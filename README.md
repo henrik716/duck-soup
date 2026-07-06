@@ -1,4 +1,4 @@
-# Duck Soup 🍲
+# Duck Soup <img src="duck_soup/web/static/favicon.png" width="32" height="32" align="absmiddle">
 
 [![DuckDB](https://img.shields.io/badge/Powered%20by-DuckDB-orange.svg)](https://duckdb.org/)
 [![GeoPackage](https://img.shields.io/badge/Output-GeoPackage-blue.svg)](https://www.geopackage.org/)
@@ -273,8 +273,8 @@ with a toggle between **rules** (match/like/regex → value, plus a default) and
   polygon's `postnummer`/`poststed` values; the other polygon's data never appears in the
   output. If that matters for your data, either clean up overlapping join-source polygons
   upstream, or use `match: all` instead (one output row per match, base row repeated) and
-  deduplicate downstream. Many-to-many fan-out, unioning multiple bases, and field-level
-  value remapping (lookup tables) are the obvious next steps.
+  deduplicate downstream. Many-to-many fan-out and unioning multiple bases are the
+  obvious next steps.
 - `func` set is small on purpose; add new ones in `engine.py:_func_expr` (SQL) or
   `derive.py` (python UDF).
 - The editor builds/validates/saves and runs synchronously; for very large jobs

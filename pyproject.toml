@@ -20,6 +20,7 @@ dependencies = [
     "requests>=2.31",
     "numpy>=1.26.0",
     "pytz>=2024.1",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
