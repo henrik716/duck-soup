@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+
+# Node / frontend build tooling (compiled output in duck_soup/web/static/ is committed)
+duck_soup/web/ui/node_modules/
+
+# Generated pipeline output
+output/*.gpkg
+!output/.gitkeep
+
+# Editor/OS
+.vscode/
+.DS_Store
+.claude/
+

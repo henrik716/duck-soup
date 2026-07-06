@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>duck soup · pipeline editor</title>
+<link rel="icon" type="image/png" href="/static/favicon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/static/assets/index-Bw8NpEtq.js"></script>
+  <link rel="stylesheet" crossorigin href="/static/assets/index-Bp1LBO0s.css">
+</head>
+<body>
+<div id="toast-container" class="toast-container"></div>
+
+<!-- Local File Explorer Modal -->
+<div id="fileModal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3><i data-lucide="folder-open" style="width:16px;height:16px"></i> select file</h3>
+      <button class="mini ghost" id="closeFileModalBtn" aria-label="Close file browser"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="fileExplorerPath" class="explorer-path">/</div>
+      <div id="fileExplorerList" class="explorer-list"></div>
+    </div>
+  </div>
+</div>
+
+<header class="top">
+  <div style="display:flex; align-items:center; gap:12px">
+    <img src="/static/favicon.png" alt="duck soup logo" style="width:40px;height:40px;border-radius:8px;border:1px solid rgba(139,108,255,0.4);box-shadow:0 0 8px rgba(139,108,255,0.25);" />
+    <span class="brand">duck soup<span class="dot">.</span></span>
+    <span class="tagline">duckdb geodata pipelines <i data-lucide="arrow-right" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px"></i> geopackage</span>
+  </div>
+  <div class="top-right">
+    <label class="field" style="flex-direction:row; align-items:center; gap:8px; margin:0">
+      <span style="color:var(--muted)">load</span>
+      <select id="loadSelect" style="width:auto; min-width:160px; padding:6px 36px 6px 12px"><option value="">— config —</option></select>
+    </label>
+    <button class="ghost mini" id="newBtn"><i data-lucide="plus-circle" style="width:13px;height:13px"></i> new</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <main class="builder">
+
+    <!-- ETL Lineage Diagram -->
+    <div id="lineage-diagram-container" class="card" style="margin-bottom:24px;padding:14px 18px;border-color:rgba(139,108,255,0.25);">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span>ETL Pipeline Lineage</span>
+        <span style="color:var(--accent);font-size:10px;">interactive flow</span>
+      </div>
+      <div id="lineage-diagram" style="display:flex;flex-direction:column;gap:8px;overflow-x:auto;padding:10px 0;min-height:60px;"></div>
+    </div>
+
+    <!-- Config header: shared name + output path -->
+    <div class="card" style="margin-bottom:20px;padding:16px 18px;">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;">config</div>
+      <div class="row">
+        <label class="field grow">config name<input id="cfg_name" placeholder="my_config"></label>
+        <label class="field grow">output geopackage
+          <div style="display:flex;gap:6px">
+            <input id="cfg_output" placeholder="output/data.gpkg" style="flex:1">
+            <button type="button" id="cfg_output_browse" class="mini ghost" title="Browse files" style="padding:10px;flex-shrink:0"><i data-lucide="folder" style="width:14px;height:14px"></i></button>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Dataset metadata (mounted by main.ts) -->
+    <div id="cfg-metadata-mount"></div>
+
+    <!-- Pipelines container -->
+    <div id="pipelines" style="display:flex;flex-direction:column;gap:16px;"></div>
+
+    <!-- Add pipeline button -->
+    <button class="addbtn" id="addPipeline" style="margin-top:16px;width:100%;border-style:dashed;border-color:rgba(139,108,255,0.4);color:var(--accent);">
+      <i data-lucide="plus" style="width:14px;height:14px"></i> add pipeline
+    </button>
+
+  </main>
+
+  <aside class="side">
+    <!-- Map -->
+    <div id="map-container" style="position:relative;width:100%;height:100%;border-bottom:1px solid var(--line);">
+      <div id="map" style="width:100%;height:100%;"></div>
+      <div id="map-toolbar" style="position:absolute;top:8px;left:8px;z-index:1000;background:rgba(10,8,25,0.85);border:1px solid var(--line);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">view</span>
+        <select id="map-layer-select" style="background:#0d0a1f;border:none;color:var(--ink);font-family:var(--mono);font-size:11px;cursor:pointer;outline:none;max-width:180px;">
+          <option value="">pipeline output</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Bottom panel: Tabs & Actions -->
+    <div id="bottom-panel" style="display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(135deg,var(--panel) 0%,var(--void) 100%);height:100%;">
+      <div class="tabs" style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);background:rgba(13,10,31,0.4);flex-shrink:0;">
+        <div style="display:flex;">
+          <button id="tab-btn-table" class="tab-btn active" data-tab="table-tab"><i data-lucide="table" style="width:13px;height:13px"></i> Data Table</button>
+          <button id="tab-btn-yaml" class="tab-btn" data-tab="yaml-tab"><i data-lucide="file-code" style="width:13px;height:13px"></i> YAML Config</button>
+          <button id="tab-btn-log" class="tab-btn" data-tab="log-tab"><i data-lucide="terminal" style="width:13px;height:13px"></i> Run Logs</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 12px 4px 4px;">
+          <span class="status idle" id="status" style="margin-right:4px;font-size:10px;padding:2px 6px;">idle</span>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">save as</span>
+            <input id="saveName" placeholder="config name" title="Filename used when saving this config" style="width:110px;padding:5px 8px;font-size:11px;height:28px;">
+            <button id="validateBtn" class="ghost mini" style="padding:5px 8px;height:28px;" title="Validate Config"><i data-lucide="check-square" style="width:13px;height:13px"></i></button>
+            <button id="saveBtn" class="ghost mini" style="padding:5px 8px;height:28px;" title="Save Config"><i data-lucide="save" style="width:13px;height:13px"></i></button>
+            <button id="runBtn" class="primary mini" style="padding:5px 10px;height:28px;"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="table-tab" class="tab-content active" style="flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;">
+        <div class="table-toolbar">
+          <input id="tableSearch" placeholder="Filter preview rows..." style="max-width:280px;">
+          <button id="tableExportBtn" class="ghost mini" title="Export current preview data to CSV"><i data-lucide="download" style="width:13px;height:13px"></i> export csv</button>
+        </div>
+        <div id="preview-table-container" style="overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel2);max-height:calc(100% - 40px);flex:1;">
+          <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;color:var(--ink);">
+            <thead>
+              <tr style="background:var(--panel2);border-bottom:1px solid var(--line);">
+                <th style="padding:10px;text-align:left;">No data loaded</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="yaml-tab" class="tab-content yaml-wrap" style="flex:1;overflow:auto;padding:12px 16px;">
+        <div class="yaml-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0;font-size:10px;">generated yaml</h3>
+          <button class="mini ghost" id="copyYamlBtn" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="copy" style="width:11px;height:11px"></i> copy</button>
+        </div>
+        <pre id="yaml" style="flex:1;margin:0;">—</pre>
+      </div>
+
+      <div id="log-tab" class="tab-content log-wrap" style="flex:1;overflow:auto;padding:12px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0;font-size:10px;">run log</h3>
+          <button class="mini ghost" id="clearLogBtn" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="trash-2" style="width:11px;height:11px"></i> clear</button>
+        </div>
+        <div id="log" style="flex:1;background:var(--void);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto"><span class="log-line">no run yet</span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+</body>
+</html>

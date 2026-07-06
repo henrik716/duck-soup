@@ -1,0 +1,35 @@
+name: test_multi_layer
+description: 'exercises PipelineDef.layers (multiple output layers from one shared chain)'
+output: output/test_multi_layer.gpkg
+overwrite: true
+pipelines:
+  - name: places
+    working_crs: EPSG:25833
+    sources:
+      - id: places
+        format: geojson
+        uri: data/test.geojson
+        layer: test
+        crs: EPSG:4326
+      - id: fylke
+        format: geojson
+        uri: data/Basisdata_0000_Norge_25833_Fylke_GeoJSON.geojson
+        layer: Fylke
+        crs: EPSG:25833
+    base: places
+    steps:
+      - type: spatial_join
+        source: fylke
+        predicate: intersects
+        fields:
+          county: fylkesnavn
+    mapping:
+      - {to: name, from: name}
+      - {to: county, from: county}
+    layers:
+      - layer: matched
+        crs: EPSG:25833
+        filter: "county IS NOT NULL"
+      - layer: unmatched
+        crs: EPSG:25833
+        filter: "county IS NULL"

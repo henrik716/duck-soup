@@ -1,0 +1,4303 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Nationaltheatret",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7333,
+          59.9139
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Frogner Plass",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.701,
+          59.9265
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Jernbanetorget",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.753,
+          59.907
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Holmenkollen",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.666,
+          59.9615
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Tøyen",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.772,
+          59.917
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Skøyen",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.679,
+          59.925
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Bygdøy",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.4,
+          59.85
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0001",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61095,
+          59.9651
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0002",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66894,
+          59.92209
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0003",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6186,
+          59.87289
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0004",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86873,
+          59.85273
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0005",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68262,
+          59.95236
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0006",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66843,
+          59.87733
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0007",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63405,
+          59.95523
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0008",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87941,
+          59.97702
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0009",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85858,
+          59.96419
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0010",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59147,
+          59.96475
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0011",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82821,
+          59.87492
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0012",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79302,
+          59.89133
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0013",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89194,
+          59.88179
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0014",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81708,
+          59.92635
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0015",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65296,
+          59.86931
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0016",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.56864,
+          59.95343
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0017",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84803,
+          59.97589
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0018",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62323,
+          59.86058
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0019",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82685,
+          59.92994
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0020",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72801,
+          59.94767
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0021",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68099,
+          59.91746
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0022",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66264,
+          59.8986
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0023",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80048,
+          59.91432
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0024",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75342,
+          59.93295
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0025",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.77741,
+          59.87694
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0026",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70823,
+          59.88047
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0027",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6571,
+          59.96553
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0028",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60502,
+          59.95952
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0029",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74269,
+          59.86746
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0030",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65327,
+          59.91745
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0031",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75439,
+          59.91048
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0032",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66773,
+          59.90865
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0033",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69313,
+          59.95459
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0034",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64556,
+          59.85321
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0035",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63183,
+          59.9339
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0036",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86552,
+          59.88829
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0037",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72948,
+          59.93368
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0038",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87431,
+          59.86279
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0039",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.67608,
+          59.92098
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0040",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61883,
+          59.8928
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0041",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81082,
+          59.9499
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0042",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61672,
+          59.92852
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0043",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89944,
+          59.94781
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0044",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86933,
+          59.85111
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0045",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64865,
+          59.89506
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0046",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.88104,
+          59.95684
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0047",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7152,
+          59.91664
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0048",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85291,
+          59.87959
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0049",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.71605,
+          59.91706
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0050",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81517,
+          59.94393
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0051",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66923,
+          59.86116
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0052",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70008,
+          59.97245
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0053",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62335,
+          59.9085
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0054",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.56054,
+          59.86806
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0055",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65695,
+          59.94591
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0056",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83364,
+          59.95846
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0057",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62892,
+          59.90534
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0058",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81699,
+          59.93977
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0059",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66413,
+          59.85302
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0060",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87275,
+          59.86998
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0061",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74887,
+          59.95389
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0062",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75086,
+          59.90082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0063",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62147,
+          59.90078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0064",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68525,
+          59.91172
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0065",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74933,
+          59.9087
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0066",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58263,
+          59.86356
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0067",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61217,
+          59.95744
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0068",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72101,
+          59.87427
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0069",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86897,
+          59.90017
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0070",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63156,
+          59.93574
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0071",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70913,
+          59.89792
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0072",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61014,
+          59.96176
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0073",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68689,
+          59.97865
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0074",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73776,
+          59.91217
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0075",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68615,
+          59.96747
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0076",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59548,
+          59.87674
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0077",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83626,
+          59.93642
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0078",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7613,
+          59.97209
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0079",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62104,
+          59.94318
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0080",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6464,
+          59.85097
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0081",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70601,
+          59.9572
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0082",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83265,
+          59.91836
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0083",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85773,
+          59.90983
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0084",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.56368,
+          59.86184
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0085",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.67137,
+          59.95954
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0086",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68688,
+          59.95705
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0087",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69527,
+          59.87335
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0088",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80664,
+          59.90952
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0089",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79448,
+          59.86242
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0090",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63389,
+          59.96317
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0091",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85889,
+          59.91991
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0092",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79432,
+          59.94391
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0093",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86806,
+          59.90347
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0094",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59243,
+          59.89794
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0095",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72654,
+          59.95134
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0096",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70783,
+          59.88286
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0097",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.56562,
+          59.85347
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0098",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6834,
+          59.94697
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0099",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68884,
+          59.8514
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0100",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79818,
+          59.86774
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0101",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.71967,
+          59.85887
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0102",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.77996,
+          59.94277
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0103",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59909,
+          59.95666
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0104",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60971,
+          59.85235
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0105",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61203,
+          59.86614
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0106",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60896,
+          59.93728
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0107",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78708,
+          59.86995
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0108",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61228,
+          59.94287
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0109",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62566,
+          59.94058
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0110",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.77435,
+          59.94313
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0111",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68672,
+          59.89008
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0112",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75937,
+          59.85633
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0113",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81849,
+          59.97075
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0114",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86806,
+          59.876
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0115",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69759,
+          59.97861
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0116",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83718,
+          59.93839
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0117",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6272,
+          59.9647
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0118",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.8034,
+          59.85572
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0119",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58769,
+          59.89253
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0120",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.76938,
+          59.93121
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0121",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68827,
+          59.90562
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0122",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62482,
+          59.89635
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0123",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55525,
+          59.93502
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0124",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68622,
+          59.90964
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0125",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78029,
+          59.8862
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0126",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.67914,
+          59.85875
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0127",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69388,
+          59.94978
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0128",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89409,
+          59.86324
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0129",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82694,
+          59.96989
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0130",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61001,
+          59.97467
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0131",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66352,
+          59.93201
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0132",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78727,
+          59.97641
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0133",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66622,
+          59.9326
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0134",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89231,
+          59.93663
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0135",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66729,
+          59.92911
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0136",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70712,
+          59.91643
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0137",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7262,
+          59.9416
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0138",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63141,
+          59.93013
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0139",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6581,
+          59.94593
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0140",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.76692,
+          59.85779
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0141",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72455,
+          59.87626
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0142",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62153,
+          59.85493
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0143",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89599,
+          59.90768
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0144",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59699,
+          59.89128
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0145",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73231,
+          59.97708
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0146",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81269,
+          59.87977
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0147",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66995,
+          59.87676
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0148",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.86732,
+          59.93645
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0149",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83051,
+          59.94052
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0150",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.76282,
+          59.89959
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0151",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61424,
+          59.93187
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0152",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85445,
+          59.8591
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0153",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.56824,
+          59.97896
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0154",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59395,
+          59.87258
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0155",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84093,
+          59.97114
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0156",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7276,
+          59.90541
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0157",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65901,
+          59.94382
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0158",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69841,
+          59.92876
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0159",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64987,
+          59.90828
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0160",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64515,
+          59.95157
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0161",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.88285,
+          59.89675
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0162",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60872,
+          59.90738
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0163",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.76329,
+          59.90635
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0164",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83686,
+          59.95316
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0165",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81668,
+          59.90556
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0166",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.8156,
+          59.9698
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0167",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73802,
+          59.92187
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0168",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64005,
+          59.91027
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0169",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64913,
+          59.92308
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0170",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.57518,
+          59.86777
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0171",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6185,
+          59.9691
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0172",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55449,
+          59.91509
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0173",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72201,
+          59.97034
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0174",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.88967,
+          59.89851
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0175",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65773,
+          59.97838
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0176",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69308,
+          59.85505
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0177",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68469,
+          59.92353
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0178",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81703,
+          59.97442
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0179",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72836,
+          59.91352
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0180",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79376,
+          59.93462
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0181",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80748,
+          59.88151
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0182",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87251,
+          59.89698
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0183",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79411,
+          59.93389
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0184",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7619,
+          59.97275
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0185",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.639,
+          59.92828
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0186",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55432,
+          59.95023
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0187",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68918,
+          59.9262
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0188",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73149,
+          59.87455
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0189",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60804,
+          59.90549
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0190",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72523,
+          59.91932
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0191",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75513,
+          59.94541
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0192",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58825,
+          59.92444
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0193",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83498,
+          59.88497
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0194",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87551,
+          59.90174
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0195",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55225,
+          59.87189
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0196",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55055,
+          59.85908
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0197",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73374,
+          59.93509
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0198",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60972,
+          59.8987
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0199",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61931,
+          59.87366
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0200",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70773,
+          59.95587
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0201",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62033,
+          59.94749
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0202",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64077,
+          59.9673
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0203",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70426,
+          59.96869
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0204",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85393,
+          59.8716
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0205",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58,
+          59.86621
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0206",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66975,
+          59.92613
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0207",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.71982,
+          59.94887
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0208",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.57137,
+          59.94773
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0209",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78286,
+          59.9526
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0210",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58389,
+          59.9179
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0211",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68148,
+          59.91761
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0212",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87624,
+          59.91152
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0213",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.76153,
+          59.89375
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0214",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89981,
+          59.95619
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0215",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78278,
+          59.8992
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0216",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89136,
+          59.9635
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0217",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55108,
+          59.96317
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0218",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80383,
+          59.96544
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0219",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55899,
+          59.86598
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0220",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64781,
+          59.9409
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0221",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.67895,
+          59.93039
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0222",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73022,
+          59.93583
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0223",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89516,
+          59.97448
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0224",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55582,
+          59.89683
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0225",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.88936,
+          59.94566
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0226",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63175,
+          59.91299
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0227",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82789,
+          59.89528
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0228",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89541,
+          59.96142
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0229",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.807,
+          59.8882
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0230",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79918,
+          59.96308
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0231",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.8247,
+          59.94317
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0232",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59475,
+          59.95359
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0233",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84132,
+          59.97952
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0234",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60882,
+          59.90802
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0235",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.71876,
+          59.92029
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0236",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62407,
+          59.94792
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0237",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58691,
+          59.97914
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0238",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.60608,
+          59.97077
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0239",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81821,
+          59.87865
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0240",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78308,
+          59.9737
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0241",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.78292,
+          59.96996
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0242",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58165,
+          59.93993
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0243",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87612,
+          59.94962
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0244",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.57263,
+          59.89462
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0245",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.77887,
+          59.95206
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0246",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83296,
+          59.87906
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0247",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65184,
+          59.86448
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0248",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.8092,
+          59.97184
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0249",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75049,
+          59.86656
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0250",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.88392,
+          59.925
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0251",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65878,
+          59.92671
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0252",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84649,
+          59.97738
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0253",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81995,
+          59.95368
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0254",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73191,
+          59.92821
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0255",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58731,
+          59.85119
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0256",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.66057,
+          59.9561
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0257",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84303,
+          59.91498
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0258",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6016,
+          59.88684
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0259",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75961,
+          59.89016
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0260",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64571,
+          59.9602
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0261",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.7174,
+          59.95773
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0262",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65202,
+          59.97564
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0263",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.8934,
+          59.89331
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0264",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84682,
+          59.97148
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0265",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79514,
+          59.85683
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0266",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.84987,
+          59.94456
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0267",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89454,
+          59.9357
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0268",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89687,
+          59.92123
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0269",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.69785,
+          59.91154
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0270",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.8152,
+          59.90084
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0271",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80436,
+          59.88671
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0272",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79539,
+          59.92124
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0273",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59582,
+          59.94779
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0274",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.85305,
+          59.85704
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0275",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.71014,
+          59.87128
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0276",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70466,
+          59.91272
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0277",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62342,
+          59.95457
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0278",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80736,
+          59.85119
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0279",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.58568,
+          59.95211
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0280",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68179,
+          59.97775
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0281",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87409,
+          59.86249
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0282",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61287,
+          59.85682
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0283",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.77753,
+          59.92714
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0284",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.76944,
+          59.90252
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0285",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59158,
+          59.90156
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0286",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79079,
+          59.97409
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0287",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82155,
+          59.97885
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0288",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82221,
+          59.96244
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0289",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64633,
+          59.93492
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0290",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.55406,
+          59.86516
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0291",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72123,
+          59.93694
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0292",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.62873,
+          59.92629
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0293",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.71782,
+          59.94018
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0294",
+        "stop_type": "tram"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.82802,
+          59.87354
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0295",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89998,
+          59.94136
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0296",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.75,
+          59.86293
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0297",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.79982,
+          59.96209
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0298",
+        "stop_type": "bus"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61471,
+          59.95567
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0299",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.68783,
+          59.95627
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "stop_name": "Stop 0300",
+        "stop_type": "metro"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.721,
+          59.91746
+        ]
+      }
+    }
+  ]
+}

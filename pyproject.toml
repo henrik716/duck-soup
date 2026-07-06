@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "duck_soup"
+version = "0.1.0"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    # Pinned to the tested DuckDB minor version: `INSTALL spatial` fetches the extension
+    # build matching the running DuckDB core, so this pin is what keeps the spatial
+    # extension version reproducible. Bump alongside the version noted in engine.py and
+    # README.md when upgrading.
+    "duckdb>=1.5.4,<1.6",
+    "pyyaml>=6.0",
+    "pydantic>=2.6",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "requests>=2.31",
+    "numpy>=1.26.0",
+    "pytz>=2024.1",
+]
+
+[project.optional-dependencies]
+mgrs = ["mgrs>=1.4"]
+test = ["pytest>=8.0", "httpx>=0.27"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["duck_soup*"]
+
+[project.scripts]
+duck_soup = "duck_soup.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

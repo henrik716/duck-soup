@@ -1,0 +1,46 @@
+name: test
+description: ''
+output: output/test.gpkg
+overwrite: true
+pipelines:
+- name: test
+  description: ''
+  sources:
+  - id: places
+    format: geojson
+    uri: data/test.geojson
+    layer: test
+    crs: EPSG:4326
+    where: 1=1
+    page_size: 2000
+  - id: fylke
+    format: geojson
+    uri: data/Basisdata_0000_Norge_25833_Fylke_GeoJSON.geojson
+    layer: Fylke
+    crs: EPSG:25833
+    where: 1=1
+    page_size: 2000
+  base: places
+  steps:
+  - type: spatial_join
+    source: fylke
+    predicate: intersects
+    fields:
+      county: fylkesnavn
+  mapping:
+  - to: name
+    from: name
+  - to: category
+    from: category
+  - to: latitude
+    func: lat
+  - to: longitude
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: uuid
+    func: uuid
+  - to: county
+    from: county
+  layer: output
+  crs: EPSG:25833

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install duck_soup with test extras
+        run: pip install -e ".[mgrs,test]"
+
+      # DuckDB downloads the spatial extension binary on first LOAD; cache it
+      # so repeat CI runs don't refetch it from extensions.duckdb.org.
+      - name: Cache DuckDB extensions
+        uses: actions/cache@v4
+        with:
+          path: ~/.duckdb/extensions
+          key: duckdb-extensions-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Run pytest
+        run: pytest -v
+
+  frontend:
+    name: Frontend build (tsc + vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: duck_soup/web/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: duck_soup/web/ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build

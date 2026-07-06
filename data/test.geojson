@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Oslo Rådhus", "category": "government" },
+      "geometry": { "type": "Point", "coordinates": [10.7331, 59.9132] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Akershus Festning", "category": "landmark" },
+      "geometry": { "type": "Point", "coordinates": [10.7369, 59.9076] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Vigelandsparken", "category": "park" },
+      "geometry": { "type": "Point", "coordinates": [10.7003, 59.9270] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Operahuset", "category": "culture" },
+      "geometry": { "type": "Point", "coordinates": [10.7527, 59.9075] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Holmenkollen", "category": "sport" },
+      "geometry": { "type": "Point", "coordinates": [10.6666, 59.9619] }
+    }
+  ]
+}

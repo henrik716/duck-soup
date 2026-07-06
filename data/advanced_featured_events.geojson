@@ -1,0 +1,335 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Oslo Pride Parade",
+        "category": "event",
+        "event_date": "2026-06-27"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74,
+          59.913
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Øyafestivalen",
+        "category": "event",
+        "event_date": "2026-08-12"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.755,
+          59.922
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 01",
+        "category": "event",
+        "event_date": "2026-11-04"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73864,
+          59.95645
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 02",
+        "category": "event",
+        "event_date": "2026-11-04"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.81373,
+          59.87697
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 03",
+        "category": "event",
+        "event_date": "2026-03-01"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61323,
+          59.92788
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 04",
+        "category": "event",
+        "event_date": "2026-02-02"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74415,
+          59.95407
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 05",
+        "category": "event",
+        "event_date": "2026-03-03"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.59509,
+          59.87681
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 06",
+        "category": "event",
+        "event_date": "2026-01-03"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74687,
+          59.96069
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 07",
+        "category": "event",
+        "event_date": "2026-06-18"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.89297,
+          59.9158
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 08",
+        "category": "event",
+        "event_date": "2026-11-01"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.61006,
+          59.97702
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 09",
+        "category": "event",
+        "event_date": "2026-09-26"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.63692,
+          59.856
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 10",
+        "category": "event",
+        "event_date": "2026-03-19"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.65269,
+          59.91943
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 11",
+        "category": "event",
+        "event_date": "2026-06-20"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.72165,
+          59.89068
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 12",
+        "category": "event",
+        "event_date": "2026-02-22"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.73837,
+          59.87728
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 13",
+        "category": "event",
+        "event_date": "2026-04-05"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.83692,
+          59.88082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 14",
+        "category": "event",
+        "event_date": "2026-03-20"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.6549,
+          59.95824
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 15",
+        "category": "event",
+        "event_date": "2026-05-05"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.74322,
+          59.92693
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 16",
+        "category": "event",
+        "event_date": "2026-09-09"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.80519,
+          59.90486
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 17",
+        "category": "event",
+        "event_date": "2026-03-13"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.64124,
+          59.93447
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 18",
+        "category": "event",
+        "event_date": "2026-11-14"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.70962,
+          59.97282
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 19",
+        "category": "event",
+        "event_date": "2026-04-03"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.87907,
+          59.86862
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Community Event 20",
+        "category": "event",
+        "event_date": "2026-11-23"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          10.77035,
+          59.88502
+        ]
+      }
+    }
+  ]
+}

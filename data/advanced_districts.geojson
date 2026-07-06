@@ -1,0 +1,787 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "Sentrum",
+        "population": 55000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.72,
+              59.895
+            ],
+            [
+              10.8,
+              59.895
+            ],
+            [
+              10.8,
+              59.92
+            ],
+            [
+              10.72,
+              59.92
+            ],
+            [
+              10.72,
+              59.895
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "Frogner",
+        "population": 58000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.68,
+              59.92
+            ],
+            [
+              10.72,
+              59.92
+            ],
+            [
+              10.72,
+              59.935
+            ],
+            [
+              10.68,
+              59.935
+            ],
+            [
+              10.68,
+              59.92
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "Vestre Aker",
+        "population": 49000
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.6,
+              59.95
+            ],
+            [
+              10.7,
+              59.95
+            ],
+            [
+              10.7,
+              59.97
+            ],
+            [
+              10.6,
+              59.97
+            ],
+            [
+              10.6,
+              59.95
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District A1",
+        "population": 49905
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.55,
+              59.85
+            ],
+            [
+              10.620000000000001,
+              59.85
+            ],
+            [
+              10.620000000000001,
+              59.8825
+            ],
+            [
+              10.55,
+              59.8825
+            ],
+            [
+              10.55,
+              59.85
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District A2",
+        "population": 15296
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.620000000000001,
+              59.85
+            ],
+            [
+              10.690000000000001,
+              59.85
+            ],
+            [
+              10.690000000000001,
+              59.8825
+            ],
+            [
+              10.620000000000001,
+              59.8825
+            ],
+            [
+              10.620000000000001,
+              59.85
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District A3",
+        "population": 9639
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.690000000000001,
+              59.85
+            ],
+            [
+              10.760000000000002,
+              59.85
+            ],
+            [
+              10.760000000000002,
+              59.8825
+            ],
+            [
+              10.690000000000001,
+              59.8825
+            ],
+            [
+              10.690000000000001,
+              59.85
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District A4",
+        "population": 56598
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.76,
+              59.85
+            ],
+            [
+              10.83,
+              59.85
+            ],
+            [
+              10.83,
+              59.8825
+            ],
+            [
+              10.76,
+              59.8825
+            ],
+            [
+              10.76,
+              59.85
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District A5",
+        "population": 26024
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.83,
+              59.85
+            ],
+            [
+              10.9,
+              59.85
+            ],
+            [
+              10.9,
+              59.8825
+            ],
+            [
+              10.83,
+              59.8825
+            ],
+            [
+              10.83,
+              59.85
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District B1",
+        "population": 24049
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.55,
+              59.8825
+            ],
+            [
+              10.620000000000001,
+              59.8825
+            ],
+            [
+              10.620000000000001,
+              59.915
+            ],
+            [
+              10.55,
+              59.915
+            ],
+            [
+              10.55,
+              59.8825
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District B2",
+        "population": 22628
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.620000000000001,
+              59.8825
+            ],
+            [
+              10.690000000000001,
+              59.8825
+            ],
+            [
+              10.690000000000001,
+              59.915
+            ],
+            [
+              10.620000000000001,
+              59.915
+            ],
+            [
+              10.620000000000001,
+              59.8825
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District B3",
+        "population": 17144
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.690000000000001,
+              59.8825
+            ],
+            [
+              10.760000000000002,
+              59.8825
+            ],
+            [
+              10.760000000000002,
+              59.915
+            ],
+            [
+              10.690000000000001,
+              59.915
+            ],
+            [
+              10.690000000000001,
+              59.8825
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District B4",
+        "population": 56265
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.76,
+              59.8825
+            ],
+            [
+              10.83,
+              59.8825
+            ],
+            [
+              10.83,
+              59.915
+            ],
+            [
+              10.76,
+              59.915
+            ],
+            [
+              10.76,
+              59.8825
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District B5",
+        "population": 14717
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.83,
+              59.8825
+            ],
+            [
+              10.9,
+              59.8825
+            ],
+            [
+              10.9,
+              59.915
+            ],
+            [
+              10.83,
+              59.915
+            ],
+            [
+              10.83,
+              59.8825
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District C1",
+        "population": 52348
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.55,
+              59.915
+            ],
+            [
+              10.620000000000001,
+              59.915
+            ],
+            [
+              10.620000000000001,
+              59.9475
+            ],
+            [
+              10.55,
+              59.9475
+            ],
+            [
+              10.55,
+              59.915
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District C2",
+        "population": 56540
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.620000000000001,
+              59.915
+            ],
+            [
+              10.690000000000001,
+              59.915
+            ],
+            [
+              10.690000000000001,
+              59.9475
+            ],
+            [
+              10.620000000000001,
+              59.9475
+            ],
+            [
+              10.620000000000001,
+              59.915
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District C3",
+        "population": 43741
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.690000000000001,
+              59.915
+            ],
+            [
+              10.760000000000002,
+              59.915
+            ],
+            [
+              10.760000000000002,
+              59.9475
+            ],
+            [
+              10.690000000000001,
+              59.9475
+            ],
+            [
+              10.690000000000001,
+              59.915
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District C4",
+        "population": 13697
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.76,
+              59.915
+            ],
+            [
+              10.83,
+              59.915
+            ],
+            [
+              10.83,
+              59.9475
+            ],
+            [
+              10.76,
+              59.9475
+            ],
+            [
+              10.76,
+              59.915
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District C5",
+        "population": 46698
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.83,
+              59.915
+            ],
+            [
+              10.9,
+              59.915
+            ],
+            [
+              10.9,
+              59.9475
+            ],
+            [
+              10.83,
+              59.9475
+            ],
+            [
+              10.83,
+              59.915
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District D1",
+        "population": 35651
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.55,
+              59.9475
+            ],
+            [
+              10.620000000000001,
+              59.9475
+            ],
+            [
+              10.620000000000001,
+              59.98
+            ],
+            [
+              10.55,
+              59.98
+            ],
+            [
+              10.55,
+              59.9475
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District D2",
+        "population": 10082
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.620000000000001,
+              59.9475
+            ],
+            [
+              10.690000000000001,
+              59.9475
+            ],
+            [
+              10.690000000000001,
+              59.98
+            ],
+            [
+              10.620000000000001,
+              59.98
+            ],
+            [
+              10.620000000000001,
+              59.9475
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District D3",
+        "population": 9952
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.690000000000001,
+              59.9475
+            ],
+            [
+              10.760000000000002,
+              59.9475
+            ],
+            [
+              10.760000000000002,
+              59.98
+            ],
+            [
+              10.690000000000001,
+              59.98
+            ],
+            [
+              10.690000000000001,
+              59.9475
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District D4",
+        "population": 14140
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.76,
+              59.9475
+            ],
+            [
+              10.83,
+              59.9475
+            ],
+            [
+              10.83,
+              59.98
+            ],
+            [
+              10.76,
+              59.98
+            ],
+            [
+              10.76,
+              59.9475
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district_name": "District D5",
+        "population": 22328
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10.83,
+              59.9475
+            ],
+            [
+              10.9,
+              59.9475
+            ],
+            [
+              10.9,
+              59.98
+            ],
+            [
+              10.83,
+              59.98
+            ],
+            [
+              10.83,
+              59.9475
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

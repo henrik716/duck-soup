@@ -1,0 +1,31 @@
+name: test_multi_pipeline_shared_output
+description: 'two independent pipelines writing to the same shared output gpkg'
+output: output/test_multi_pipeline_shared_output.gpkg
+overwrite: true
+pipelines:
+  - name: places_layer
+    sources:
+      - id: places
+        format: geojson
+        uri: data/test.geojson
+        layer: test
+        crs: EPSG:4326
+    base: places
+    mapping:
+      - {to: name, from: name}
+    layers:
+      - layer: places_out
+        crs: EPSG:25833
+  - name: fylke_layer
+    sources:
+      - id: fylke
+        format: geojson
+        uri: data/Basisdata_0000_Norge_25833_Fylke_GeoJSON.geojson
+        layer: Fylke
+        crs: EPSG:25833
+    base: fylke
+    mapping:
+      - {to: name, from: fylkesnavn}
+    layers:
+      - layer: fylke_out
+        crs: EPSG:25833

@@ -1,0 +1,296 @@
+name: test_advanced
+description: >-
+  Advanced worked example: six small pipelines sharing one output GeoPackage,
+  built to exercise most of duck_soup's functionality end to end (every step
+  type, both derived_source variants, every mapping value type, layer filters
+  and layer-level mapping overrides). All mock data lives in data/advanced_*
+  and data/codelists/transit_type_labels.csv, except for the two polygon
+  sources (districts) which are also mocked and the real Oslo park polygons
+  in data/castles_and_parks.gpkg, reused here as an overlay layer.
+output: output/test_advanced.gpkg
+overwrite: true
+pipelines:
+
+  # ---------------------------------------------------------------------
+  # 1) Points of interest enriched via every join step, plus a snapshot /
+  #    branch / merge combo that appends "impact zone" buffer polygons for
+  #    high-traffic attractions, and a merge of an unrelated events source.
+  # ---------------------------------------------------------------------
+  - name: attractions_advanced
+    description: 'spatial_join, attribute_join, nearest_neighbor, filter, snapshot+branch+buffer, merge (x2)'
+    working_crs: EPSG:25833
+    sources:
+      - id: attractions
+        format: geojson
+        uri: data/advanced_attractions.geojson
+        crs: EPSG:4326
+      - id: districts
+        format: geojson
+        uri: data/advanced_districts.geojson
+        crs: EPSG:4326
+      - id: transit_stops
+        format: geojson
+        uri: data/advanced_transit_stops.geojson
+        crs: EPSG:4326
+      - id: operators
+        format: csv
+        uri: data/advanced_operators.csv
+      - id: featured_events
+        format: geojson
+        uri: data/advanced_featured_events.geojson
+        crs: EPSG:4326
+    base: attractions
+    steps:
+      - type: spatial_join
+        source: districts
+        predicate: intersects
+        on_multiple: largest_overlap
+        fields: {district_name: district_name, district_population: population}
+      - type: attribute_join
+        source: operators
+        left: category
+        right: category_code
+        fields: {operator_name: operator_name, operator_email: operator_email}
+      - type: nearest_neighbor
+        source: transit_stops
+        max_distance: 600
+        distance_field: distance_to_transit_m
+        fields: {nearest_stop_name: stop_name, nearest_stop_type: stop_type}
+      - type: filter
+        where: "category != 'excluded_test'"
+      - type: snapshot
+        id: high_traffic_snapshot
+      - type: filter
+        branch: high_traffic_snapshot
+        where: "visitors_per_year >= 500000"
+      - type: buffer
+        branch: high_traffic_snapshot
+        distance: 250
+      - type: merge
+        source: high_traffic_snapshot
+      - type: merge
+        source: featured_events
+    mapping:
+      - {to: name, from: name}
+      - to: feature_type
+        expr: "CASE WHEN ST_GeometryType(geom) = 'POLYGON' THEN 'high_traffic_impact_zone' ELSE 'point_of_interest' END"
+      - {to: category, from: category}
+      - to: category_label
+        codelist:
+          source: category
+          cases:
+            - {match: government, value: "Government Building"}
+            - {match: landmark, value: "Historic Landmark"}
+            - {match: park, value: "Park & Recreation"}
+            - {match: culture, value: "Culture & Arts"}
+            - {match: sport, value: "Sports Facility"}
+            - {match: museum, value: "Museum"}
+            - {match: event, value: "Special Event"}
+          default: "Other"
+      - {to: district, from: district_name}
+      - {to: district_population, from: district_population, cast: INTEGER}
+      - {to: operator, from: operator_name}
+      - {to: operator_email, from: operator_email}
+      - {to: nearest_transit_stop, from: nearest_stop_name}
+      - {to: nearest_transit_type, from: nearest_stop_type}
+      - to: transit_type_label
+        codelist:
+          source: nearest_stop_type
+          file: data/codelists/transit_type_labels.csv
+          file_match_col: code
+          file_value_col: label
+          default: "Unknown"
+      - {to: distance_to_transit_m, from: distance_to_transit_m, cast: INTEGER}
+      - {to: visitors_per_year, from: visitors_per_year, cast: INTEGER}
+      - {to: opened_year, from: opened_year, cast: INTEGER}
+      - {to: area_m2, expr: "ROUND(ST_Area(geom), 1)"}
+      - {to: longitude, func: lon}
+      - {to: latitude, func: lat}
+      - {to: mgrs, func: mgrs}
+      - {to: uuid, func: uuid}
+      - {to: created_at, func: now}
+      - {to: report_date, func: today}
+      - {to: source_dataset, const: "ngf_duckdb_advanced_demo"}
+    layers:
+      - layer: attractions_full
+        crs: EPSG:25833
+      - layer: attractions_matched
+        crs: EPSG:25833
+        filter: "district_name IS NOT NULL"
+      - layer: attractions_unmatched
+        crs: EPSG:25833
+        filter: "district_name IS NULL AND category != 'event'"
+      - layer: featured_events_only
+        crs: EPSG:25833
+        filter: "category = 'event'"
+        mapping:
+          - {to: name, from: name}
+          - {to: event_date, from: event_date}
+          - {to: uuid, func: uuid}
+
+  # ---------------------------------------------------------------------
+  # 2) Real Oslo park polygons overlaid with the mock districts: filter +
+  #    intersect_overlay, one row per park/district intersection, clipped
+  #    to the district boundary.
+  # ---------------------------------------------------------------------
+  - name: clipped_parks
+    description: 'filter, intersect_overlay'
+    working_crs: EPSG:25833
+    sources:
+      - id: parks
+        format: gpkg
+        uri: data/castles_and_parks.gpkg
+        layer: parks
+        crs: EPSG:3857
+      - id: districts
+        format: geojson
+        uri: data/advanced_districts.geojson
+        crs: EPSG:4326
+    base: parks
+    steps:
+      - type: filter
+        where: "name IS NOT NULL"
+      - type: intersect_overlay
+        source: districts
+        fields: {district_name: district_name, district_population: population}
+    mapping:
+      - {to: park_name, from: name}
+      - {to: district, from: district_name}
+      - {to: district_population, from: district_population, cast: INTEGER}
+      - {to: area_m2, func: area}
+      - {to: uuid, func: uuid}
+    layers:
+      - layer: parks_by_district
+        crs: EPSG:25833
+
+  # ---------------------------------------------------------------------
+  # 3) Same overlay, then dissolved per district: total green space area,
+  #    demonstrating dissolve plus func:area and an equivalent expr.
+  # ---------------------------------------------------------------------
+  - name: district_green_space
+    description: 'filter, intersect_overlay, dissolve'
+    working_crs: EPSG:25833
+    sources:
+      - id: parks
+        format: gpkg
+        uri: data/castles_and_parks.gpkg
+        layer: parks
+        crs: EPSG:3857
+      - id: districts
+        format: geojson
+        uri: data/advanced_districts.geojson
+        crs: EPSG:4326
+    base: parks
+    steps:
+      - type: filter
+        where: "name IS NOT NULL"
+      - type: intersect_overlay
+        source: districts
+        fields: {district_name: district_name}
+      - type: dissolve
+        by: [district_name]
+    mapping:
+      - {to: district, from: district_name}
+      - {to: green_area_m2, func: area}
+      - {to: green_area_ha, expr: "ROUND(ST_Area(geom) / 10000.0, 2)"}
+      - {to: uuid, func: uuid}
+    layers:
+      - layer: district_green_space
+        crs: EPSG:25833
+
+  # ---------------------------------------------------------------------
+  # 4) Districts minus park coverage: erase step for a rough
+  #    "non-green land" estimate per district.
+  # ---------------------------------------------------------------------
+  - name: buildable_land
+    description: 'erase'
+    working_crs: EPSG:25833
+    sources:
+      - id: districts
+        format: geojson
+        uri: data/advanced_districts.geojson
+        crs: EPSG:4326
+      - id: parks
+        format: gpkg
+        uri: data/castles_and_parks.gpkg
+        layer: parks
+        crs: EPSG:3857
+    derived_sources:
+      - id: parks_named
+        from: parks
+        where: "name IS NOT NULL"
+    base: districts
+    steps:
+      - type: erase
+        source: parks_named
+        predicate: intersects
+    mapping:
+      - {to: district, from: district_name}
+      - {to: population, from: population, cast: INTEGER}
+      - {to: buildable_area_m2, func: area}
+      - {to: uuid, func: uuid}
+    layers:
+      - layer: buildable_land
+        crs: EPSG:25833
+
+  # ---------------------------------------------------------------------
+  # 5) One label point per district (polygon -> centroid).
+  # ---------------------------------------------------------------------
+  - name: district_label_points
+    description: 'centroid'
+    working_crs: EPSG:25833
+    sources:
+      - id: districts
+        format: geojson
+        uri: data/advanced_districts.geojson
+        crs: EPSG:4326
+    base: districts
+    steps:
+      - type: centroid
+    mapping:
+      - {to: district, from: district_name}
+      - {to: population, from: population, cast: INTEGER}
+      - {to: uuid, func: uuid}
+    layers:
+      - layer: district_label_points
+        crs: EPSG:25833
+
+  # ---------------------------------------------------------------------
+  # 6) Transit stops within 100m of a district boundary: derived_source
+  #    (buffer) + clip, reusing the transit_type_labels.csv codelist.
+  # ---------------------------------------------------------------------
+  - name: transit_near_districts
+    description: 'derived_source (buffer), clip'
+    working_crs: EPSG:25833
+    sources:
+      - id: transit_stops
+        format: geojson
+        uri: data/advanced_transit_stops.geojson
+        crs: EPSG:4326
+      - id: districts
+        format: geojson
+        uri: data/advanced_districts.geojson
+        crs: EPSG:4326
+    derived_sources:
+      - id: districts_buffered
+        from: districts
+        buffer: 100
+    base: transit_stops
+    steps:
+      - type: clip
+        source: districts_buffered
+        predicate: intersects
+    mapping:
+      - {to: stop_name, from: stop_name}
+      - {to: stop_type, from: stop_type}
+      - to: stop_type_label
+        codelist:
+          source: stop_type
+          file: data/codelists/transit_type_labels.csv
+          file_match_col: code
+          file_value_col: label
+          default: "Unknown"
+      - {to: uuid, func: uuid}
+    layers:
+      - layer: transit_stops_near_districts
+        crs: EPSG:25833
