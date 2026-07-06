@@ -5,9 +5,9 @@
 
 **Duck Soup** makes config-driven geodata ETL on **DuckDB** as easy as... well, duck soup!
 
-It serves as a lightweight, lightning-fast replacement for building heavy, complex workspaces in tools like FME (Safe Software Feature Manipulation Engine) or writing custom, error-prone Python scripts. You describe your dataset as a simple YAML file (sources → base → join/geoprocessing steps → attribute mapping → one or more output layers), or build it visually using the interactive web editor.
+It's a lightweight, lightning-fast replacement for building heavy workspaces in tools like FME (Safe Software Feature Manipulation Engine), or writing custom, error-prone Python scripts. Describe your pipeline as a simple YAML file — sources, a base, join/geoprocessing steps, attribute mapping, one or more output layers — or build it visually in the interactive web editor.
 
-Under the hood, everything runs inside DuckDB using the powerful **spatial** extension. It compiles your pipeline of spatial joins, attribute joins, nearest-neighbor searches, buffers, clips, overlays, dissolves, and field mappings into a chain of SQL views that DuckDB streams straight to an output **GeoPackage**. A single YAML file can define several independent pipelines that each fan out to multiple layers, all written into one shared GeoPackage.
+Under the hood, everything runs inside DuckDB using the powerful **spatial** extension: joins, geoprocessing (buffers, clips, overlays, dissolves, ...), and field mappings all compile down to a chain of SQL views, written straight to an output **GeoPackage**. A single YAML file can define several independent pipelines, each fanning out to multiple layers, all written into one shared GeoPackage.
 
 ---
 
@@ -17,8 +17,8 @@ Under the hood, everything runs inside DuckDB using the powerful **spatial** ext
 - **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage with optional dataset-level metadata.
 - **Web Editor:** A visual, browser-based pipeline builder with live YAML preview, syntax validation, data previewing, and interactive execution logs.
 - **Powered by DuckDB Spatial:** Blistering speed using DuckDB's columnar execution engine and GDAL-backed `ST_Read`/`ST_Write` operations.
-- **Flexible Joins:** Spatial joins (intersects/contains/within, first-match or fan-out-all), attribute joins, and nearest-neighbor (distance-constrained) searches.
-- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union) — chainable like any join step, and forkable into named branches via `snapshot`.
+- **Flexible Joins:** Spatial joins (intersects/contains/within, keeping the first match or fanning out to all), attribute joins, and nearest-neighbor (distance-constrained) searches.
+- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union) — chainable like any join step, with `snapshot` to fork the chain into named branches.
 - **Derived sources:** Build a filtered/buffered view of any source and reuse it as a join source, without a dedicated step.
 - **Rich Attribute Mapping:** Translate, rename, compute coordinates/area/length, generate UUIDs/timestamps, or apply rule-based/CSV-based codelist lookups on the fly.
 
@@ -44,18 +44,19 @@ data/  output/       # inputs / outputs
 Each source is read once into a `src_<id>` view, with its geometry reprojected to a
 single **working CRS**. The engine then walks the pipeline's `steps` in order, each
 one creating the next `step_N` view on top of the last (`step_0` is the `base`
-source). A `snapshot` step can fork a named branch off the chain at that point — a
-later step's `source:` can target a branch, or a `derived_source` can wrap an
-existing source with a filter/buffer — so steps don't have to run strictly linearly.
-DuckDB plans each layer's view chain as one query, so joins, geoprocessing, and
-projections stream and stay fast.
+source). A `snapshot` step names the chain's current state so a later step can fork
+off a named branch instead of following the main chain, and a `derived_source` wraps
+an existing source with a filter/buffer for reuse as a join source — so a pipeline
+isn't limited to one strictly linear sequence of steps. DuckDB plans each layer's
+view chain as one query, so joins, geoprocessing, and projections stream and stay
+fast.
 
 Once the chain is built, each output layer applies its own attribute `mapping` (and
 optional `filter`) and is written straight to GeoPackage via
 `COPY … (FORMAT GDAL, DRIVER 'GPKG')`. A pipeline can write several layers this way,
 and a Config file can run several pipelines, all appended into the same GeoPackage.
 lon/lat/mgrs/wkb/area/length are always derived from the same working-CRS geometry
-used for joins — no extra reprojection.
+used for the joins, so there's no extra reprojection.
 
 Almost every format goes through DuckDB's `ST_Read` (which uses GDAL), so adding a
 format is usually one branch in `sources.py`. **ArcGIS REST** is the exception: it's
@@ -161,74 +162,74 @@ and run log.
 
 ## Pipeline YAML
 
-A file is a **Config**: one shared output GeoPackage, optional dataset metadata, and a
-list of independent `pipelines`. Each pipeline has its own sources/base/steps/mapping
-and can fan out to one or more output `layers`, all appended into the same GeoPackage:
+A pipeline file is a **Config**: one shared output GeoPackage, optional dataset
+metadata, and a list of independent `pipelines`. Each pipeline has its own
+sources/base/steps/mapping, and can fan out to one or more output `layers` that all
+get appended into that same GeoPackage:
 
 ```yaml
-name: embassies
-description: "Foreign missions in Norway"
-output: output/Embassies.gpkg   # one shared GeoPackage for every pipeline below
+name: ducks
+description: "Ranking every duck in the neighbourhood pond by sass level"
+output: output/Ducks.gpkg       # one shared GeoPackage for every pipeline below
 overwrite: true
 metadata:                       # optional GeoPackage-level dataset metadata
-  abstract: "Embassy locations enriched with postal area and MGRS"
-  gdpr: "No personal data"
+  abstract: "Duck sightings enriched with pond gossip and species drama"
+  gdpr: "No personal data (ducks were not available for consent)"
 
 pipelines:
-  - name: embassies              # first (here, only) pipeline in the file
+  - name: ducks                  # first (here, only) pipeline in the file
     working_crs: EPSG:25833      # CRS used for joins; defaults to base source CRS
 
     sources:
-      - id: ambassader           # unique handle
-        format: gpkg             # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|xlsx|csv
-        uri: data/Ambassader.gpkg  # path, .gdb folder, or service URL
-        layer: Ambassader        # layer / WFS typename / sheet name
+      - id: ducks                # unique handle
+        format: gpkg              # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|xlsx|csv
+        uri: data/Ducks.gpkg      # path, .gdb folder, or service URL
+        layer: Ducks              # layer / WFS typename / sheet name
         crs: EPSG:4326
-      - id: postnummer
-        format: wfs
-        uri: https://wfs.geonorge.no/skwms1/wfs.postnummeromrader
-        layer: Postnummeromrade
+      - id: ponds
+        format: geojson
+        uri: data/Ponds.geojson
+        layer: ponds
         crs: EPSG:25833
-      - id: dgif
-        format: xlsx
-        uri: data/Mappingtabell_NGF-DGIF.xlsx
-        layer: NGF-DGIF
+      - id: species_codes
+        format: csv
+        uri: data/species_codes.csv
         geometry: false          # tabular source
 
     derived_sources:             # optional: filtered/buffered view of a source, usable as `source:` below
-      - id: postnummer_oslo
-        from: postnummer
-        where: "poststed = 'OSLO'"
+      - id: ponds_chill
+        from: ponds
+        where: "vibe = 'chill'"  # only the drama-free ponds
 
-    base: ambassader              # features flow from here
+    base: ducks                   # features flow from here
     steps:                        # ordered; each reshapes or adds columns to the row
       - type: spatial_join
-        source: postnummer
+        source: ponds
         predicate: intersects     # intersects|contains|within
         on_multiple: first        # first|largest_overlap (see "Spatial join match resolution" below)
-        fields: { s_postnummer: postnummer, s_poststed: poststed }
+        fields: { s_pond_id: pond_id, s_pond_name: name, s_pond_type: type }
       - type: attribute_join
-        source: dgif
-        left: "'Embassies'"       # SQL expression / literal evaluated on the row
-        right: dataset             # column on the joined source
-        fields: { dgifCCode: dgifCCode }
+        source: species_codes
+        left: species_code        # SQL expression / literal evaluated on the row
+        right: code                # column on the joined source
+        fields: { s_species_name: common_name }
 
     mapping:                      # ordered output columns; one of from/const/expr/func/codelist
-      - { to: name,           from: "name:en" }
-      - { to: type,           const: "Embassy" }
-      - { to: postalCode,     from: "s_postnummer", cast: INTEGER }
+      - { to: name,           from: "nickname" }        # e.g. "Sir Quacksalot"
+      - { to: species,        from: "s_species_name" }
+      - { to: pondId,         from: "s_pond_id", cast: INTEGER }
       - { to: longitude,      func: lon }      # ST_X of EPSG:4326 geometry
       - { to: latitude,       func: lat }      # ST_Y of EPSG:4326 geometry
-      - { to: mgrs,           func: mgrs }     # via python mgrs lib
-      - { to: updateDate,     func: today }    # also: now, uuid, wkb, area, length
-      - { to: area_label,     expr: "upper(s_poststed)" }   # raw SQL on the row
+      - { to: mgrs,           func: mgrs }     # for ducks who need a proper grid reference
+      - { to: spottedDate,    func: today }    # also: now, uuid, wkb, area, length
+      - { to: pond_label,     expr: "upper(s_pond_name)" }   # raw SQL on the row, e.g. "MURKY LAGOON"
 
     layers:                       # one or more output layers from the same chain above
-      - layer: Embassies
+      - layer: Ducks
         crs: EPSG:25833
-      - layer: EmbassiesOslo       # a second layer, filtered from the same pipeline
+      - layer: DucksChillPonds     # a second layer, filtered from the same pipeline
         crs: EPSG:25833
-        filter: "s_poststed = 'OSLO'"
+        filter: "s_pond_type = 'no_drama'"
 ```
 
 A single-layer pipeline can write `layer:`/`crs:`/`filter:` directly instead of a
@@ -255,8 +256,8 @@ legacy shorthands, auto-upgraded to the Config shape above on load.
 | `snapshot`           | name the chain's current state (`id:`) so a later step can join back against it or fork a branch |
 
 Every step also accepts an optional `branch:` — the name of an earlier `snapshot` to
-run against instead of the main chain, letting a pipeline maintain several parallel,
-diverging chains that each keep evolving independently.
+run against instead of the main chain, letting a pipeline maintain several parallel
+chains that each keep evolving on their own.
 
 ### Derived sources
 
@@ -293,39 +294,39 @@ of picking a single one.
 
 ### Codelists
 
-For "if value LIKE potato then Vegetable" style remapping, use `codelist` instead
+For "if value LIKE mall then Mallard" style remapping, use `codelist` instead
 of hand-writing a `CASE WHEN` in `expr`. Rules are evaluated top-to-bottom, first
 match wins:
 
 ```yaml
-- to: category
+- to: species
   codelist:
-    source: raw_name          # column being translated
-    case_insensitive: true     # default true
+    source: raw_species        # column being translated
+    case_insensitive: true      # default true
     cases:
-      - { match: "potato",  value: "Vegetable" }   # exact match
-      - { like: "%apple%",  value: "Fruit" }        # SQL LIKE pattern
-      - { regex: "^carro",  value: "Vegetable" }    # regex
-    default: "Unknown"          # used when nothing matches (omit for NULL)
+      - { match: "mall",     value: "Mallard (reigning pond champion)" }  # exact match
+      - { like: "%gadwall%", value: "Gadwall (quietly judging everyone)" } # SQL LIKE pattern
+      - { regex: "^teal",    value: "Green-winged Teal (chaotic good)" }   # regex
+    default: "Mystery duck, do not approach"  # used when nothing matches (omit for NULL)
 ```
 
 For large code tables (hundreds+ of codes), point at a CSV instead of listing
 rules — this becomes a correlated lookup against `read_csv`, not a giant `CASE`:
 
 ```yaml
-- to: nato_code
+- to: species_name
   codelist:
-    source: raw_code
-    file: codelists/dgif_codes.csv   # two (or more) columns
-    file_match_col: code              # key column in the CSV
-    file_value_col: label              # output column in the CSV
-    default: "Unmapped"
+    source: species_code
+    file: codelists/duck_species.csv   # two (or more) columns
+    file_match_col: code                 # key column in the CSV
+    file_value_col: common_name          # output column in the CSV
+    default: "Unidentified duck"
 ```
 
 If the lookup is itself a real table with several columns you need (not just a
 single translated value), model it as an `attribute_join` step instead — that's
 a proper join, not a per-row correlated subquery, and is the better fit for
-things like the NGF→DGIF mapping table in the example above.
+things like the species lookup table in the example above.
 
 The editor's mapping rows support `codelist` directly: choosing it opens a panel
 with a toggle between **rules** (match/like/regex → value, plus a default) and
@@ -336,14 +337,14 @@ with a toggle between **rules** (match/like/regex → value, plus a default) and
 - **One `base` per pipeline.** Each `pipelines` entry starts from a single source's
   features. `merge` can append another source's rows mid-chain via `UNION ALL BY
   NAME`, but those rows only pass through the steps *after* the merge, not the ones
-  before it — there's no way to run one identical step chain over two starting
-  datasets at once. If you need that, write separate `pipelines` entries (each can
-  write to its own layer in the same shared output).
+  before it — so there's no way to run one identical step chain over two starting
+  datasets at once. Write separate `pipelines` entries instead (each can write to
+  its own layer in the same shared output).
 - **`match: first` is the default and is easy to reach for by accident.** A base
-  feature that overlaps more than one join-source feature — e.g. a point sitting
-  exactly on the boundary between two postal-code polygons — silently keeps only
-  one match's fields unless you deliberately opt into `match: all` (see "Spatial
-  join match resolution" above).
+  feature that overlaps more than one join-source feature — e.g. a duck paddling
+  exactly on the boundary between two overlapping ponds — silently keeps only one
+  match's fields unless you deliberately opt into `match: all` (see "Spatial join
+  match resolution" above).
 - **Synchronous run.** `POST /api/run` blocks on the whole pipeline and returns
   once it's done — no job queue, cancellation, or streamed logs for long-running
   jobs. `check`/`run` in the CLI are likewise blocking, single-shot commands.
