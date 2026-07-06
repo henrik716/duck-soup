@@ -5,19 +5,22 @@
 
 **Duck Soup** makes config-driven geodata ETL on **DuckDB** as easy as... well, duck soup!
 
-It serves as a lightweight, lightning-fast replacement for building heavy, complex workspaces in tools like FME (Safe Software Feature Manipulation Engine) or writing custom, error-prone Python scripts. You describe your dataset as a simple YAML file (sources → base → join steps → attribute mapping → output), or build it visually using the interactive web editor.
+It serves as a lightweight, lightning-fast replacement for building heavy, complex workspaces in tools like FME (Safe Software Feature Manipulation Engine) or writing custom, error-prone Python scripts. You describe your dataset as a simple YAML file (sources → base → join/geoprocessing steps → attribute mapping → one or more output layers), or build it visually using the interactive web editor.
 
-Under the hood, everything runs inside DuckDB using the powerful **spatial** extension. It compiles your entire pipeline of spatial joins, attribute joins, nearest-neighbor searches, and field mappings into a single, high-performance SQL query that streams directly to an output **GeoPackage**.
+Under the hood, everything runs inside DuckDB using the powerful **spatial** extension. It compiles your pipeline of spatial joins, attribute joins, nearest-neighbor searches, buffers, clips, overlays, dissolves, and field mappings into a chain of SQL views that DuckDB streams straight to an output **GeoPackage**. A single YAML file can define several independent pipelines that each fan out to multiple layers, all written into one shared GeoPackage.
 
 ---
 
 ## Key Features
 
-- **YAML-driven pipelines:** Describe inputs, join steps, schema mapping, and output layers in one neat configuration file.
+- **YAML-driven pipelines:** Describe inputs, join/geoprocessing steps, schema mapping, and output layers in one neat configuration file.
+- **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage with optional dataset-level metadata.
 - **Web Editor:** A visual, browser-based pipeline builder with live YAML preview, syntax validation, data previewing, and interactive execution logs.
 - **Powered by DuckDB Spatial:** Blistering speed using DuckDB's columnar execution engine and GDAL-backed `ST_Read`/`ST_Write` operations.
-- **Flexible Joins:** Supports spatial joins (intersects, contains, within), traditional attribute joins, and nearest-neighbor (distance-constrained) searches out of the box.
-- **Rich Attribute Mapping:** Translate, rename, compute coordinates, generate UUIDs/timestamps, or apply CSV-based codelist lookups on the fly.
+- **Flexible Joins:** Spatial joins (intersects/contains/within, first-match or fan-out-all), attribute joins, and nearest-neighbor (distance-constrained) searches.
+- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union) — chainable like any join step, and forkable into named branches via `snapshot`.
+- **Derived sources:** Build a filtered/buffered view of any source and reuse it as a join source, without a dedicated step.
+- **Rich Attribute Mapping:** Translate, rename, compute coordinates/area/length, generate UUIDs/timestamps, or apply rule-based/CSV-based codelist lookups on the fly.
 
 ---
 
@@ -38,12 +41,21 @@ data/  output/       # inputs / outputs
 
 ## How it works
 
-Each source is read once and its geometry reprojected to a single **working CRS**.
-The engine then builds a chain of SQL views — `base → step_1 → step_2 → … → mapped`
-— and DuckDB plans the whole thing as one query, so joins and projections stream
-and stay fast. The final view is written straight to GeoPackage via
-`COPY … (FORMAT GDAL, DRIVER 'GPKG')`. lon/lat and MGRS are always derived from a
-single `EPSG:4326` transform of the geometry.
+Each source is read once into a `src_<id>` view, with its geometry reprojected to a
+single **working CRS**. The engine then walks the pipeline's `steps` in order, each
+one creating the next `step_N` view on top of the last (`step_0` is the `base`
+source). A `snapshot` step can fork a named branch off the chain at that point — a
+later step's `source:` can target a branch, or a `derived_source` can wrap an
+existing source with a filter/buffer — so steps don't have to run strictly linearly.
+DuckDB plans each layer's view chain as one query, so joins, geoprocessing, and
+projections stream and stay fast.
+
+Once the chain is built, each output layer applies its own attribute `mapping` (and
+optional `filter`) and is written straight to GeoPackage via
+`COPY … (FORMAT GDAL, DRIVER 'GPKG')`. A pipeline can write several layers this way,
+and a Config file can run several pipelines, all appended into the same GeoPackage.
+lon/lat/mgrs/wkb/area/length are always derived from the same working-CRS geometry
+used for joins — no extra reprojection.
 
 Almost every format goes through DuckDB's `ST_Read` (which uses GDAL), so adding a
 format is usually one branch in `sources.py`. **ArcGIS REST** is the exception: it's
@@ -142,61 +154,117 @@ cd duck_soup/web/ui
 npm run build      # compiles TypeScript and copies assets to ../static/
 ```
 
-The editor lets you add sources, pick the base, build join steps, define the output
-mapping, and Validate / Save / Run — with a live YAML preview and run log.
+The editor lets you add sources and derived sources, pick the base, build join and
+geoprocessing steps, define one or more output layers and their mapping, add more
+pipelines to the same file, and Validate / Save / Run — with a live YAML preview
+and run log.
 
 ## Pipeline YAML
 
+A file is a **Config**: one shared output GeoPackage, optional dataset metadata, and a
+list of independent `pipelines`. Each pipeline has its own sources/base/steps/mapping
+and can fan out to one or more output `layers`, all appended into the same GeoPackage:
+
 ```yaml
 name: embassies
-working_crs: EPSG:25833        # CRS used for joins; defaults to base source CRS
+description: "Foreign missions in Norway"
+output: output/Embassies.gpkg   # one shared GeoPackage for every pipeline below
+overwrite: true
+metadata:                       # optional GeoPackage-level dataset metadata
+  abstract: "Embassy locations enriched with postal area and MGRS"
+  gdpr: "No personal data"
 
-sources:
-  - id: ambassader             # unique handle
-    format: gpkg               # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|xlsx|csv
-    uri: data/Ambassader.gpkg  # path, .gdb folder, or service URL
-    layer: Ambassader          # layer / WFS typename / sheet name
-    crs: EPSG:4326
-  - id: postnummer
-    format: wfs
-    uri: https://wfs.geonorge.no/skwms1/wfs.postnummeromrader
-    layer: Postnummeromrade
-    crs: EPSG:25833
-  - id: dgif
-    format: xlsx
-    uri: data/Mappingtabell_NGF-DGIF.xlsx
-    layer: NGF-DGIF
-    geometry: false            # tabular source
+pipelines:
+  - name: embassies              # first (here, only) pipeline in the file
+    working_crs: EPSG:25833      # CRS used for joins; defaults to base source CRS
 
-base: ambassader               # features flow from here
+    sources:
+      - id: ambassader           # unique handle
+        format: gpkg             # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|xlsx|csv
+        uri: data/Ambassader.gpkg  # path, .gdb folder, or service URL
+        layer: Ambassader        # layer / WFS typename / sheet name
+        crs: EPSG:4326
+      - id: postnummer
+        format: wfs
+        uri: https://wfs.geonorge.no/skwms1/wfs.postnummeromrader
+        layer: Postnummeromrade
+        crs: EPSG:25833
+      - id: dgif
+        format: xlsx
+        uri: data/Mappingtabell_NGF-DGIF.xlsx
+        layer: NGF-DGIF
+        geometry: false          # tabular source
 
-steps:                         # ordered; each adds columns to the base row
-  - type: spatial_join
-    source: postnummer
-    predicate: intersects      # intersects|contains|within
-    on_multiple: first         # first|largest_overlap (see "Spatial join match resolution" below)
-    fields: { s_postnummer: postnummer, s_poststed: poststed }
-  - type: attribute_join
-    source: dgif
-    left: "'Embassies'"        # SQL expression / literal evaluated on the base row
-    right: dataset             # column on the joined source
-    fields: { dgifCCode: dgifCCode }
+    derived_sources:             # optional: filtered/buffered view of a source, usable as `source:` below
+      - id: postnummer_oslo
+        from: postnummer
+        where: "poststed = 'OSLO'"
 
-mapping:                       # ordered output columns; one of from/const/expr/func
-  - { to: name,           from: "name:en" }
-  - { to: type,           const: "Embassy" }
-  - { to: postalCode,     from: "s_postnummer", cast: INTEGER }
-  - { to: longitude,      func: lon }      # ST_X of EPSG:4326 geometry
-  - { to: latitude,       func: lat }      # ST_Y of EPSG:4326 geometry
-  - { to: mgrs,           func: mgrs }     # via python mgrs lib
-  - { to: updateDate,     func: today }    # also: now, uuid
-  - { to: area_label,     expr: "upper(s_poststed)" }   # raw SQL on the row
+    base: ambassader              # features flow from here
+    steps:                        # ordered; each reshapes or adds columns to the row
+      - type: spatial_join
+        source: postnummer
+        predicate: intersects     # intersects|contains|within
+        on_multiple: first        # first|largest_overlap (see "Spatial join match resolution" below)
+        fields: { s_postnummer: postnummer, s_poststed: poststed }
+      - type: attribute_join
+        source: dgif
+        left: "'Embassies'"       # SQL expression / literal evaluated on the row
+        right: dataset             # column on the joined source
+        fields: { dgifCCode: dgifCCode }
 
-output:
-  path: output/Embassies.gpkg
-  layer: Embassies
-  crs: EPSG:25833
+    mapping:                      # ordered output columns; one of from/const/expr/func/codelist
+      - { to: name,           from: "name:en" }
+      - { to: type,           const: "Embassy" }
+      - { to: postalCode,     from: "s_postnummer", cast: INTEGER }
+      - { to: longitude,      func: lon }      # ST_X of EPSG:4326 geometry
+      - { to: latitude,       func: lat }      # ST_Y of EPSG:4326 geometry
+      - { to: mgrs,           func: mgrs }     # via python mgrs lib
+      - { to: updateDate,     func: today }    # also: now, uuid, wkb, area, length
+      - { to: area_label,     expr: "upper(s_poststed)" }   # raw SQL on the row
+
+    layers:                       # one or more output layers from the same chain above
+      - layer: Embassies
+        crs: EPSG:25833
+      - layer: EmbassiesOslo       # a second layer, filtered from the same pipeline
+        crs: EPSG:25833
+        filter: "s_poststed = 'OSLO'"
 ```
+
+A single-layer pipeline can write `layer:`/`crs:`/`filter:` directly instead of a
+`layers:` list (see `pipelines/test.yaml` for a minimal working example) — and a
+single-pipeline file can skip the `pipelines:` wrapper entirely and write
+`sources`/`base`/`steps`/`mapping`/`output` directly at the top level. Both are
+legacy shorthands, auto-upgraded to the Config shape above on load.
+
+### Step types
+
+| `type`              | what it does |
+|---------------------|--------------|
+| `spatial_join`       | join by `predicate` (intersects/contains/within); `match: first` (default, one row per base feature) or `match: all` (fan out one row per match) |
+| `attribute_join`     | 1:1 left join: `left` (SQL expression/literal on the row) = `right` (column on the joined source) |
+| `nearest_neighbor`   | join the closest feature by distance; optional `max_distance` cap and `distance_field` output |
+| `buffer`             | `ST_Buffer(geom, distance)` |
+| `centroid`           | `ST_Centroid(geom)` |
+| `clip`               | keep only the geometry intersecting a matching feature from `source` (`ST_Intersection`) |
+| `erase`              | subtract the union of all matching `source` features from the geometry (`ST_Difference`) |
+| `dissolve`           | `ST_Union_Agg(geom)` grouped `by` a list of columns (omit for one feature total) |
+| `intersect_overlay`  | inner join + `ST_Intersection`, one output row per overlapping pair |
+| `filter`             | drop rows where `where` (SQL boolean) is false |
+| `merge`              | append another source's rows via `UNION ALL BY NAME` |
+| `snapshot`           | name the chain's current state (`id:`) so a later step can join back against it or fork a branch |
+
+Every step also accepts an optional `branch:` — the name of an earlier `snapshot` to
+run against instead of the main chain, letting a pipeline maintain several parallel,
+diverging chains that each keep evolving independently.
+
+### Derived sources
+
+A `derived_sources` entry wraps an existing `source` (or another derived source) with
+a `where` filter and/or a `buffer`, registered under its own `id` — usable as
+`source:` in any step exactly like a real source. Handy for joining against only a
+subset of a large reference layer, or a buffered version of it, without adding a
+dedicated step to the main chain.
 
 ### Spatial join match resolution
 
@@ -219,7 +287,7 @@ of picking a single one.
 | `from`     | copy a column from the (joined) row                            |
 | `const`    | a literal value                                                 |
 | `expr`     | raw SQL expression evaluated against the row                    |
-| `func`     | `lon`, `lat`, `mgrs`, `uuid`, `now`, `today`                     |
+| `func`     | `lon`, `lat`, `mgrs`, `wkb`, `area`, `length`, `uuid`, `now`, `today` |
 | `codelist` | translate a column's value via rules or a CSV lookup table      |
 | `cast`     | optional; wraps the result in `TRY_CAST(… AS TYPE)`              |
 
@@ -263,19 +331,22 @@ The editor's mapping rows support `codelist` directly: choosing it opens a panel
 with a toggle between **rules** (match/like/regex → value, plus a default) and
 **file lookup** (csv path + key/value columns).
 
-## Not yet (first-draft scope)
+## Known limitations
 
-- One base + first-match joins (1:1) by default. `spatial_join` with `match: first`
-  keeps only a single joined feature per base row (see "Spatial join match resolution"
-  above for how it's chosen) — if a base feature overlaps more than one join-source
-  feature, the others are silently dropped, not merged or reported. For example, a point
-  sitting exactly on the boundary between two postal-code polygons will only pick up one
-  polygon's `postnummer`/`poststed` values; the other polygon's data never appears in the
-  output. If that matters for your data, either clean up overlapping join-source polygons
-  upstream, or use `match: all` instead (one output row per match, base row repeated) and
-  deduplicate downstream. Many-to-many fan-out and unioning multiple bases are the
-  obvious next steps.
-- `func` set is small on purpose; add new ones in `engine.py:_func_expr` (SQL) or
+- **One `base` per pipeline.** Each `pipelines` entry starts from a single source's
+  features. `merge` can append another source's rows mid-chain via `UNION ALL BY
+  NAME`, but those rows only pass through the steps *after* the merge, not the ones
+  before it — there's no way to run one identical step chain over two starting
+  datasets at once. If you need that, write separate `pipelines` entries (each can
+  write to its own layer in the same shared output).
+- **`match: first` is the default and is easy to reach for by accident.** A base
+  feature that overlaps more than one join-source feature — e.g. a point sitting
+  exactly on the boundary between two postal-code polygons — silently keeps only
+  one match's fields unless you deliberately opt into `match: all` (see "Spatial
+  join match resolution" above).
+- **Synchronous run.** `POST /api/run` blocks on the whole pipeline and returns
+  once it's done — no job queue, cancellation, or streamed logs for long-running
+  jobs. `check`/`run` in the CLI are likewise blocking, single-shot commands.
+- **Small `func` set on purpose** (`lon`, `lat`, `mgrs`, `wkb`, `area`, `length`,
+  `uuid`, `now`, `today`); add new ones in `engine.py:_func_expr` (SQL) or
   `derive.py` (python UDF).
-- The editor builds/validates/saves and runs synchronously; for very large jobs
-  you'd want a job queue and streamed logs.
