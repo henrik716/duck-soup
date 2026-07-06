@@ -27,7 +27,7 @@ duck_soup/           # Python package directory
   sources.py         # one reader per format (mostly DuckDB ST_Read / GDAL)
   derive.py          # python UDFs (MGRS) registered into DuckDB
   engine.py          # builds a chain of SQL views, writes GeoPackage
-  cli.py             # python -m duck_soup.cli run pipelines/embassies.yaml
+  cli.py             # python -m duck_soup.cli run pipelines/test.yaml
   web/
     app.py           # FastAPI backend
     static/          # compiled editor frontend assets served by FastAPI
@@ -99,8 +99,8 @@ python -m duck_soup.cli run   pipelines/test.yaml   # writes output/test.gpkg
 Run commands in your virtual environment:
 
 ```bash
-python -m duck_soup.cli check pipelines/embassies.yaml   # validate only
-python -m duck_soup.cli run   pipelines/embassies.yaml   # build the GeoPackage
+python -m duck_soup.cli check pipelines/test.yaml   # validate only
+python -m duck_soup.cli run   pipelines/test.yaml   # build the GeoPackage
 ```
 
 ### Editor (Web App)
@@ -257,7 +257,7 @@ rules — this becomes a correlated lookup against `read_csv`, not a giant `CASE
 If the lookup is itself a real table with several columns you need (not just a
 single translated value), model it as an `attribute_join` step instead — that's
 a proper join, not a per-row correlated subquery, and is the better fit for
-things like the NGF→DGIF mapping table in `pipelines/embassies.yaml`.
+things like the NGF→DGIF mapping table in the example above.
 
 The editor's mapping rows support `codelist` directly: choosing it opens a panel
 with a toggle between **rules** (match/like/regex → value, plus a default) and

@@ -1,4 +1,4 @@
-"""Command-line runner: `python -m duck_soup.cli run pipelines/embassies.yaml`."""
+"""Command-line runner: `python -m duck_soup.cli run pipelines/test.yaml`."""
 from __future__ import annotations
 
 import argparse
