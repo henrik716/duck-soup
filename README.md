@@ -3,7 +3,7 @@
 [![DuckDB](https://img.shields.io/badge/Powered%20by-DuckDB-orange.svg)](https://duckdb.org/)
 [![GeoPackage](https://img.shields.io/badge/Output-GeoPackage-blue.svg)](https://www.geopackage.org/)
 
-**Duck Soup** makes config-driven geodata ETL on **DuckDB** as easy as... well, duck soup!
+**duck soup** makes config-driven geodata ETL on **DuckDB** as easy as... well, duck soup!
 
 It's a lightweight, lightning-fast replacement for building heavy workspaces in tools like FME (Safe Software Feature Manipulation Engine), or writing custom, error-prone Python scripts. Describe your pipeline as a simple YAML file — sources, a base, join/geoprocessing steps, attribute mapping, one or more output layers — or build it visually in the interactive web editor.
 
