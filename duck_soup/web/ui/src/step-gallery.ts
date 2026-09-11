@@ -1,5 +1,6 @@
 import { createIcons } from 'lucide'
 import { mkEl, appIcons } from './dom'
+import { openOverlay, closeOverlay } from './overlay'
 import type { Step } from './types'
 
 export function openStepGalleryModal(onSelect: (type: Step['type']) => void): void {
@@ -104,26 +105,38 @@ export function openStepGalleryModal(onSelect: (type: Step['type']) => void): vo
     document.body.appendChild(modal)
 
     // Wire close buttons
-    modal.querySelector('#closeStepModalBtn')!.addEventListener('click', () => {
-      modal!.classList.remove('show')
-    })
+    modal.querySelector('#closeStepModalBtn')!.addEventListener('click', () => close())
     modal.addEventListener('click', e => {
-      if (e.target === modal) modal!.classList.remove('show')
+      if (e.target === modal) close()
     })
+  }
+
+  const el = modal
+  const close = () => {
+    el.classList.remove('show')
+    closeOverlay(el)
   }
 
   // Bind step-gallery item clicks dynamically
   modal.querySelectorAll<HTMLElement>('.step-gallery-item').forEach(item => {
     const newItem = item.cloneNode(true) as HTMLElement
     item.parentNode!.replaceChild(newItem, item)
-    newItem.addEventListener('click', () => {
-      const type = newItem.dataset['type'] as Step['type']
-      onSelect(type)
-      modal!.classList.remove('show')
+
+    // Gallery items are divs; make them reachable and operable from the keyboard.
+    newItem.tabIndex = 0
+    newItem.setAttribute('role', 'button')
+    const pick = () => {
+      onSelect(newItem.dataset['type'] as Step['type'])
+      close()
+    }
+    newItem.addEventListener('click', pick)
+    newItem.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick() }
     })
   })
 
   // Show modal
   modal.classList.add('show')
+  openOverlay(modal, close)
   createIcons({ icons: appIcons })
 }

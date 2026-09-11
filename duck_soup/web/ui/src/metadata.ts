@@ -1,5 +1,5 @@
 import { createIcons, Info, ChevronDown } from 'lucide'
-import { mkEl } from './dom'
+import { mkEl, esc } from './dom'
 import { comboField, wireCombos } from './combo'
 import type { DatasetMetadata } from './types'
 
@@ -17,7 +17,7 @@ const METADATA_OPTIONS: Partial<Record<typeof METADATA_FIELDS[number], string[]>
 
 function metaInput(key: typeof METADATA_FIELDS[number], value: string, placeholder: string): string {
   const options = METADATA_OPTIONS[key]
-  if (!options) return `<input data-mk="${key}" placeholder="${placeholder}" value="${value}">`
+  if (!options) return `<input data-mk="${key}" placeholder="${esc(placeholder)}" value="${esc(value)}">`
   return comboField(`data-mk="${key}"`, value, options, placeholder)
 }
 
@@ -40,24 +40,26 @@ export function buildMetadataSection(
       </div>
       <div class="cfg-metadata-right">
         <span class="cfg-metadata-progress" data-meta-progress></span>
-        <i data-lucide="chevron-down" class="meta-chevron" style="width:16px;height:16px"></i>
+        <button type="button" class="chevron-btn meta-toggle-btn" aria-expanded="false" aria-controls="cfg-metadata-body" aria-label="Expand dataset metadata">
+          <i data-lucide="chevron-down" class="meta-chevron" style="width:16px;height:16px"></i>
+        </button>
       </div>
     </div>
-    <div class="cfg-metadata-collapse collapsed">
+    <div class="cfg-metadata-collapse collapsed" id="cfg-metadata-body">
       <div class="cfg-metadata-collapse-inner">
         <div class="cfg-metadata-body">
           <label class="field grow">name
-            <input data-mk="name" placeholder="Norwegian Embassies" value="${meta.name ?? ''}">
+            <input data-mk="name" placeholder="Norwegian Embassies" value="${esc(meta.name)}">
           </label>
           <label class="field" style="grid-column:1 / -1;">abstract
             <textarea data-mk="abstract" rows="2" placeholder="Dataset description / abstract"
-                      style="resize:vertical;font-family:inherit;">${meta.abstract ?? ''}</textarea>
+                      style="resize:vertical;font-family:inherit;">${esc(meta.abstract)}</textarea>
           </label>
           <label class="field grow">origin
-            <input data-mk="origin" placeholder="Ministry of Foreign Affairs" value="${meta.origin ?? ''}">
+            <input data-mk="origin" placeholder="Ministry of Foreign Affairs" value="${esc(meta.origin)}">
           </label>
           <label class="field grow">access method / source
-            <input data-mk="access_method_source" placeholder="GeoPackage file, WFS, …" value="${meta.access_method_source ?? ''}">
+            <input data-mk="access_method_source" placeholder="GeoPackage file, WFS, …" value="${esc(meta.access_method_source)}">
           </label>
           <label class="field grow">update frequency
             ${metaInput('update_frequency', meta.update_frequency ?? '', 'Annual')}
@@ -86,7 +88,17 @@ export function buildMetadataSection(
     progressEl.classList.toggle('complete', filled === METADATA_FIELDS.length)
   }
 
-  toggleEl.addEventListener('click', () => collapse.classList.toggle('collapsed'))
+  const toggleBtn = section.querySelector<HTMLButtonElement>('.meta-toggle-btn')!
+  const toggleCollapse = () => {
+    const collapsed = collapse.classList.toggle('collapsed')
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed))
+    toggleBtn.setAttribute('aria-label', collapsed ? 'Expand dataset metadata' : 'Collapse dataset metadata')
+  }
+  toggleEl.addEventListener('click', e => {
+    if ((e.target as Element).closest('button,input,select,textarea')) return
+    toggleCollapse()
+  })
+  toggleBtn.addEventListener('click', e => { e.stopPropagation(); toggleCollapse() })
 
   section.querySelectorAll('[data-mk]').forEach(el =>
     el.addEventListener('input', () => { updateProgress(); syncFn() }))

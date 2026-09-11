@@ -295,7 +295,8 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
   padding: 12px; margin: 8px 0 12px; }
 .codelist-panel .row { margin-bottom: 8px; }
 
-.case-row { display: grid; grid-template-columns: 110px 1fr 1fr 32px; gap: 6px; align-items: center; margin-bottom: 8px; }
+.case-row { display: grid; grid-template-columns: 110px 1fr 1fr 26px 26px 32px; gap: 6px; align-items: center; margin-bottom: 8px; }
+.case-row [data-cup], .case-row [data-cdown] { padding: 4px; display: inline-flex; align-items: center; justify-content: center; }
 .case-row select { padding: 8px 10px; }
 
 .codelist-toggle {
@@ -496,7 +497,10 @@ aside.side {
 pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space: pre-wrap; margin: 0;
   background: var(--void); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px;
   box-shadow: inset 0 2px 8px rgba(0,0,0,0.5); }
-.log-wrap { padding: 18px 24px; height: 100%; display: flex; flex-direction: column; }
+/* No `display` here: at equal specificity this rule sits after `.tab-content{display:none}`
+   and would win, leaving the log panel permanently visible under whichever tab was active.
+   `.tab-content.active` supplies flex/column when the tab is actually selected. */
+.log-wrap { padding: 18px 24px; height: 100%; }
 .log-line { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 4px; line-height: 1.5; }
 .log-line.ok { color: var(--ok); } .log-line.bad { color: var(--warn); }
 
@@ -824,6 +828,50 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .drawer-header h3 { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .drawer-body { padding: 20px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
 
+/* ---- Expression Builder ---- */
+.expr-editor-wrap { position: relative; flex: 1; }
+.expr-editor-wrap textarea, .expr-editor-wrap pre {
+  position: absolute; inset: 0; margin: 0; box-sizing: border-box;
+  font-family: var(--mono); font-size: 13px; line-height: 1.5;
+  padding: 10px; white-space: pre-wrap; word-wrap: break-word; overflow: auto;
+}
+.expr-editor-wrap pre {
+  color: var(--ink); pointer-events: none; background: var(--void);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.expr-editor-wrap textarea {
+  background: transparent; color: transparent; caret-color: var(--ink);
+  border: 1px solid transparent; border-radius: var(--radius-sm); resize: none;
+}
+.expr-tok-keyword { color: var(--accent); font-weight: 600; }
+.expr-tok-func { color: var(--spatial); }
+.expr-tok-string { color: var(--ok); }
+.expr-tok-number { color: #ffb86b; }
+.expr-snippet-category { margin-bottom: 4px; }
+.expr-snippet-category summary {
+  cursor: pointer; font-size: 10px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--display); padding: 4px 0;
+}
+.expr-badge { padding: 4px 6px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 10.5px; font-family: var(--mono); cursor: pointer; user-select: none; margin-bottom: 4px; }
+.expr-badge:hover { border-color: var(--accent-soft-border); background: var(--accent-soft); }
+.expr-badge-doc { display: block; font-size: 9.5px; color: var(--muted); margin-top: 2px; font-family: var(--display); }
+.expr-badge-type { float: right; font-size: 10px; color: var(--muted); }
+.expr-validation-msg { font-size: 11px; font-family: var(--mono); min-height: 14px; }
+.expr-validation-msg.ok { color: var(--ok); }
+.expr-validation-msg.bad { color: var(--warn); }
+.expr-validation-msg.pending { color: var(--muted); }
+.expr-autocomplete-popup {
+  display: none; position: fixed; z-index: 1100; min-width: 180px; max-width: 320px;
+  background: var(--panel-solid); border: 1px solid var(--line-glow); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); max-height: 200px; overflow-y: auto; padding: 4px;
+}
+.expr-ac-item {
+  padding: 5px 8px; border-radius: 4px; font-size: 11.5px; font-family: var(--mono);
+  cursor: pointer; display: flex; justify-content: space-between; gap: 12px;
+}
+.expr-ac-item.sel, .expr-ac-item:hover { background: var(--accent-soft); color: var(--accent-hover); }
+.expr-ac-type { color: var(--muted); font-size: 10px; font-family: var(--display); }
+
 /* ---- Auto-map Banner ---- */
 .auto-map-banner {
   background: var(--accent-soft);
@@ -1007,6 +1055,191 @@ th.sortable.sorted-desc .sort-indicator {
 .lineage-node.is-derived {
   border-style: dashed;
   border-color: rgba(139, 108, 255, 0.4);
+}
+
+/* ============================================================================
+   UI/UX pass — action bar, preview feedback, problems panel, a11y
+   ========================================================================= */
+
+/* ---- header action bar (moved out of the sidebar tab strip) ---- */
+.top-right { flex-wrap: wrap; }
+.inline-field { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+.inline-field > span {
+  color: var(--muted); font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap;
+}
+.inline-field input { padding: 6px 10px; font-size: 12px; height: 30px; }
+.top-divider { width: 1px; height: 22px; background: var(--line-solid); flex-shrink: 0; }
+
+/* The tagline is the first thing to go when the action bar needs the room. */
+@media (max-width: 1180px) { .tagline { display: none; } }
+@media (max-width: 900px) {
+  header.top { height: auto; flex-wrap: wrap; row-gap: 10px; }
+  .top-right { width: 100%; margin-left: 0; }
+}
+
+/* The status pill is now a button that opens the problems panel. */
+button.status { cursor: pointer; font-family: var(--mono); margin-left: 0; }
+button.status:hover { filter: brightness(1.25); }
+.status.busy { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft-border); }
+.status.busy::before { animation: statusPulse 1.1s ease-in-out infinite; }
+@keyframes statusPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* Unsaved-changes marker on the save button. */
+#saveBtn { position: relative; }
+#saveBtn.dirty::after {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent);
+}
+
+/* ---- preview busy indicator ---- */
+.preview-progress { height: 2px; flex-shrink: 0; background: transparent; overflow: hidden; position: relative; }
+.preview-progress.active::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: previewSweep 1.1s ease-in-out infinite;
+}
+@keyframes previewSweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* Stale results are dimmed only after a grace period (see busy.ts) so fast local
+   previews do not flash the table. */
+#preview-table-container { transition: opacity 0.2s ease; }
+#preview-table-container.is-stale { opacity: 0.45; }
+
+/* ---- tab strip ---- */
+.tabs { justify-content: space-between; align-items: center; flex-shrink: 0; }
+.tabs-list { display: flex; }
+.tabs-meta { display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+.row-count {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+}
+.row-count.truncated { color: var(--warn); cursor: help; }
+.tab-btn { flex: 0 0 auto; }
+.tab-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px;
+  padding: 0 5px; margin-left: 6px; border-radius: 8px;
+  background: var(--warn); color: var(--void); font-family: var(--mono); font-size: 9px; font-weight: 700;
+}
+.tab-badge[hidden] { display: none; }
+
+/* ---- problems panel ---- */
+/* Same reason as .log-wrap above — no `display` here. */
+.problems-wrap { padding: 18px 24px; height: 100%; gap: 10px; }
+.problem-locators { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.problem-locator {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: var(--warn-soft); border: 1px solid rgba(255, 107, 107, 0.25); border-radius: var(--radius-sm);
+  padding: 8px 10px; color: var(--ink); font-family: var(--mono); font-size: 11px; cursor: pointer;
+  transition: var(--transition);
+}
+.problem-locator:hover { border-color: var(--warn); background: rgba(255, 107, 107, 0.14); }
+.problem-locator .loc-path { color: var(--warn); font-weight: 600; white-space: nowrap; }
+.problem-locator .loc-msg { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#problemsDetail { overflow: auto; }
+
+/* ---- empty states ---- */
+.map-empty {
+  position: absolute; inset: 0; z-index: 500; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(9, 6, 21, 0.55);
+  color: var(--muted); font-family: var(--mono); font-size: 12px; text-align: center; padding: 20px;
+}
+.map-empty small { font-size: 10.5px; opacity: 0.75; max-width: 280px; }
+.map-empty[hidden] { display: none; }
+
+.section-empty-hint .empty-action {
+  background: none; border: none; padding: 0; color: var(--accent);
+  font-family: inherit; font-size: inherit; text-decoration: underline; cursor: pointer;
+}
+
+/* Card that will not make it into the generated config yet. */
+.card-warning {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px;
+  background: var(--warn-soft); border: 1px solid rgba(255, 107, 107, 0.25);
+  border-radius: var(--radius-sm); padding: 6px 9px;
+  color: var(--warn); font-family: var(--mono); font-size: 10.5px;
+}
+.card-warning[hidden] { display: none; }
+
+/* Value the editor filled in for you, rather than one you typed. */
+.auto-chip {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
+  background: var(--accent-soft); border: 1px solid var(--accent-soft-border); border-radius: 10px;
+  padding: 1px 7px; color: var(--accent); font-family: var(--mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.auto-chip[hidden] { display: none; }
+
+/* ---- preview highlight ----
+   A class, not inline style. These used to be written directly to element.style
+   alongside schema.ts's base-source marker, so clearing one wiped the other. */
+.is-previewing { border-color: var(--accent) !important; box-shadow: 0 0 10px rgba(139, 108, 255, 0.4) !important; }
+
+/* ---- toasts ---- */
+.toast-msg { flex: 1; }
+.toast-count {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  background: rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 1px 6px; flex-shrink: 0;
+}
+.toast-action {
+  background: var(--accent-soft); border: 1px solid var(--accent-soft-border); border-radius: var(--radius-sm);
+  color: var(--accent); font-family: var(--display); font-size: 12px; font-weight: 600;
+  padding: 4px 10px; cursor: pointer; flex-shrink: 0; transition: var(--transition);
+}
+.toast-action:hover { background: var(--accent); color: var(--void); }
+.toast-close {
+  background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px;
+  display: inline-flex; align-items: center; flex-shrink: 0; border-radius: var(--radius-sm);
+}
+.toast-close:hover { color: var(--ink); }
+
+/* ---- combo keyboard navigation ---- */
+.combo-option.active {
+  background: var(--accent-soft); color: var(--accent-hover);
+  outline: 1px solid var(--accent-soft-border); outline-offset: -1px;
+}
+
+/* ---- disclosure buttons ----
+   Headers stay clickable for the mouse, but the chevron is the real control:
+   focusable, Enter/Space-operable and carrying aria-expanded. */
+.chevron-btn {
+  background: none; border: none; padding: 2px; margin: 0; cursor: pointer;
+  color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); flex-shrink: 0; transition: var(--transition);
+}
+.chevron-btn:hover { color: var(--ink); background: rgba(255, 255, 255, 0.05); }
+
+/* ---- drag reorder affordance ---- */
+.map-item.drop-target-above { box-shadow: 0 -2px 0 0 var(--accent); }
+.map-item.drop-target-below { box-shadow: 0 2px 0 0 var(--accent); }
+
+/* ---- focus visibility ----
+   Previously only inputs had a focus ring; every button, tab, option, gallery item and
+   lineage node was invisible to keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+/* Elements flush against a panel edge need the ring drawn inside. */
+.tab-btn:focus-visible, .explorer-item:focus-visible, th.sortable:focus-visible {
+  outline-offset: -2px;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
+
+/* ---- reduced motion ----
+   flowPulse in particular looped forever on every lineage arrow with no way out. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Spinners still need to spin — a frozen spinner reads as a hang. */
+  .spin-animation { animation: spin 1s linear infinite !important; }
+  .preview-progress.active::after { animation: none !important; opacity: 0.6; }
 }
 
 

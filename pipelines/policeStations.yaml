@@ -1,0 +1,85 @@
+name: policeStations
+description: ''
+output: output/PoliceStations.gpkg
+overwrite: true
+pipelines:
+- name: PoliceStations
+  description: ''
+  sources:
+  - id: politistasjoner
+    format: geojson
+    uri: data/politistasjoner.geojson
+    layer: politistasjoner
+    crs: EPSG:4326
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: politistasjoner
+  steps: []
+  mapping:
+  - to: dgif_fullName
+    from: name
+  - to: dgif_ContactInfo
+    from: url
+  - to: dgif_contactInfo_1
+    from: phone
+  - to: dgif_contactInfo_2
+    from: email
+  - to: dgif_featureFunction
+    const: lawEnforcement
+    cast: VARCHAR
+  - to: services
+    expr: |-
+      COALESCE(
+        NULLIF(
+          list_distinct(
+            list_filter(
+              list_transform(
+                from_json(services, '["VARCHAR"]'),
+                x -> CASE
+                  WHEN x = 'Anmelde' THEN 'fileReport'
+                  WHEN x = 'Forvaltning (tillatelse og bevilling)' THEN 'administration'
+                  WHEN x = 'Våpen' THEN 'firearms'
+                  WHEN x = 'Hittegods' THEN 'lostAndFound'
+                  WHEN x = 'Namsfogd og forliksråd' THEN 'debtCollectionAndMediation'
+                  WHEN x = 'Pass og ID-kort' THEN 'passportAndIdCard'
+                  WHEN x = 'Opphold og utlendingssaker' THEN 'residenceAndImmigrationCases'
+                  WHEN x = 'Nødpass' THEN 'emergencyPassport'
+                  WHEN x = 'Politivakt' THEN 'policeGuardDuty'
+                  WHEN x = 'Hente pass og ID-kort' THEN 'collectPassportAndIdCard'
+                  ELSE NULL
+                END
+              ),
+              v -> v IS NOT NULL
+            )
+          ),
+          []
+        ),
+        ['noInformation']
+      )
+  - to: dgif_currencyDateTime
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: TIMESTAMP
+  - to: classification
+    const: NATO UNCLASSIFIED
+  - to: dgif_sourceIdentifier
+    const: Politiet
+  - to: gradering
+    const: Ugradert
+  - to: dgif_featureType
+    const: Building
+  - to: dgif_featureType531
+    const: AL013
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: PoliceStations
+    crs: EPSG:25833
+    mapping: []

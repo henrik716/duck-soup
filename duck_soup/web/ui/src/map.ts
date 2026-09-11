@@ -1,18 +1,43 @@
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { PreviewRow } from './types'
+import { esc } from './dom'
 
 let map: L.Map | null = null
 let geojsonGroup: L.FeatureGroup | null = null
 
+// Leaflet writes these straight into SVG `stroke`/`fill` presentation attributes, where
+// `var(--token)` does not resolve — features silently fall back to the SVG default (black)
+// on a dark basemap. So resolve the tokens to literal colors instead. Done lazily and
+// memoised: at module-eval time the stylesheet may not be applied yet.
+let _colors: { spatial: string; accent: string; ink: string } | null = null
+function colors(): { spatial: string; accent: string; ink: string } {
+  if (_colors) return _colors
+  const cs = getComputedStyle(document.documentElement)
+  const read = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback
+  _colors = {
+    spatial: read('--spatial', '#00ebd7'),
+    accent: read('--accent', '#9d85ff'),
+    ink: read('--ink', '#f0edff'),
+  }
+  return _colors
+}
+
 export function initMap(): void {
   try {
-    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
-    })
+    // Esri's free (keyless) "Canvas" basemap — the same ArcGIS Online service already
+    // used for the satellite layer below, so no new provider/API key to manage. CARTO's
+    // basemaps.cartocdn.com previously used here now serves an "API key required"
+    // watermark instead of tiles for anonymous use.
+    const darkLayer = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+        maxZoom: 16,
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 16,
+      }),
+    ])
 
     const lightLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -45,24 +70,48 @@ export function initMap(): void {
   }
 }
 
-export function updateMap(rows: PreviewRow[], activeStep?: any): void {
+/** Current map viewport as a WGS84 [west, south, east, north] bbox, or null before the map exists. */
+export function getMapBounds(): [number, number, number, number] | null {
+  if (!map) return null
+  const b = map.getBounds()
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+}
+
+/** Fires `cb` after the user finishes panning/zooming (Leaflet's debounced 'moveend'). */
+export function onViewChange(cb: () => void): void {
+  map?.on('moveend', cb)
+}
+
+function setEmptyOverlay(visible: boolean): void {
+  const el = document.getElementById('map-empty')
+  if (el) (el as HTMLElement).hidden = !visible
+}
+
+export function updateMap(rows: PreviewRow[], activeStep?: any, opts?: { fitBounds?: boolean }): void {
   if (!map || !geojsonGroup) return
   geojsonGroup.clearLayers()
-  if (!rows || rows.length === 0) return
+  if (!rows || rows.length === 0) {
+    // Rows with no geometry are a legitimate result (a dissolve drops columns, a CSV source
+    // has none at all) — say so rather than leaving the last preview's features on screen
+    // or showing a blank map with no explanation.
+    setEmptyOverlay(true)
+    return
+  }
 
   let hoverCircle: L.Circle | null = null
+  const c = colors()
 
   rows.forEach(row => {
     if (row.__geojson) {
       try {
         const geom = JSON.parse(row.__geojson as string)
         const layer = L.geoJSON(geom, {
-          style: { color: 'var(--spatial)', weight: 3, opacity: 0.8 },
+          style: { color: c.spatial, weight: 3, opacity: 0.8 },
           pointToLayer: (_point, latlng) =>
             L.circleMarker(latlng, {
               radius: 6,
-              fillColor: 'var(--spatial)',
-              color: 'var(--ink)',
+              fillColor: c.spatial,
+              color: c.ink,
               weight: 1,
               opacity: 1,
               fillOpacity: 0.8,
@@ -77,9 +126,9 @@ export function updateMap(rows: PreviewRow[], activeStep?: any): void {
               if (hoverCircle) hoverCircle.remove()
               hoverCircle = L.circle(e.latlng, {
                 radius: radiusNum,
-                color: 'var(--accent)',
+                color: c.accent,
                 weight: 1,
-                fillColor: 'var(--accent)',
+                fillColor: c.accent,
                 fillOpacity: 0.15,
                 dashArray: '4 4'
               }).addTo(map!)
@@ -95,7 +144,7 @@ export function updateMap(rows: PreviewRow[], activeStep?: any): void {
 
         const tooltipContent = Object.entries(row)
           .filter(([k]) => k !== '__geojson' && k !== 'geom')
-          .map(([k, v]) => `<strong>${k}:</strong> ${v !== null ? v : 'NULL'}`)
+          .map(([k, v]) => `<strong>${esc(k)}:</strong> ${v !== null ? esc(v) : 'NULL'}`)
           .join('<br>')
 
         if (tooltipContent) layer.bindPopup(tooltipContent)
@@ -106,7 +155,10 @@ export function updateMap(rows: PreviewRow[], activeStep?: any): void {
     }
   })
 
-  if (geojsonGroup.getLayers().length > 0) {
+  const drawn = geojsonGroup.getLayers().length
+  setEmptyOverlay(drawn === 0)
+
+  if ((opts?.fitBounds ?? true) && drawn > 0) {
     map.fitBounds(geojsonGroup.getBounds())
   }
 }

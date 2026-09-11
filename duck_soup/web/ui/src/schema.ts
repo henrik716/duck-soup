@@ -1,5 +1,5 @@
 import { createIcons, Loader, Database, ChevronDown, AlertCircle, Plus } from 'lucide'
-import { mkEl, val, refreshIcons } from './dom'
+import { mkEl, val, refreshIcons, esc } from './dom'
 import { SOURCE_SCHEMAS } from './state'
 import { setComboOptions, ensureComboOption, type ComboOptionDef } from './combo'
 import { mapRow } from './cards/map-row'
@@ -33,7 +33,7 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
       `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;max-height:120px;overflow-y:auto;padding:4px;">` +
       status.columns.map(c =>
         `<div style="display:flex;justify-content:space-between;border-bottom:1px dashed rgba(255,255,255,0.05);">` +
-        `<span style="color:var(--ink)">${c.name}</span><span style="color:var(--muted);font-size:10px">${c.type}</span></div>`
+        `<span style="color:var(--ink)">${esc(c.name)}</span><span style="color:var(--muted);font-size:10px">${esc(c.type)}</span></div>`
       ).join('') + `</div>`
 
     badge.querySelector<HTMLAnchorElement>('.schema-toggle-btn')!.onclick = e => {
@@ -46,9 +46,9 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
     createIcons({ icons: { Database, ChevronDown } })
   } else {
     const msg = status.error || 'failed'
-    badge.innerHTML = `<span title="${msg.replace(/"/g, '&quot;')}" style="font-size:11px;color:var(--warn);border:1px solid rgba(255,107,107,0.2);background:var(--warn-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;cursor:help">
+    badge.innerHTML = `<span title="${esc(msg)}" style="font-size:11px;color:var(--warn);border:1px solid rgba(255,107,107,0.2);background:var(--warn-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;cursor:help">
       <i data-lucide="alert-circle" style="width:11px;height:11px"></i> error</span>`
-    schemaList.innerHTML = `<div style="color:var(--warn);padding:4px;">${msg}</div>`
+    schemaList.innerHTML = `<div style="color:var(--warn);padding:4px;">${esc(msg)}</div>`
     schemaList.style.display = 'none'
     createIcons({ icons: { AlertCircle } })
   }
@@ -112,50 +112,62 @@ export function collectAvailableColumnsScoped(scope: Element): Set<string> {
   return cols
 }
 
+export interface AvailableColumnDetail { name: string; type: string; origin: string }
+
+// Same column set as collectAvailableColumnsScoped, but resolved with type (for base-source
+// columns) and origin (`base` or `step N (type)`) — used anywhere a column picker wants to
+// show more than a bare name, e.g. the expression builder's column list.
+export function collectAvailableColumnDetailsScoped(scope: Element): AvailableColumnDetail[] {
+  const available = collectAvailableColumnsScoped(scope)
+  const baseId = scope.querySelector<HTMLInputElement>('.pl-base')?.value || ''
+  const baseCols = baseId ? (SOURCE_SCHEMAS[baseId] || []) : []
+  const steps = Array.from(scope.querySelectorAll('.pl-steps > .card'))
+
+  return [...available].map(col => {
+    const baseCol = baseCols.find(c => c.name === col)
+    if (baseCol) return { name: col, type: baseCol.type || '', origin: 'base' }
+
+    let origin = 'step'
+    for (let i = 0; i < steps.length; i++) {
+      const stepCard = steps[i] as HTMLElement
+      const stepType = stepCard.dataset['type'] || ''
+      const outputInputs = Array.from(stepCard.querySelectorAll('[data-fields] .kv [data-fo]')) as HTMLInputElement[]
+      if (outputInputs.some(oi => oi.value.trim() === col)) {
+        origin = `step ${i + 1} (${stepType})`
+        break
+      }
+    }
+    return { name: col, type: '', origin }
+  })
+}
+
 export function updateDatalistsScoped(scope: Element): void {
   let container = scope.querySelector<HTMLElement>('.pl-datalists')
   if (!container) return
   let html = ''
   for (const [srcId, columns] of Object.entries(SOURCE_SCHEMAS)) {
     html += `<datalist id="dl-src-${scope.getAttribute('data-pl-id')}-${srcId}">`
-    columns.forEach(c => { html += `<option value="${c.name}">${c.type}</option>` })
+    columns.forEach(c => { html += `<option value="${esc(c.name)}">${esc(c.type)}</option>` })
     html += '</datalist>'
   }
   const available = collectAvailableColumnsScoped(scope)
   const plId = scope.getAttribute('data-pl-id') ?? '0'
   html += `<datalist id="dl-cols-${plId}">`
-  available.forEach(col => { html += `<option value="${col}">available column</option>` })
+  available.forEach(col => { html += `<option value="${esc(col)}">available column</option>` })
   html += '</datalist>'
   container.innerHTML = html
 
-  const baseId = scope.querySelector<HTMLInputElement>('.pl-base')?.value || ''
-  const baseCols = baseId ? (SOURCE_SCHEMAS[baseId] || []) : []
-
   // Build rich ComboOptionDef list for mapping columns
-  const availableOptions: ComboOptionDef[] = [...available].map(col => {
-    const baseCol = baseCols.find(c => c.name === col)
-    if (baseCol) {
+  const availableOptions: ComboOptionDef[] = collectAvailableColumnDetailsScoped(scope).map(c => {
+    if (c.origin === 'base') {
       return {
-        value: col,
-        label: `<span style="font-family:var(--mono);">${col}</span> <span style="float:right;font-size:10px;color:var(--muted);background:rgba(255,255,255,0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;margin-left:8px;">${baseCol.type || 'unknown'} [base]</span>`
-      }
-    }
-
-    // Find which step added this output column
-    let originText = 'step'
-    const steps = Array.from(scope.querySelectorAll('.pl-steps > .card'))
-    for (let i = 0; i < steps.length; i++) {
-      const stepCard = steps[i] as HTMLElement
-      const stepType = stepCard.dataset['type'] || ''
-      const outputInputs = Array.from(stepCard.querySelectorAll('[data-fields] .kv [data-fo]')) as HTMLInputElement[]
-      if (outputInputs.some(oi => oi.value.trim() === col)) {
-        originText = `step ${i + 1} (${stepType})`
-        break
+        value: c.name,
+        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span style="float:right;font-size:10px;color:var(--muted);background:rgba(255,255,255,0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;margin-left:8px;">${esc(c.type || 'unknown')} [base]</span>`
       }
     }
     return {
-      value: col,
-      label: `<span style="font-family:var(--mono);">${col}</span> <span style="float:right;font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(139,108,255,0.2);padding:1px 4px;border-radius:3px;margin-left:8px;">${originText}</span>`
+      value: c.name,
+      label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span style="float:right;font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(139,108,255,0.2);padding:1px 4px;border-radius:3px;margin-left:8px;">${esc(c.origin)}</span>`
     }
   })
 
@@ -170,7 +182,7 @@ export function updateDatalistsScoped(scope: Element): void {
       fieldEl.innerHTML = `
         <span style="display: flex; align-items: center; gap: 6px; font-weight: 500;">
           <i data-lucide="plus" style="width: 11px; height: 11px; color: var(--muted); opacity: 0.7; transition: color 0.2s;"></i>
-          <span style="font-family: var(--mono); color: var(--ink);">${opt.value}</span>
+          <span style="font-family: var(--mono); color: var(--ink);">${esc(opt.value)}</span>
         </span>
         ${opt.label ? opt.label.substring(opt.label.indexOf('<span style="float:right;')) : ''}
       `

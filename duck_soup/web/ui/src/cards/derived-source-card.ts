@@ -1,6 +1,7 @@
 import { createIcons, GitBranch, Trash2, ChevronDown } from 'lucide'
-import { mkEl } from '../dom'
+import { mkEl, wireCollapse } from '../dom'
 import { wireCombos, comboField } from '../combo'
+import { mutate } from '../history'
 import type { DerivedSource } from '../types'
 
 // ---- derived source card ----
@@ -14,7 +15,7 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
       <span class="tag"><i data-lucide="git-branch" style="width:12px;height:12px;margin-right:2px"></i>derived</span>
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="spacer"></span>
-      <button class="mini danger ghost" data-del><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
+      <button class="mini danger ghost" data-del aria-label="Remove this derived source"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
       <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;margin-left:8px;"></i>
     </div>
     <div class="card-content" style="margin-top:12px;">
@@ -38,6 +39,8 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
 
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
     e.stopPropagation()
+    const id = c.querySelector<HTMLInputElement>('[data-k="id"]')?.value.trim()
+    mutate('remove derived source', { undoToast: `Removed derived source${id ? ` "${id}"` : ''}` })
     c.classList.add('slide-out')
     setTimeout(() => { c.remove(); syncFn() }, 250)
   })
@@ -67,22 +70,7 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
   fromInp.addEventListener('change', updateTitle)
   updateTitle()
 
-  const head = c.querySelector('.item-head')!
-  head.addEventListener('click', e => {
-    if ((e.target as Element).closest('button, input, select, a')) return
-    const wasCollapsed = c.classList.contains('collapsed')
-    if (wasCollapsed) {
-      const parent = c.parentElement
-      if (parent) {
-        parent.querySelectorAll(':scope > .card').forEach(sibling => {
-          if (sibling !== c) sibling.classList.add('collapsed')
-        })
-      }
-      c.classList.remove('collapsed')
-    } else {
-      c.classList.add('collapsed')
-    }
-  })
+  wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
   createIcons({ icons: { GitBranch, Trash2, ChevronDown } })
   return c

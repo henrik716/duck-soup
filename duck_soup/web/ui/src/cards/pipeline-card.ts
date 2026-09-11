@@ -1,6 +1,7 @@
 import { createIcons, Loader, UploadCloud } from 'lucide'
 import { uploadFile } from '../api'
-import { mkEl, val, refreshIcons, getDragAfterElement } from '../dom'
+import { mkEl, val, refreshIcons, getDragAfterElement, esc, qs, wireCollapse } from '../dom'
+import { mutate } from '../history'
 import { EXT_FORMAT } from '../state'
 import { comboField, wireCombos, ensureComboOption } from '../combo'
 import {
@@ -27,8 +28,8 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   card.innerHTML = `
     <div class="pipeline-card-header">
       <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent);flex-shrink:0"></i>
-      <input class="pl-name" placeholder="pipeline name" value="${pdef.name ?? ''}">
-      <button class="mini danger ghost pl-remove" title="Remove pipeline"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>
+      <input class="pl-name" placeholder="pipeline name" value="${esc(pdef.name)}">
+      <button class="mini danger ghost pl-remove" title="Remove pipeline" aria-label="Remove this entire pipeline"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>
       <i data-lucide="chevron-down" class="chevron" style="flex-shrink:0"></i>
     </div>
     <div class="pipeline-card-body">
@@ -48,9 +49,9 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           </div>
         </div>
         <div class="pl-block-content">
-          <div class="sources-dropzone">
+          <div class="sources-dropzone" role="button" tabindex="0" aria-label="Add source files — drag and drop, or activate to browse your computer">
             <i data-lucide="upload-cloud" style="width:24px;height:24px;margin-bottom:4px"></i>
-            <span class="title">Drag & drop spatial files here</span>
+            <span class="title">Drag &amp; drop spatial files here</span>
             <span class="subtitle">Or click to browse from your computer</span>
           </div>
           <div class="templates-grid">
@@ -84,7 +85,11 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
         </div>
         <div class="pl-block-content">
           <div class="pl-derived-sources"></div>
-          <p class="hint" style="margin-top:6px">Optional — a filtered/buffered view of an existing source, usable anywhere a step needs a "source" (fork part of a source, transform it, then join it back into the base)</p>
+          <div class="section-empty-hint" data-empty="derived_sources" hidden>
+            <span class="hint-icon">🌿</span>
+            <p>No derived sources. Optional — a <strong>filtered or buffered view</strong> of an existing source, usable anywhere a step needs a source.</p>
+          </div>
+          <p class="hint" style="margin-top:6px">Fork part of a source, transform it, then join it back into the base.</p>
         </div>
       </div>
 
@@ -97,7 +102,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
             <span class="pl-block-summary"></span>
           </div>
           <div class="pl-block-actions">
-            <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
+            <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
             <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
         </div>
@@ -105,7 +110,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           <div style="max-width:280px">${comboField('class="pl-base"', pdef.base ?? '', [])}</div>
           <label class="field grow" style="margin-top:10px">
             working CRS
-            <input class="pl-working-crs" placeholder="defaults to base source's CRS" value="${pdef.working_crs ?? ''}">
+            <input class="pl-working-crs" placeholder="defaults to base source's CRS" value="${esc(pdef.working_crs)}">
           </label>
           <p class="hint" style="margin-top:6px"><i data-lucide="info" style="width:11px;height:11px;margin-right:4px;vertical-align:middle"></i>Internal CRS used for every join/step (spatial joins, buffer, clip, etc.) and for area/length calcs — pick a projected (metric) CRS if you use those. Every source is reprojected into this CRS before processing, then reprojected again to the output layer's CRS. Leave blank to use the base source's declared CRS.</p>
         </div>
@@ -126,7 +131,10 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
         </div>
         <div class="pl-block-content">
           <div class="pl-steps"></div>
-          <p class="hint" style="margin-top:6px">Optional — spatial or attribute joins to enrich base features</p>
+          <div class="section-empty-hint" data-empty="steps" hidden>
+            <span class="hint-icon">🔗</span>
+            <p>No steps yet. Use <button type="button" class="empty-action pl-empty-add-step">add step</button> to enrich, filter or reshape the base features.</p>
+          </div>
         </div>
       </div>
 
@@ -140,7 +148,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           </div>
           <div class="pl-block-actions">
             <button class="addbtn pl-add-map" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> column</button>
-            <button class="mini ghost pl-auto-map" style="border:1px dashed var(--line);color:var(--muted);padding:3px 9px;" title="Auto-map all available columns"><i data-lucide="sparkles" style="width:11px;height:11px"></i></button>
+            <button class="mini ghost pl-auto-map" style="border:1px dashed var(--line);color:var(--muted);padding:3px 9px;" title="Auto-map all available columns" aria-label="Map every available source column"><i data-lucide="sparkles" style="width:11px;height:11px"></i></button>
             <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
         </div>
@@ -164,6 +172,10 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
                 <span class="head">value</span><span class="head">cast</span><span></span>
               </div>
               <div class="pl-mapping" style="flex: 1; min-height: 100px;"></div>
+              <div class="section-empty-hint" data-empty="mapping" hidden>
+                <span class="hint-icon">🧭</span>
+                <p>No output columns yet. Use <button type="button" class="empty-action pl-empty-add-map">+ column</button>, or click a field in the pool on the left.<br>With no mapping at all, every upstream column is written as-is.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -197,13 +209,31 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   }
   ;(card as any)._scopedSync = scopedSync
 
+  // Sections are independently collapsible. Expanding one used to force the other five
+  // shut, which — combined with the per-card accordion inside each section — meant you
+  // could never see a source and the step consuming it at the same time.
   const expandBlock = (secName: string) => {
+    card.querySelector<HTMLElement>(`.pl-block[data-sec="${secName}"]`)?.classList.remove('collapsed')
+    persistBlockState()
+  }
+
+  // Which sections are open is a working-layout preference, not config — remember it so it
+  // survives a reload and an undo (which rebuilds this DOM wholesale).
+  const blockStateKey = () => `ducksoup.blocks.${qs<HTMLInputElement>('#cfg_name')?.value.trim() || 'default'}`
+
+  const persistBlockState = () => {
+    const open = [...card.querySelectorAll<HTMLElement>('.pl-block')]
+      .filter(b => !b.classList.contains('collapsed'))
+      .map(b => b.getAttribute('data-sec'))
+    try { localStorage.setItem(blockStateKey(), JSON.stringify(open)) } catch { /* private mode */ }
+  }
+
+  const restoreBlockState = () => {
+    let open: string[] = []
+    try { open = JSON.parse(localStorage.getItem(blockStateKey()) ?? '[]') } catch { return }
+    if (!Array.isArray(open) || open.length === 0) return
     card.querySelectorAll<HTMLElement>('.pl-block').forEach(b => {
-      if (b.getAttribute('data-sec') === secName) {
-        b.classList.remove('collapsed')
-      } else {
-        b.classList.add('collapsed')
-      }
+      b.classList.toggle('collapsed', !open.includes(b.getAttribute('data-sec') ?? ''))
     })
   }
 
@@ -213,7 +243,24 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   const mappingEl = card.querySelector<HTMLElement>('.pl-mapping')!
   const layersEl = card.querySelector<HTMLElement>('.pl-output-layers')!
 
-  // ---- auto-map banner ----
+  // ---- auto-map ----
+  // One click can append dozens of rows that would otherwise have to be deleted one at a
+  // time, so it snapshots first and offers a single-action undo.
+  const autoMapAll = () => {
+    const available = collectAvailableColumnsScoped(card)
+    const mapped = new Set([...mappingEl.querySelectorAll('.map-item')]
+      .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
+    const unmapped = [...available].filter(col => !mapped.has(col))
+    if (unmapped.length === 0) return
+
+    mutate('auto-map columns', {
+      undoToast: `Mapped ${unmapped.length} column${unmapped.length !== 1 ? 's' : ''}`,
+    })
+    unmapped.forEach(col => mappingEl.appendChild(mapRow({ to: col, from: col }, fullSync, plId)))
+    refreshIcons()
+    fullSync()
+  }
+
   const updateAutoMapBanner = () => {
     const bannerContainer = card.querySelector<HTMLElement>('.auto-map-banner-container')
     if (!bannerContainer) return
@@ -232,14 +279,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
 
       bannerContainer.querySelector('.pl-banner-auto-map')!.addEventListener('click', e => {
         e.stopPropagation()
-        let added = 0
-        available.forEach(col => {
-          if (!mapped.has(col)) { mappingEl.appendChild(mapRow({ to: col, from: col }, fullSync, plId)); added++ }
-        })
-        if (added > 0) {
-          refreshIcons()
-          fullSync()
-        }
+        autoMapAll()
       })
     } else {
       bannerContainer.innerHTML = ''
@@ -267,21 +307,27 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     setSummary('mapping', mapCount ? `${mapCount} column${mapCount !== 1 ? 's' : ''}` : '')
     setSummary('output', layerNames.length ? layerNames.join(', ') : '')
 
+    // Empty sections get a real empty state instead of a blank box.
+    const setEmpty = (name: string, empty: boolean) => {
+      const el = card.querySelector<HTMLElement>(`.section-empty-hint[data-empty="${name}"]`)
+      if (el) el.hidden = !empty
+    }
+    setEmpty('derived_sources', derivedCount === 0)
+    setEmpty('steps', stepCount === 0)
+    setEmpty('mapping', mapCount === 0)
+
     updateAutoMapBanner()
   }
   const fullSync = () => { scopedSync(); updateSummaries() }
 
   card.querySelectorAll<HTMLElement>('.pl-block').forEach(block => {
-    const header = block.querySelector<HTMLElement>('.pl-block-header')!
-    header.addEventListener('click', e => {
-      if ((e.target as Element).closest('button,input,select')) return
-      const isCollapsed = block.classList.contains('collapsed')
-      if (isCollapsed) {
-        expandBlock(block.getAttribute('data-sec') || '')
-      } else {
-        block.classList.add('collapsed')
-      }
+    wireCollapse(block, {
+      headerSel: '.pl-block-header',
+      chevronSel: '.pl-chevron',
+      bodySel: '.pl-block-content',
     })
+    block.querySelector('.pl-block-header')!.addEventListener('click', persistBlockState)
+    block.querySelector('.pl-chevron')?.closest('button')?.addEventListener('click', persistBlockState)
   })
 
   // Wire base source preview button
@@ -298,13 +344,11 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   // ---- add buttons ----
   card.querySelector('.pl-add-source')!.addEventListener('click', e => {
     e.stopPropagation()
+    mutate('add source')
     // expand sources section if collapsed
     expandBlock('sources')
     const newCard = sourceCard({}, fullSync)
     newCard.classList.remove('collapsed')
-    sourcesEl.querySelectorAll(':scope > .card').forEach(sibling => {
-      if (sibling !== newCard) sibling.classList.add('collapsed')
-    })
     sourcesEl.appendChild(newCard)
     refreshIcons()
     fullSync()
@@ -312,12 +356,10 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
 
   card.querySelector('.pl-add-derived')!.addEventListener('click', e => {
     e.stopPropagation()
+    mutate('add derived source')
     expandBlock('derived_sources')
     const newCard = derivedSourceCard({}, fullSync, collectAllSourceIdsScoped(card))
     newCard.classList.remove('collapsed')
-    derivedEl.querySelectorAll(':scope > .card').forEach(sibling => {
-      if (sibling !== newCard) sibling.classList.add('collapsed')
-    })
     derivedEl.appendChild(newCard)
     refreshIcons()
     fullSync()
@@ -329,12 +371,10 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
       e.stopPropagation()
       const fmt = btn.dataset['fmt'] as Source['format']
       const uri = btn.dataset['uri'] || ''
+      mutate('add source')
       expandBlock('sources')
       const newCard = sourceCard({ format: fmt, uri }, fullSync)
       newCard.classList.remove('collapsed')
-      sourcesEl.querySelectorAll(':scope > .card').forEach(sibling => {
-        if (sibling !== newCard) sibling.classList.add('collapsed')
-      })
       sourcesEl.appendChild(newCard)
       setTimeout(() => newCard.querySelector<HTMLInputElement>('[data-k="uri"]')?.focus(), 50)
       refreshIcons()
@@ -351,6 +391,9 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   dropzone.addEventListener('click', e => {
     if (e.target === fileInp) return
     fileInp.click()
+  })
+  dropzone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInp.click() }
   })
 
   const uploadFiles = async (files: FileList) => {
@@ -378,12 +421,10 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
 
           const newSrc = { id, format: fmt as any, uri: res.path }
 
+          mutate('add uploaded source')
           card.querySelector('.pl-block[data-sec="sources"]')?.classList.remove('collapsed')
           const newCard = sourceCard(newSrc, fullSync)
           newCard.classList.remove('collapsed')
-          sourcesEl.querySelectorAll(':scope > .card').forEach(sibling => {
-            if (sibling !== newCard) sibling.classList.add('collapsed')
-          })
           sourcesEl.appendChild(newCard)
           refreshIcons()
           fullSync()
@@ -435,12 +476,10 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   addStepBtn.addEventListener('click', e => {
     e.stopPropagation()
     openStepGalleryModal(k => {
+      mutate('add step')
       expandBlock('steps')
       const newCard = stepCard(k, {}, fullSync, collectAllSourceIdsScoped(card))
       newCard.classList.remove('collapsed')
-      stepsEl.querySelectorAll(':scope > .card').forEach(sibling => {
-        if (sibling !== newCard) sibling.classList.add('collapsed')
-      })
       stepsEl.appendChild(newCard)
       refreshIcons()
       fullSync()
@@ -448,6 +487,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   })
   card.querySelector('.pl-add-map')!.addEventListener('click', e => {
     e.stopPropagation()
+    mutate('add mapping column')
     expandBlock('mapping')
     mappingEl.appendChild(mapRow({}, scopedSync, plId))
     refreshIcons()
@@ -456,53 +496,66 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   card.querySelector('.pl-auto-map')!.addEventListener('click', e => {
     e.stopPropagation()
     expandBlock('mapping')
-    const available = collectAvailableColumnsScoped(card)
-    const mapped = new Set([...mappingEl.querySelectorAll('.map-item')]
-      .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
-    let added = 0
-    available.forEach(col => {
-      if (!mapped.has(col)) { mappingEl.appendChild(mapRow({ to: col, from: col }, scopedSync, plId)); added++ }
-    })
-    if (added > 0) {
-      refreshIcons()
-      syncFn()
-    }
+    autoMapAll()
   })
 
   card.querySelector('.pl-add-layer')!.addEventListener('click', e => {
     e.stopPropagation()
+    mutate('add output layer')
     expandBlock('output')
     const newCard = outputLayerCard({}, fullSync)
     newCard.classList.remove('collapsed')
-    layersEl.querySelectorAll(':scope > .card').forEach(sibling => {
-      if (sibling !== newCard) sibling.classList.add('collapsed')
-    })
     layersEl.appendChild(newCard)
     refreshIcons()
     fullSync()
   })
 
   // ---- mapping drag-reorder ----
+  let dragSnapshotTaken = false
   mappingEl.addEventListener('dragover', e => {
     e.preventDefault()
     const dragging = mappingEl.querySelector<HTMLElement>('.map-item.dragging')
     if (!dragging) return
+    if (!dragSnapshotTaken) { mutate('reorder mapping'); dragSnapshotTaken = true }
+
     const after = getDragAfterElement(mappingEl, e.clientY)
+    // A visible insertion line — previously the only feedback was the dragged row fading.
+    mappingEl.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+    if (after) after.classList.add('drop-target-above')
+    else mappingEl.lastElementChild?.classList.add('drop-target-below')
+
     if (after === null) mappingEl.appendChild(dragging)
     else if (after !== dragging.nextElementSibling) mappingEl.insertBefore(dragging, after)
   })
-  mappingEl.addEventListener('drop', () => syncFn())
+  mappingEl.addEventListener('drop', () => {
+    dragSnapshotTaken = false
+    mappingEl.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+    syncFn()
+  })
 
   // ---- remove pipeline ----
+  // The only delete in the app that takes a whole subtree with it — sources, steps, mapping
+  // and layers all go at once — so this one gets a confirm rather than an undo toast.
   card.querySelector('.pl-remove')!.addEventListener('click', e => {
     e.stopPropagation()
+    const name = card.querySelector<HTMLInputElement>('.pl-name')?.value.trim() || 'this pipeline'
+    const counts = [
+      `${sourcesEl.querySelectorAll('.card').length} source(s)`,
+      `${stepsEl.querySelectorAll('.card').length} step(s)`,
+      `${mappingEl.querySelectorAll('.map-item').length} mapped column(s)`,
+    ].join(', ')
+    if (!window.confirm(`Remove "${name}"?\n\nThis also removes its ${counts}.`)) return
+    mutate('remove pipeline', { undoToast: `Removed pipeline "${name}"` })
     card.remove(); syncFn()
   })
 
   // ---- top-level collapse ----
-  card.querySelector('.pipeline-card-header')!.addEventListener('click', e => {
-    if ((e.target as Element).closest('input,button,select')) return
-    card.classList.toggle('collapsed')
+  wireCollapse(card, {
+    headerSel: '.pipeline-card-header',
+    chevronSel: '.pipeline-card-header .chevron',
+    bodySel: '.pipeline-card-body',
   })
 
   // ---- input changes ----
@@ -525,6 +578,17 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   const baseEl = card.querySelector<HTMLInputElement>('.pl-base')!
   if (pdef.base) { ensureComboOption(baseEl, pdef.base); baseEl.value = pdef.base }
 
+  // Empty-state shortcut buttons reuse the real add handlers.
+  card.querySelector('.pl-empty-add-step')?.addEventListener('click', e => {
+    e.stopPropagation()
+    ;(card.querySelector('.pl-add-step') as HTMLButtonElement | null)?.click()
+  })
+  card.querySelector('.pl-empty-add-map')?.addEventListener('click', e => {
+    e.stopPropagation()
+    ;(card.querySelector('.pl-add-map') as HTMLButtonElement | null)?.click()
+  })
+
+  restoreBlockState()
   updateSummaries()
   // createIcons is called by the caller after the card is in the DOM
   return card

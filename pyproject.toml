@@ -25,6 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mgrs = ["mgrs>=1.4"]
+curves = ["pyogrio>=0.10"]
 test = ["pytest>=8.0", "httpx>=0.27"]
 
 [tool.setuptools.packages.find]

@@ -1,5 +1,6 @@
 import { createIcons, Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera } from 'lucide'
 import type { Config } from './types'
+import { esc } from './dom'
 
 let lineageResizeObserver: ResizeObserver | null = null
 let dragStartX = 0
@@ -105,7 +106,7 @@ export function updateLineageDiagram(cfg: Config): void {
         node.className = 'lineage-node lineage-src-node'
         node.setAttribute('data-source-id', src.id)
         const info = getSourceIcon(src.format)
-        node.innerHTML = `<i data-lucide="${info.icon}" style="width:12px;height:12px;color:${info.color};"></i> <span>${src.id}</span>`
+        node.innerHTML = `<i data-lucide="${info.icon}" style="width:12px;height:12px;color:${info.color};"></i> <span>${esc(src.id)}</span>`
         unusedCol.appendChild(node)
       })
       row.appendChild(unusedCol)
@@ -121,14 +122,14 @@ export function updateLineageDiagram(cfg: Config): void {
       node.className = 'lineage-node lineage-src-node is-base'
       node.setAttribute('data-source-id', baseSrc.id)
       const info = getSourceIcon(baseSrc.format)
-      node.innerHTML = `<i data-lucide="${info.icon}" style="width:12px;height:12px;color:${info.color};"></i> <span>${baseSrc.id}</span>`
+      node.innerHTML = `<i data-lucide="${info.icon}" style="width:12px;height:12px;color:${info.color};"></i> <span>${esc(baseSrc.id)}</span>`
       baseCol.appendChild(node)
     }
 
     const baseNode = document.createElement('div')
     baseNode.className = 'lineage-node lineage-base-node is-base'
     baseNode.setAttribute('data-source-id', pdef.base)
-    baseNode.innerHTML = `<i data-lucide="play" style="width:12px;height:12px;color:var(--accent);"></i> <span>${pdef.base || '—'}</span>`
+    baseNode.innerHTML = `<i data-lucide="play" style="width:12px;height:12px;color:var(--accent);"></i> <span>${pdef.base ? esc(pdef.base) : '—'}</span>`
     baseCol.appendChild(baseNode)
 
     row.appendChild(baseCol)
@@ -155,7 +156,7 @@ export function updateLineageDiagram(cfg: Config): void {
               pNode.className = 'lineage-node lineage-src-node'
               pNode.setAttribute('data-source-id', parentSrc.id)
               const pInfo = getSourceIcon(parentSrc.format)
-              pNode.innerHTML = `<i data-lucide="${pInfo.icon}" style="width:12px;height:12px;color:${pInfo.color};"></i> <span>${parentSrc.id}</span>`
+              pNode.innerHTML = `<i data-lucide="${pInfo.icon}" style="width:12px;height:12px;color:${pInfo.color};"></i> <span>${esc(parentSrc.id)}</span>`
               stepCol.appendChild(pNode)
             }
           }
@@ -178,7 +179,7 @@ export function updateLineageDiagram(cfg: Config): void {
           }
           
           const info = getSourceIcon(format)
-          node.innerHTML = `<i data-lucide="${info.icon}" style="width:12px;height:12px;color:${info.color};"></i> <span>${stepSrcId}</span>`
+          node.innerHTML = `<i data-lucide="${info.icon}" style="width:12px;height:12px;color:${info.color};"></i> <span>${esc(stepSrcId)}</span>`
           stepCol.appendChild(node)
         }
       }
@@ -206,7 +207,7 @@ export function updateLineageDiagram(cfg: Config): void {
       node.className = `lineage-node lineage-step-node ${st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'nearest_neighbor' ? 'is-spatial' : 'is-attribute'}`
       node.setAttribute('data-source-id', stepSourceId)
       node.dataset.stepIndex = idx.toString()
-      node.innerHTML = `<i data-lucide="${icon}" style="width:12px;height:12px;color:${color};"></i> <span>${label}</span>`
+      node.innerHTML = `<i data-lucide="${icon}" style="width:12px;height:12px;color:${color};"></i> <span>${esc(label)}</span>`
       stepCol.appendChild(node)
 
       row.appendChild(stepCol)
@@ -218,7 +219,7 @@ export function updateLineageDiagram(cfg: Config): void {
 
     const layerNode = document.createElement('div')
     layerNode.className = 'lineage-node lineage-layer-node is-output'
-    layerNode.innerHTML = `<i data-lucide="layers" style="width:12px;height:12px;color:var(--ok);"></i> <span>${(pdef.layers || []).map(l => l.layer).join(', ') || 'layer'}</span>`
+    layerNode.innerHTML = `<i data-lucide="layers" style="width:12px;height:12px;color:var(--ok);"></i> <span>${esc((pdef.layers || []).map(l => l.layer).join(', ')) || 'layer'}</span>`
     layerCol.appendChild(layerNode)
 
     row.appendChild(layerCol)
@@ -235,7 +236,7 @@ export function updateLineageDiagram(cfg: Config): void {
   gpkgNode.innerHTML = `
     <i data-lucide="package" style="width:14px;height:14px;color:var(--ok);"></i>
     <div style="display:flex;flex-direction:column;gap:1px;">
-      <span style="font-size:12px;font-weight:600;">${gpkgName}</span>
+      <span style="font-size:12px;font-weight:600;">${esc(gpkgName)}</span>
       <span style="font-size:10px;color:var(--muted);">${pipelines.length} layer${pipelines.length !== 1 ? 's' : ''}</span>
     </div>`
   gpkgNode.style.cssText = `
@@ -246,9 +247,15 @@ export function updateLineageDiagram(cfg: Config): void {
 
   lineage.appendChild(outer)
 
-  // Enable drag-to-scroll (pan) on the lineage container
+  // Enable drag-to-scroll (pan) on the lineage container.
+  // The container element outlives every rebuild (only its children are replaced), and
+  // this function runs on every keystroke — so without this guard the four listeners
+  // below accumulated without bound for the life of the page.
   lineage.style.cursor = 'grab'
   lineage.style.userSelect = 'none'
+
+  if (!lineage.dataset['panWired']) {
+  lineage.dataset['panWired'] = '1'
 
   lineage.addEventListener('mousedown', (e: MouseEvent) => {
     // Only drag with left click
@@ -284,6 +291,7 @@ export function updateLineageDiagram(cfg: Config): void {
     }
     lineage.scrollLeft = dragScrollLeft - walk
   })
+  }
 
   const drawAll = () => {
     drawPaths(outer, cfg)
@@ -538,6 +546,16 @@ function setupGlobalHoverEffects(outer: HTMLElement): void {
   }
 
   nodes.forEach(node => {
+    // Click-to-navigate was mouse-only: these are plain divs. Make them real controls so
+    // the diagram is usable from the keyboard, and mirror the hover highlight on focus.
+    node.tabIndex = 0
+    node.setAttribute('role', 'button')
+    node.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); node.click() }
+    })
+    node.addEventListener('focus', () => node.dispatchEvent(new Event('mouseenter')))
+    node.addEventListener('blur', () => node.dispatchEvent(new Event('mouseleave')))
+
     node.addEventListener('mouseenter', () => {
       const connected = getConnectedPaths(node)
       if (connected.length === 0) return
@@ -636,10 +654,10 @@ function setupGlobalHoverEffects(outer: HTMLElement): void {
 
       let targetElement: HTMLElement | null = null
 
+      // Expand the target section without shutting the others — blocks are independently
+      // collapsible now, and navigating here shouldn't undo the user's chosen layout.
       const expandBlockOnly = (block: HTMLElement) => {
-        targetCard.querySelectorAll('.pl-block').forEach(b => {
-          if (b === block) b.classList.remove('collapsed'); else b.classList.add('collapsed')
-        })
+        block.classList.remove('collapsed')
       }
 
       if (node.classList.contains('lineage-src-node')) {

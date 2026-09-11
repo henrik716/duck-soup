@@ -89,12 +89,18 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -e .           # installs duck_soup + all required deps
-# optional: pip install -e ".[mgrs]"   adds MGRS grid conversion support
+# optional: pip install -e ".[mgrs]"     adds MGRS grid conversion support
+# optional: pip install -e ".[curves]"   adds automatic linearization of curve geometry
 ```
 
 DuckDB downloads its **spatial** extension on first run (needs internet once, or
 pre-install it offline). The `mgrs` package is optional — without it, `func: mgrs`
-yields NULL instead of failing.
+yields NULL instead of failing. The `pyogrio` package (`curves` extra) is also
+optional — without it, sources whose geometry is stored as an ISO curve type
+(CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface — DuckDB's
+spatial extension can't parse these, only plain OGC linear geometry) fail with a
+clear error telling you to install it; with it, such sources are automatically
+read and re-linearized into ordinary line/polygon geometry on the fly.
 
 ## Quickstart
 
@@ -307,8 +313,16 @@ match wins:
       - { match: "mall",     value: "Mallard (reigning pond champion)" }  # exact match
       - { like: "%gadwall%", value: "Gadwall (quietly judging everyone)" } # SQL LIKE pattern
       - { regex: "^teal",    value: "Green-winged Teal (chaotic good)" }   # regex
+      - { is_blank: true,    value: "Mallard (reigning pond champion)" }   # NULL or ''
     default: "Mystery duck, do not approach"  # used when nothing matches (omit for NULL)
 ```
+
+A case can also match `is_blank: true` instead of `match`/`like`/`regex`, matching a
+NULL or empty-string source value. That's how you route a specific value *and*
+NULL/blank to the same output (as with "mall"/Mallard above) — give both cases the
+same `value`. Unlike `is_blank`, an unmatched value falling through to `default`
+also catches NULL, but only as a single catch-all — `is_blank` lets a blank source
+value take a distinct case, evaluated in order alongside the others.
 
 For large code tables (hundreds+ of codes), point at a CSV instead of listing
 rules — this becomes a correlated lookup against `read_csv`, not a giant `CASE`:
@@ -329,8 +343,8 @@ a proper join, not a per-row correlated subquery, and is the better fit for
 things like the species lookup table in the example above.
 
 The editor's mapping rows support `codelist` directly: choosing it opens a panel
-with a toggle between **rules** (match/like/regex → value, plus a default) and
-**file lookup** (csv path + key/value columns).
+with a toggle between **rules** (match/like/regex/is blank → value, plus a
+default) and **file lookup** (csv path + key/value columns).
 
 ## Known limitations
 

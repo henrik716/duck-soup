@@ -14,10 +14,11 @@ from pathlib import Path
 import shutil
 
 import duckdb
+import yaml
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..config import (
     JOIN_PREDICATES,
@@ -65,11 +66,22 @@ def get_pipeline(name: str) -> dict:
     path = PIPELINE_DIR / f"{name}.yaml"
     if not path.exists():
         raise HTTPException(404, f"pipeline '{name}' not found")
-    cfg = load_config(path)
+    text = path.read_text(encoding="utf-8")
+    try:
+        cfg = load_config(path)
+        config_dict = cfg.model_dump(by_alias=True, exclude_none=True)
+        warning = None
+    except Exception as e:
+        # Saved YAML can go stale/invalid between edits (e.g. a mapping row left
+        # mid-edit with no source picked yet). Load it raw so the editor can still
+        # open it and let the user fix it there, instead of refusing to load at all.
+        config_dict = yaml.safe_load(text) or {}
+        warning = str(e)
     return {
         "name": name,
-        "config": cfg.model_dump(by_alias=True, exclude_none=True),
-        "yaml": path.read_text(encoding="utf-8"),
+        "config": config_dict,
+        "yaml": text,
+        "warning": warning,
     }
 
 
@@ -107,7 +119,7 @@ def inspect_source(req: InspectRequest) -> dict:
                 register_udfs(con)
                 with tempfile.TemporaryDirectory() as tmp:
                     workdir = Path(tmp)
-                    read = read_expr(src, workdir)
+                    read = read_expr(src, workdir, con=con)
                     res = con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()
                     columns = [{"name": r[0], "type": str(r[1])} for r in res]
                     return {"ok": True, "columns": columns}
@@ -164,8 +176,13 @@ async def run(req: RunRequest) -> dict:
 class PreviewRequest(BaseModel):
     config: dict
     pipeline_idx: int = 0
-    limit: int = 50
+    # Capped server-side (not just the frontend default) so a source with millions
+    # of features can't be asked to ship an unbounded GeoJSON payload to the browser.
+    limit: int = Field(default=1000, ge=1, le=20000)
     preview_until_step: int | None = None
+    # Optional WGS84 bbox (west, south, east, north) — e.g. the current map viewport —
+    # to restrict the preview to, instead of an arbitrary first-N-rows slice.
+    bbox: tuple[float, float, float, float] | None = None
 
 
 @app.post("/api/preview")
@@ -176,7 +193,10 @@ def preview(req: PreviewRequest) -> dict:
         raise HTTPException(422, f"invalid config: {e}")
 
     try:
-        rows = preview_config_pipeline(cfg, pipeline_idx=req.pipeline_idx, limit=req.limit, preview_until_step=req.preview_until_step)
+        rows = preview_config_pipeline(
+            cfg, pipeline_idx=req.pipeline_idx, limit=req.limit,
+            preview_until_step=req.preview_until_step, bbox=req.bbox,
+        )
         # Sanitize values to ensure JSON serializability (handles non-UTF-8 strings, bytes, etc.)
         safe_rows = []
         for row in rows:

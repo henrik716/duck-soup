@@ -103,7 +103,7 @@ class Engine:
     # -- source views -------------------------------------------------------
     def _create_source_views(self, con: duckdb.DuckDBPyConnection, workdir: Path) -> None:
         for s in self.p.sources:
-            read = src_readers.read_expr(s, workdir)
+            read = src_readers.read_expr(s, workdir, con=con, log=self.log)
             view = _ident(f"src_{s.id}")
             if s.has_geometry:
                 crs = "EPSG:4326" if s.format == "arcgis_rest" else (s.crs or self.working_crs)
@@ -442,8 +442,27 @@ class Engine:
         else:  # pragma: no cover - validated upstream
             raise ValueError(f"mapping '{item.to}' has no source")
         if item.cast:
-            expr = f"TRY_CAST({expr} AS {item.cast})"
+            expr = self._cast_expr(expr, item.cast)
         return f"{expr} AS {_ident(item.to)}"
+
+    @staticmethod
+    def _cast_expr(expr: str, cast_type: str) -> str:
+        normalized = cast_type.strip().upper()
+        if normalized in ("DATE", "TIMESTAMP"):
+            # TRY_CAST(... AS DATE/TIMESTAMP) only understands ISO-ish text
+            # (YYYY-MM-DD); it silently returns NULL for the dd.mm.yyyy format this
+            # data's source fields actually use (e.g. Bane NOR's '01.01.1111'
+            # placeholder date, or real 'gyldigfra' values) — not because the date
+            # itself is invalid, but because the format doesn't match. Fall back to
+            # parsing that format explicitly before giving up; a value that fails
+            # both is still NULL. (DATE specifically also can't hold a pre-1970 value
+            # when written to GeoPackage — a DuckDB/GDAL limitation, not this parsing
+            # — which is why some mappings use `cast: TIMESTAMP` instead.)
+            return (
+                f"COALESCE(TRY_CAST({expr} AS {normalized}), "
+                f"TRY_CAST(TRY_STRPTIME(CAST({expr} AS VARCHAR), '%d.%m.%Y') AS {normalized}))"
+            )
+        return f"TRY_CAST({expr} AS {cast_type})"
 
     def _codelist_expr(self, cl: CodeList) -> str:
         col = _ident(cl.source)
@@ -472,6 +491,8 @@ class Engine:
 
     @staticmethod
     def _case_condition(col: str, c: CodeCase, case_insensitive: bool) -> str:
+        if c.is_blank:
+            return f"({col} IS NULL OR {col} = '')"
         if c.match is not None:
             return (
                 f"lower({col}) = lower({_lit(c.match)})"
@@ -610,7 +631,28 @@ class Engine:
                         out_paths.append(str(out_path))
                 return out_paths
 
-    def preview(self, limit: int = 50, preview_until_step: int | None = None) -> list[dict]:
+    @staticmethod
+    def _bbox_filter(bbox: tuple[float, float, float, float] | None, crs: str) -> str:
+        """WHERE clause restricting `geom` (in `crs`) to a WGS84 bbox (west, south, east, north).
+
+        The bbox itself — just 4 corner points — is transformed once into `crs`, rather than
+        transforming every row's geometry to WGS84 to compare; ST_Intersects then runs natively
+        against the source CRS.
+        """
+        if not bbox:
+            return ""
+        west, south, east, north = bbox
+        envelope = f"ST_MakeEnvelope({west}, {south}, {east}, {north})"
+        if crs != "EPSG:4326":
+            envelope = f"ST_Transform({envelope}, 'EPSG:4326', {_lit(crs)}, always_xy := true)"
+        return f"WHERE ST_Intersects(geom, {envelope}) "
+
+    def preview(
+        self,
+        limit: int = 50,
+        preview_until_step: int | None = None,
+        bbox: tuple[float, float, float, float] | None = None,
+    ) -> list[dict]:
         with DUCKDB_LOCK:
             con = duckdb.connect()
             # `INSTALL spatial` fetches the extension build matching this connection's
@@ -625,10 +667,17 @@ class Engine:
                 self._create_source_views(con, workdir)
                 self._create_derived_source_views(con)
 
-                # base
+                # base — pre-filtered to the bbox (if given) before any steps run, not just
+                # at the very end. Steps (spatial joins especially) otherwise run over the
+                # entire base table only to have everything but the visible viewport thrown
+                # away afterwards — for a big base table with real join steps that's the
+                # difference between an instant "in view" preview and a very slow one. The
+                # final SELECT below still re-applies the bbox filter, since a geometry-
+                # mutating step (buffer, dissolve, ...) can move a feature relative to it.
                 con.execute(
                     f"CREATE OR REPLACE TEMP VIEW {_ident('step_0')} AS "
-                    f"SELECT * FROM {_ident('src_' + self.p.base)}"
+                    f"SELECT * FROM {_ident('src_' + self.p.base)} "
+                    f"{self._bbox_filter(bbox, self.working_crs) if self.p.base_source.has_geometry else ''}"
                 )
                 prev = "step_0"
                 prev = self._build_step_views(con, prev, limit_steps=preview_until_step)
@@ -640,12 +689,12 @@ class Engine:
                         has_geom = any(col[0] == "geom" for col in cols_desc)
                     except Exception:
                         has_geom = False
-                    
+
                     if has_geom:
                         preview_sql = (
                             f"SELECT * EXCLUDE (geom), "
                             f"ST_AsGeoJSON(ST_Transform(geom, {_lit(self.working_crs)}, 'EPSG:4326', always_xy := true)) AS __geojson "
-                            f"FROM {_ident(prev)} LIMIT {limit}"
+                            f"FROM {_ident(prev)} {self._bbox_filter(bbox, self.working_crs)}LIMIT {limit}"
                         )
                     else:
                         preview_sql = f"SELECT * FROM {_ident(prev)} LIMIT {limit}"
@@ -657,15 +706,15 @@ class Engine:
                         preview_sql = (
                             f"SELECT * EXCLUDE (geom), "
                             f"ST_AsGeoJSON(ST_Transform(geom, {_lit(layer.crs)}, 'EPSG:4326', always_xy := true)) AS __geojson "
-                            f"FROM ({final_sql}) LIMIT {limit}"
+                            f"FROM ({final_sql}) {self._bbox_filter(bbox, layer.crs)}LIMIT {limit}"
                         )
                     else:
                         preview_sql = f"SELECT * FROM ({final_sql}) LIMIT {limit}"
 
-            res = con.execute(preview_sql)
-            cols = [desc[0] for desc in res.description]
-            rows = res.fetchall()
-            return [dict(zip(cols, r)) for r in rows]
+                res = con.execute(preview_sql)
+                cols = [desc[0] for desc in res.description]
+                rows = res.fetchall()
+                return [dict(zip(cols, r)) for r in rows]
 
 
 def run_pipeline(pipeline: Pipeline, log: Callable[[str], None] | None = None) -> list[str]:
@@ -673,9 +722,14 @@ def run_pipeline(pipeline: Pipeline, log: Callable[[str], None] | None = None) -
     return engine.run()
 
 
-def preview_pipeline(pipeline: Pipeline, limit: int = 50, preview_until_step: int | None = None) -> list[dict]:
+def preview_pipeline(
+    pipeline: Pipeline,
+    limit: int = 50,
+    preview_until_step: int | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> list[dict]:
     engine = Engine(pipeline)
-    return engine.preview(limit=limit, preview_until_step=preview_until_step)
+    return engine.preview(limit=limit, preview_until_step=preview_until_step, bbox=bbox)
 
 
 def run_config(config: Config, log: Callable[[str], None] | None = None) -> str:
@@ -689,11 +743,20 @@ def run_config(config: Config, log: Callable[[str], None] | None = None) -> str:
     return str(out_path)
 
 
-def preview_config_pipeline(config: Config, pipeline_idx: int = 0, limit: int = 50, preview_until_step: int | None = None) -> list[dict]:
+def preview_config_pipeline(
+    config: Config,
+    pipeline_idx: int = 0,
+    limit: int = 50,
+    preview_until_step: int | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> list[dict]:
     """Preview one pipeline from a Config (defaults to the first)."""
     if pipeline_idx >= len(config.pipelines):
         raise ValueError(f"no pipeline at index {pipeline_idx}")
-    return preview_pipeline(config.pipelines[pipeline_idx].to_pipeline(config.output), limit=limit, preview_until_step=preview_until_step)
+    return preview_pipeline(
+        config.pipelines[pipeline_idx].to_pipeline(config.output),
+        limit=limit, preview_until_step=preview_until_step, bbox=bbox,
+    )
 
 
 

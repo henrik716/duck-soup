@@ -1,6 +1,7 @@
-import { createIcons, Database, Trash2, Folder, ChevronDown } from 'lucide'
+import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle } from 'lucide'
 import { inspectSource, inspectFile } from '../api'
-import { mkEl, val } from '../dom'
+import { mkEl, val, wireCollapse } from '../dom'
+import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS, EXT_FORMAT } from '../state'
 import { comboField, wireCombos, setComboOptions, ensureComboOption } from '../combo'
 import { updateSourceBadge } from '../schema'
@@ -16,13 +17,17 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="schema-badge" style="margin-left:8px;"></span>
       <span class="spacer"></span>
-      <button class="mini danger ghost" data-del><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
+      <button class="mini danger ghost" data-del aria-label="Remove this source"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
       <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;margin-left:8px;"></i>
     </div>
     <div class="card-content" style="margin-top:12px;">
+      <div class="card-warning" data-incomplete hidden>
+        <i data-lucide="alert-triangle" style="width:12px;height:12px;flex-shrink:0"></i>
+        <span></span>
+      </div>
       <div class="row">
         <label class="field grow">id<input data-k="id" placeholder="ambassader"></label>
-        <label class="field grow">format${comboField('data-k="format"', s.format ?? '', META.formats)}</label>
+        <label class="field grow">format<span class="auto-chip" data-auto-format hidden>from extension</span>${comboField('data-k="format"', s.format ?? '', META.formats)}</label>
       </div>
       <label class="field" style="margin-top:8px">uri / path / url
         <div style="display:flex;gap:6px">
@@ -34,7 +39,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
         <label class="field grow">layer / typename / sheet
           ${comboField('data-k="layer"', s.layer ?? '', [], '—')}
         </label>
-        <label class="field grow">crs<input data-k="crs" placeholder="EPSG:4326"></label>
+        <label class="field grow">crs<span class="auto-chip" data-auto-crs hidden>detected</span><input data-k="crs" placeholder="EPSG:4326"></label>
         <label class="field" style="flex:0 0 auto"><span>&nbsp;</span>
           <span style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui;white-space:nowrap">
             <input type="checkbox" data-k="make_valid" checked style="width:auto;margin:0"> repair invalid geometry</span></label>
@@ -48,6 +53,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
     e.stopPropagation()
     const id = val(c, 'id')
+    mutate('remove source', { undoToast: `Removed source${id ? ` "${id}"` : ''}` })
     if (id) delete SOURCE_SCHEMAS[id]
     c.classList.add('slide-out')
     setTimeout(() => { c.remove(); syncFn() }, 250)
@@ -79,6 +85,26 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   fmt.addEventListener('change', toggleArcgis)
   toggleArcgis()
 
+  // A value the editor filled in on your behalf should say so — these used to overwrite a
+  // deliberate choice with no visible trace.
+  const showChip = (sel: string, on: boolean) => {
+    const chip = c.querySelector<HTMLElement>(sel)
+    if (chip) chip.hidden = !on
+  }
+
+  // Flag a card that collectPipelineDef() will drop for want of an id or uri, instead of
+  // letting it vanish from the generated YAML without explanation.
+  const updateIncompleteWarning = () => {
+    const box = c.querySelector<HTMLElement>('[data-incomplete]')
+    if (!box) return
+    const missing: string[] = []
+    if (!val(c, 'id')) missing.push('an id')
+    if (!val(c, 'uri')) missing.push('a uri')
+    box.hidden = missing.length === 0
+    const msg = box.querySelector('span')
+    if (msg) msg.textContent = `Not included in the pipeline yet — needs ${missing.join(' and ')}.`
+  }
+
   // Auto-detect format from file extension when URI changes
   const autoDetectFormat = () => {
     const uri = val(c, 'uri')
@@ -96,6 +122,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
     }
     if (detected && fmt.value !== detected) {
       fmt.value = detected
+      showChip('[data-auto-format]', true)
       fmt.dispatchEvent(new Event('change', { bubbles: true }))
       toggleArcgis()
     }
@@ -144,6 +171,9 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       const layerSel = c.querySelector<HTMLInputElement>('[data-k="layer"]')
       const crsInp = c.querySelector<HTMLInputElement>('[data-k="crs"]')
       if (!uri || !format) return
+      // Remote sources (wfs, arcgis_rest) are a full round trip; without a badge this
+      // looked like nothing was happening.
+      updateSourceBadge(c, { loading: true })
       let inspectUri = uri
       if (format === 'wfs') {
         try {
@@ -166,12 +196,17 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
             }
           }
           if (crsInp && d.default_crs) {
+            showChip('[data-auto-crs]', crsInp.value !== d.default_crs)
             crsInp.value = d.default_crs
             crsInp.dispatchEvent(new Event('input', { bubbles: true }))
           }
+        } else {
+          // Previously console.error only — the user saw nothing at all.
+          updateSourceBadge(c, { ok: false, error: d.error || 'could not read this file' })
         }
       } catch (e) {
         console.error('Failed to inspect file:', e)
+        updateSourceBadge(c, { ok: false, error: `could not read this file: ${e instanceof Error ? e.message : String(e)}` })
       }
     }, 400)
   }
@@ -214,23 +249,12 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   fmt.addEventListener('change', updateTitle)
   updateTitle()
 
-  const head = c.querySelector('.item-head')!
-  head.addEventListener('click', e => {
-    if ((e.target as Element).closest('button, input, select, a, .schema-toggle-btn')) return
-    const wasCollapsed = c.classList.contains('collapsed')
-    if (wasCollapsed) {
-      const parent = c.parentElement
-      if (parent) {
-        parent.querySelectorAll(':scope > .card').forEach(sibling => {
-          if (sibling !== c) sibling.classList.add('collapsed')
-        })
-      }
-      c.classList.remove('collapsed')
-    } else {
-      c.classList.add('collapsed')
-    }
-  })
+  idInp.addEventListener('input', updateIncompleteWarning)
+  uriInp.addEventListener('input', updateIncompleteWarning)
+  updateIncompleteWarning()
 
-  createIcons({ icons: { Database, Trash2, Folder, ChevronDown } })
+  wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
+
+  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle } })
   return c
 }

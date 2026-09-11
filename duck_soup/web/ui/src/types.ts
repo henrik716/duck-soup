@@ -120,6 +120,7 @@ export interface CodeCase {
   match?: string
   like?: string
   regex?: string
+  is_blank?: boolean
 }
 
 export interface CodeList {
@@ -203,6 +204,8 @@ export interface InspectFileResponse {
   ok: boolean
   layers?: string[]
   default_crs?: string
+  // Present whenever ok is false — /api/inspect_file never raises, it reports.
+  error?: string
 }
 
 export interface ValidateResponse {
@@ -238,4 +241,5 @@ export interface FilesResponse {
 
 export interface PipelineLoadResponse {
   config: Config
+  warning?: string | null
 }

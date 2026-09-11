@@ -234,12 +234,15 @@ class CodeCase(BaseModel):
     match: Optional[str] = Field(None, description="Exact-match pattern")
     like: Optional[str] = Field(None, description="SQL LIKE pattern, e.g. '%potato%'")
     regex: Optional[str] = Field(None, description="Regex pattern")
+    is_blank: bool = Field(False, description="Match when the source value is NULL or ''")
 
     @model_validator(mode="after")
     def _one_pattern(self):
-        n = sum(x is not None for x in (self.match, self.like, self.regex))
+        n = sum(x is not None for x in (self.match, self.like, self.regex)) + (
+            1 if self.is_blank else 0
+        )
         if n != 1:
-            raise ValueError("a codelist case needs exactly one of match/like/regex")
+            raise ValueError("a codelist case needs exactly one of match/like/regex/is_blank")
         return self
 
 
@@ -281,6 +284,29 @@ class MapItem(BaseModel):
     cast: Optional[str] = Field(None, description="Cast result to this SQL type")
 
     model_config = {"populate_by_name": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_strings_to_none(cls, data):
+        # The editor writes an empty string (not the field at all) for a `from`/`expr`
+        # picker that hasn't been given a value yet — e.g. a mapping row switched to
+        # `func` still carrying a blank leftover `from: ""` from its `from` days, or a
+        # freshly-added row still mid-edit. `_ident("")` on that empty string builds
+        # `"" AS ...`, an empty quoted identifier DuckDB's parser rejects outright — so
+        # treat blank as "not provided", same as the row never had it, before that can
+        # reach SQL generation.
+        if isinstance(data, dict):
+            for key in ("from", "expr"):
+                if data.get(key) == "":
+                    data = {**data, key: None}
+            expr = data.get("expr")
+            if isinstance(expr, str) and expr != expr.strip():
+                # Trim only — a hand-formatted multi-line expression (CASE/WHEN on their
+                # own indented lines) is legitimate and dump_config_yaml() now writes it
+                # back as a YAML literal block (`|`) so it round-trips exactly. Collapsing
+                # internal whitespace here would undo that formatting on every load.
+                data = {**data, "expr": expr.strip()}
+        return data
 
     @model_validator(mode="after")
     def _exactly_one_source(self):
@@ -558,6 +584,25 @@ def load_config_dict(data: dict) -> Config:
     return _pipeline_to_config(Pipeline.model_validate(data))
 
 
+class _ConfigDumper(yaml.SafeDumper):
+    """SafeDumper that writes multi-line strings (e.g. a hand-formatted `expr`) as a
+    literal block (`|`) instead of PyYAML's default plain-scalar folding.
+
+    Folding only replaces each line break with a single space — it does *not* strip a
+    line's own leading indentation, so a nicely indented multi-line SQL expression comes
+    back mangled (e.g. "COALESCE(\\n  NULLIF(" turns into "COALESCE(  NULLIF(") the next
+    time the file is loaded and re-wrapped. Block style preserves the string byte-for-byte.
+    """
+
+
+def _str_representer(dumper: yaml.SafeDumper, data: str) -> yaml.ScalarNode:
+    style = "|" if "\n" in data else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
+_ConfigDumper.add_representer(str, _str_representer)
+
+
 def dump_config_yaml(config: Config) -> str:
     data = config.model_dump(by_alias=True, exclude_none=True)
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    return yaml.dump(data, Dumper=_ConfigDumper, sort_keys=False, allow_unicode=True)

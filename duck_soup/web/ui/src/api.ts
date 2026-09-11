@@ -22,7 +22,13 @@ export async function fetchPipelineNames(): Promise<string[]> {
 }
 
 export async function fetchPipeline(name: string): Promise<PipelineLoadResponse> {
-  return (await fetch('/api/pipelines/' + encodeURIComponent(name))).json()
+  const r = await fetch('/api/pipelines/' + encodeURIComponent(name))
+  if (!r.ok) {
+    let detail = r.statusText
+    try { detail = (await r.json()).detail ?? detail } catch { /* body wasn't JSON */ }
+    throw new Error(`failed to load '${name}': ${detail}`)
+  }
+  return r.json()
 }
 
 export async function savePipeline(name: string, config: Config): Promise<Response> {
@@ -42,11 +48,17 @@ export async function validateConfig(config: Config): Promise<ValidateResponse> 
   return r.json()
 }
 
-export async function previewConfig(config: Config, pipeline_idx = 0, limit = 50, preview_until_step?: number): Promise<PreviewResponse> {
+export async function previewConfig(
+  config: Config,
+  pipeline_idx = 0,
+  limit = 1000,
+  preview_until_step?: number,
+  bbox?: [number, number, number, number],
+): Promise<PreviewResponse> {
   const r = await fetch('/api/preview', {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step }),
+    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox }),
   })
   return r.json()
 }
@@ -63,8 +75,16 @@ export async function runConfig(config: Config): Promise<RunResponse> {
     })
     return r.json()
   } catch (e) {
+    // "Timed out" overstated what happened: aborting only drops *our* side of the request.
+    // The server has no cancellation path, so the run carries on — and it holds the global
+    // DUCKDB_LOCK while it does, which is why previews stay frozen until it finishes.
     if ((e as Error).name === 'AbortError')
-      return { ok: false, error: 'Run timed out after 5 minutes', log: [] } as RunResponse
+      return {
+        ok: false,
+        error: 'Stopped waiting after 5 minutes — the run is still going on the server, '
+             + 'and previews will stay frozen until it finishes.',
+        log: [],
+      } as RunResponse
     throw e
   } finally {
     clearTimeout(timer)

@@ -1,0 +1,78 @@
+name: Hospitals
+description: ''
+output: output/Hospitals.gpkg
+overwrite: true
+pipelines:
+- name: Hospitals
+  description: ''
+  sources:
+  - id: sykehus
+    format: gpkg
+    uri: data/sykehus.gpkg
+    layer: sykehus
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: sykehus
+  steps: []
+  mapping:
+  - to: dataset
+    from: dataset
+  - to: dgif_fullName
+    from: name
+  - to: dgif_controllingAuthority
+    from: type
+  - to: dgif_medicalServices
+    from: emergencyDepartment
+  - to: doctors
+    from: doctors
+  - to: nurses
+    from: nurses
+  - to: operationRooms
+    from: operationRooms
+  - to: dgif_hospitalBedsAvailable
+    from: beds
+  - to: dgif_onSiteStaff
+    from: employees
+  - to: dgif_contactInfo_1
+    from: telephoneNumber
+  - to: dgif_contactInfo_2
+    from: email
+  - to: dgif_contactInfo_3
+    from: website
+  - to: latitude
+    from: latitude
+  - to: longitude
+    from: longitude
+  - to: mgrs
+    from: mgrs
+  - to: classification
+    from: classification
+  - to: dgif_sourceIdentifier
+    from: origin
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: dgif_currencyDateTime
+    from: dataCaptureDate
+  - to: dgif_modificationDate
+    const: 05.05.2026
+    cast: DATE
+  - to: gradering
+    from: gradering
+  - to: opphav
+    from: opphav
+  - to: dgif_featureType
+    const: Facility
+  - to: dgif_featureType531
+    const: AL010
+  - to: dgif_featureFunction
+    const: humanHealthActivities
+  - to: uuid
+    from: uuid
+  layers:
+  - layer: Hospitals
+    crs: EPSG:25833
+    mapping: []

@@ -1,11 +1,13 @@
 import { createIcons, Trash2, GripVertical, ChevronDown } from 'lucide'
-import { mkEl, refreshIcons } from '../dom'
+import { mkEl, refreshIcons, esc } from '../dom'
+import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS } from '../state'
 import { comboField, wireCombos, type ComboOptionDef } from '../combo'
-import { collectAvailableColumnsScoped } from '../schema'
+import { collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped } from '../schema'
 import { openCodelistDrawer } from './codelist'
 import { openExprDrawer } from '../expr-drawer'
-import type { CodeList, MapItem } from '../types'
+import { collectPipelineDef } from './pipeline-card'
+import type { CodeList, Config, MapItem } from '../types'
 
 // ---- map row ----
 const FUNC_DESCRIPTIONS: Record<string, string> = {
@@ -36,11 +38,11 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
 
   row.innerHTML = `
     <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
-    <input data-to placeholder="column" value="${m.to ?? ''}">
+    <input data-to placeholder="column" value="${esc(m.to)}">
     ${comboField('data-kind', kind, ['from', 'const', 'expr', 'func', 'codelist'])}
     <span data-valwrap></span>
     ${comboField('data-cast', m.cast ? m.cast.toUpperCase() : '', ['INTEGER', 'DOUBLE', 'VARCHAR', 'BOOLEAN', 'DATE', 'TIMESTAMP'], '— cast —')}
-    <button class="mini danger ghost" data-del><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`
+    <button class="mini danger ghost" data-del aria-label="Remove this output column"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`
 
   const KIND_VALUES = ['from', 'const', 'expr', 'func', 'codelist'] as const
   const normalizeKind = (v: string): typeof KIND_VALUES[number] =>
@@ -52,6 +54,12 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
 
   let panel: HTMLElement | null = null
   let currentCodelist: Partial<CodeList> = typeof m.codelist === 'object' && m.codelist ? m.codelist : {}
+  // A single-line <input> silently strips \n from its value (the HTML value-sanitization
+  // algorithm for text controls), so a multi-line expression can't live in the row's inline
+  // field without losing its formatting. The real value lives here instead; the inline
+  // input only ever shows a newline-free preview of it — see exprPreviewText() below.
+  let currentExprValue: string = typeof m.expr === 'string' ? m.expr : ''
+  const exprPreviewText = (v: string) => v.includes('\n') ? v.replace(/\s+/g, ' ').trim() : v
 
   const renderVal = () => {
     valWrap.innerHTML = ''
@@ -165,12 +173,19 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
         const available = card ? [...collectAvailableColumnsScoped(card)] : []
         const availableOptions: ComboOptionDef[] = available.map(col => ({
           value: col,
-          label: `<span style="font-family:var(--mono);">${col}</span> <span style="float:right;font-size:10px;color:var(--muted);">column</span>`
+          label: `<span style="font-family:var(--mono);">${esc(col)}</span> <span style="float:right;font-size:10px;color:var(--muted);">column</span>`
         }))
-        wrapperDiv.innerHTML = comboField('', (typeof initVal === 'string' || typeof initVal === 'number') ? String(initVal) : '', availableOptions, 'SQL expression (e.g. col1 + col2)')
+        wrapperDiv.innerHTML = comboField('', exprPreviewText(currentExprValue), availableOptions, 'SQL expression (e.g. col1 + col2)')
         const comboEl = wrapperDiv.firstElementChild as HTMLElement
         const inp = comboEl.querySelector<HTMLInputElement>('input')!
         inp.classList.add('has-badge')
+
+        const syncReadonly = () => {
+          const multiLine = currentExprValue.includes('\n')
+          inp.readOnly = multiLine
+          inp.title = multiLine ? 'Multi-line expression — use the edit icon to change it' : ''
+        }
+        syncReadonly()
 
         const editBtn = mkEl('button', { className: 'mini ghost expr-edit-btn', type: 'button' })
         editBtn.title = 'Open SQL Expression Builder'
@@ -181,14 +196,42 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
         editBtn.addEventListener('click', e => {
           e.preventDefault()
           e.stopPropagation()
-          openExprDrawer(inp.value, available, val => {
-            inp.value = val
+          const availableDetails = card ? collectAvailableColumnDetailsScoped(card) : []
+          // Builds a throwaway single-column preview config from the pipeline's real
+          // sources/steps as currently drafted in the form, so the drawer can validate the
+          // expression against real sample data via /api/preview without a dedicated
+          // backend endpoint.
+          const buildPreviewConfig = card ? (draftExpr: string): Config | null => {
+            const pdef = collectPipelineDef(card as HTMLElement)
+            if (!pdef.base) return null
+            return {
+              name: 'expr_preview',
+              output: 'preview.gpkg',
+              pipelines: [{
+                ...pdef,
+                mapping: [{ to: '_expr_preview', expr: draftExpr }],
+                layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
+              }],
+            }
+          } : undefined
+          openExprDrawer(currentExprValue, availableDetails, val => {
+            currentExprValue = val
+            inp.value = exprPreviewText(currentExprValue)
+            syncReadonly()
             syncFn()
-          })
+          }, buildPreviewConfig)
         })
 
-        inp.addEventListener('input', syncFn)
-        inp.addEventListener('change', syncFn)
+        inp.addEventListener('input', () => {
+          if (inp.readOnly) return
+          currentExprValue = inp.value
+          syncFn()
+        })
+        inp.addEventListener('change', () => {
+          if (inp.readOnly) return
+          currentExprValue = inp.value
+          syncFn()
+        })
         valWrap.appendChild(comboEl)
         wireCombos(valWrap)
         refreshIcons()
@@ -206,6 +249,8 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
   kindSel.addEventListener('change', () => { renderVal(); syncFn() })
 
   row.querySelector('[data-del]')!.addEventListener('click', () => {
+    const to = row.querySelector<HTMLInputElement>('[data-to]')?.value.trim()
+    mutate('remove mapping column', { undoToast: `Removed column${to ? ` "${to}"` : ''}` })
     wrap.classList.add('slide-out'); setTimeout(() => { wrap.remove(); syncFn() }, 250)
   })
   row.querySelectorAll('[data-to]').forEach(i => i.addEventListener('input', syncFn))
@@ -216,7 +261,30 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
   const handle = row.querySelector<HTMLElement>('.drag-handle')!
   handle.addEventListener('mousedown', () => { wrap.draggable = true })
   wrap.addEventListener('dragstart', () => { wrap.classList.add('dragging') })
-  wrap.addEventListener('dragend', () => { wrap.draggable = false; wrap.classList.remove('dragging') })
+  wrap.addEventListener('dragend', () => {
+    wrap.draggable = false
+    wrap.classList.remove('dragging')
+    wrap.parentElement?.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+  })
+
+  // Mapping order is meaningful (it's the output column order), and drag was the only way
+  // to change it. Alt+Arrow gives the same move without a mouse.
+  handle.tabIndex = 0
+  handle.setAttribute('role', 'button')
+  handle.setAttribute('aria-label', 'Reorder this column — hold Alt and press the up or down arrow')
+  wrap.addEventListener('keydown', e => {
+    if (!e.altKey) return
+    const sib = e.key === 'ArrowUp' ? wrap.previousElementSibling
+      : e.key === 'ArrowDown' ? wrap.nextElementSibling : null
+    if (!sib) return
+    e.preventDefault()
+    mutate(e.key === 'ArrowUp' ? 'move column up' : 'move column down')
+    if (e.key === 'ArrowUp') wrap.parentNode!.insertBefore(wrap, sib)
+    else wrap.parentNode!.insertBefore(sib, wrap)
+    handle.focus()
+    syncFn()
+  })
 
   wrap._readMapping = () => {
     const to = row.querySelector<HTMLInputElement>('[data-to]')!.value.trim()
@@ -228,6 +296,8 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
       out.func = (inp ? inp.value : '') as MapItem['func']
     } else if (k === 'codelist') {
       out.codelist = currentCodelist as CodeList
+    } else if (k === 'expr') {
+      out.expr = currentExprValue
     } else {
       const inp = valWrap.querySelector<HTMLInputElement>('input')
       ;(out as unknown as Record<string, unknown>)[k] = inp ? inp.value : ''

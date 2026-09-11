@@ -1,0 +1,713 @@
+name: railways
+description: ''
+output: output/Railways.gpkg
+overwrite: true
+metadata:
+  name: Railways
+  origin: BaneNOR
+  update_frequency: Irregular
+  geometric_quality: Good
+  attribute_quality: Good
+  access_method_source: GPKG
+  gdpr: Non-personal
+pipelines:
+- name: RailwayNetwork
+  description: ''
+  sources:
+  - id: spornettverk
+    format: gpkg
+    uri: data/Spornettverk.gpkg
+    layer: sporsegment
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: spornettverk
+  steps: []
+  mapping:
+  - to: sourceFid
+    from: fid
+  - to: dgif_fullName
+    from: bane
+  - to: trackId
+    from: spornummer
+  - to: dgif_currencyDateTime
+    from: gyldigfra
+    cast: DATE
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: Railway
+    cast: VARCHAR
+  - to: dgif_featureType531
+    const: AN010
+    cast: VARCHAR
+  - to: uuid
+    from: segmentid
+  layers:
+  - layer: RailwayNetwork
+    crs: EPSG:25833
+    mapping: []
+- name: RailwayBridgesAreas
+  description: ''
+  sources:
+  - id: bruer_f
+    format: gpkg
+    uri: data/Bruer.gpkg
+    layer: bruer_f
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: bruer_f
+  steps: []
+  mapping:
+  - to: id
+    from: id
+  - to: objectId
+    from: objekt
+  - to: dgif_fullName
+    from: navn/nr
+  - to: bridgeCategory
+    codelist:
+      source: hovedtype
+      case_insensitive: true
+      cases:
+      - value: railwayBridge
+        match: Jernbanebru
+      - value: overpassBridge
+        match: Overgangsbru
+      - value: otherStructure
+        match: Annet byggverk
+      default: noInformation
+  - to: dgif_bridgeStructureType
+    codelist:
+      source: brutype
+      case_insensitive: true
+      cases:
+      - value: girder
+        match: Bjelkebru
+      - value: arch
+        match: Bue
+      - value: truss
+        match: Fagverksbru
+      - value: girder
+        match: Kassebru
+      - value: noInformation
+        match: Kulvert
+      - value: slab
+        match: Platebru
+      - value: noInformation
+        match: Ramme
+      - value: noInformation
+        match: Rør
+      - value: deck
+        match: Trau
+      default: noInformation
+  - to: dgif_structMatType
+    codelist:
+      source: byggemateriale
+      case_insensitive: true
+      cases:
+      - value: concrete
+        match: Betong
+      - value: reinforcedConcrete
+        match: Betong armert
+      - value: treatedTimber
+        match: Limtre
+      - value: prestressedConcrete
+        match: Spennarmert betong
+      - value: stone
+        match: Stein
+      - value: stone
+        match: Stein/betong
+      - value: steel
+        match: Stål
+      - value: steel
+        match: Stål/betong
+      - value: wood
+        match: Tre
+      default: noInformation
+  - to: dgif_facilityOperationalStatus
+    codelist:
+      source: status
+      case_insensitive: true
+      cases:
+      - value: operational
+        match: I DRIFT
+      - value: nonOperational
+        match: NEDLAGT
+      default: noInformation
+  - to: constructionLength_m
+    from: konstruksjonslengde (m)
+    cast: DOUBLE
+  - to: calculationBasis
+    codelist:
+      source: beregningsgrunnlag
+      case_insensitive: true
+      cases:
+      - value: Not relevant for overpass bridge
+        match: Ikke relevant for overgangsbru
+      - value: Load train of 1899
+        match: Belastningstoget av 1899
+      - value: Load Model 71
+        match: Lastmodell 71
+      - value: Load train of 1977
+        match: Belastningstoget av 1977
+      - value: Load train of 1932 type B
+        match: Belastningstoget av 1932 type B
+      - value: Load train of 1958
+        match: Belastningstoget av 1958
+      - value: Unknown
+        match: Ukjent
+      - value: Load train of 1932 type A
+        match: Belastningstoget av 1932 type A
+      - value: Ofotbanen load train
+        match: Ofotbanens belastningstog
+      - value: 20 t/m
+        match: 20 t/m
+      - value: 15 t/m
+        match: 15 t/m
+      - value: Ofotbanen 30 tonne axle load
+        match: Ofotbanen 30 tonn aksellast
+      default: noInformation
+  - to: dgif_currencyDateTime
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: Bridge
+  - to: dgif_featureType531
+    const: AQ040
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: RailwayBridgesAreas
+    crs: EPSG:25833
+    mapping: []
+- name: RailwayBridgesPoints
+  description: ''
+  sources:
+  - id: bruer_p
+    format: gpkg
+    uri: data/Bruer.gpkg
+    layer: bruer_p
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: bruer_p
+  steps: []
+  mapping:
+  - to: id
+    from: id
+  - to: objectId
+    from: objekt
+  - to: dgif_fullName
+    from: navn/nr
+  - to: bridgeCategory
+    codelist:
+      source: hovedtype
+      case_insensitive: true
+      cases:
+      - value: railwayBridge
+        match: Jernbanebru
+      - value: overpassBridge
+        match: Overgangsbru
+      - value: otherStructure
+        match: Annet byggverk
+      default: noInformation
+  - to: dgif_bridgeStructureType
+    codelist:
+      source: brutype
+      case_insensitive: true
+      cases:
+      - value: girder
+        match: Bjelkebru
+      - value: arch
+        match: Bue
+      - value: truss
+        match: Fagverksbru
+      - value: girder
+        match: Kassebru
+      - value: noInformation
+        match: Kulvert
+      - value: slab
+        match: Platebru
+      - value: noInformation
+        match: Ramme
+      - value: noInformation
+        match: Rør
+      - value: deck
+        match: Trau
+      default: noInformation
+  - to: dgif_structMatType
+    codelist:
+      source: byggemateriale
+      case_insensitive: true
+      cases:
+      - value: concrete
+        match: Betong
+      - value: reinforcedConcrete
+        match: Betong armert
+      - value: treatedTimber
+        match: Limtre
+      - value: prestressedConcrete
+        match: Spennarmert betong
+      - value: stone
+        match: Stein
+      - value: stone
+        match: Stein/betong
+      - value: steel
+        match: Stål
+      - value: steel
+        match: Stål/betong
+      - value: wood
+        match: Tre
+      default: noInformation
+  - to: dgif_facilityOperationalStatus
+    codelist:
+      source: status
+      case_insensitive: true
+      cases:
+      - value: operational
+        match: I DRIFT
+      - value: nonOperational
+        match: NEDLAGT
+      default: noInformation
+  - to: constructionLength_m
+    from: konstruksjonslengde (m)
+    cast: DOUBLE
+  - to: calculationBasis
+    codelist:
+      source: beregningsgrunnlag
+      case_insensitive: true
+      cases:
+      - value: Not relevant for overpass bridge
+        match: Ikke relevant for overgangsbru
+      - value: Load train of 1899
+        match: Belastningstoget av 1899
+      - value: Load Model 71
+        match: Lastmodell 71
+      - value: Load train of 1977
+        match: Belastningstoget av 1977
+      - value: Load train of 1932 type B
+        match: Belastningstoget av 1932 type B
+      - value: Load train of 1958
+        match: Belastningstoget av 1958
+      - value: Unknown
+        match: Ukjent
+      - value: Load train of 1932 type A
+        match: Belastningstoget av 1932 type A
+      - value: Ofotbanen load train
+        match: Ofotbanens belastningstog
+      - value: 20 t/m
+        match: 20 t/m
+      - value: 15 t/m
+        match: 15 t/m
+      - value: Ofotbanen 30 tonne axle load
+        match: Ofotbanen 30 tonn aksellast
+      default: noInformation
+  - to: dgif_currencyDateTime
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: Bridge
+  - to: dgif_featureType531
+    const: AQ040
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: RailwayBridgePoints
+    crs: EPSG:25833
+    mapping: []
+- name: RailwayTunnels
+  description: ''
+  sources:
+  - id: tuneller
+    format: gpkg
+    uri: data/Tuneller.gpkg
+    layer: Tunellbuffer
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: tuneller
+  steps: []
+  mapping:
+  - to: objectType
+    const: Tunnel and superstructure
+    cast: VARCHAR
+  - to: dgif_currencyDateTime
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: Tunnel
+  - to: dgif_featureType531
+    const: AQ130
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: RailwayTunnel
+    crs: EPSG:25833
+    mapping: []
+- name: RailwayStations
+  description: ''
+  sources:
+  - id: stasjoner_idrift
+    format: gpkg
+    uri: data/Stasjoner_iDrift.gpkg
+    layer: Stasjoner_iDrift
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: stasjoner_idrift
+  steps: []
+  mapping:
+  - to: dgif_fullName
+    from: navn
+  - to: trackId
+    from: sporkilometer
+    cast: DOUBLE
+  - to: railwayLineName
+    from: banenavn
+  - to: railwayLineShortCode
+    from: banekortnavn
+  - to: stationType
+    codelist:
+      source: stasjonstype
+      case_insensitive: true
+      cases:
+      - value: signalEquipped
+        match: Signalteknisk
+      - value: nonSignalEquipped
+        match: Ikke-signalteknisk
+      default: noInformation
+  - to: dgif_meansTransportation
+    const: train
+    cast: VARCHAR
+  - to: dgif_transportationUse
+    codelist:
+      source: jernbaneformål
+      case_insensitive: true
+      cases:
+      - value: passenger
+        match: Persontrafikk
+      - value: cargo
+        match: Godstrafikk
+      - value: general
+        match: Blandet trafikk
+      - value: noInformation
+        match: Kryssing
+      default: noInformation
+  - to: dgif_facilityOperationalStatus
+    codelist:
+      source: jernbanestatus
+      case_insensitive: true
+      cases:
+      - value: operational
+        match: I drift
+      - value: nonOperational
+        match: Nedlagt
+      - value: temporarilyNonOperational
+        match: Midlertidig ute av drift
+      default: noInformation
+  - to: dgif_currencyDateTime
+    from: gyldigfra
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: TransportationStation
+  - to: dgif_featureType531
+    const: AQ125
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: RailwayStation
+    crs: EPSG:25833
+    mapping: []
+- name: FreightTerminals
+  description: ''
+  sources:
+  - id: godsterminaler
+    format: gpkg
+    uri: data/Godsterminaler.gpkg
+    layer: Godsterminaler
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: godsterminaler
+  steps: []
+  mapping:
+  - to: dgif_fullName
+    from: terminalnavn
+  - to: railwayLineName
+    from: banenavn
+  - to: railwayLineShortCode
+    from: banekortnavn
+  - to: terminalType
+    codelist:
+      source: terminaltype
+      case_insensitive: true
+      cases:
+      - value: timberTerminal
+        match: Tømmerterminal
+      - value: combiTerminal
+        match: Kombiterminal
+      - value: harbourTerminal
+        match: Havneterminal
+      default: noInformation
+  - to: dgif_featureFunction
+    const: cargoHandling
+    cast: VARCHAR
+  - to: dgif_facilityOperationalStatus
+    codelist:
+      source: jernbanestatus
+      case_insensitive: true
+      cases:
+      - value: operational
+        match: I drift
+      - value: temporarilyNonOperational
+        match: Midlertidig ute av drift
+      - value: noInformation
+        match: Ukjent
+      default: noInformation
+  - to: dgif_ContactInfo
+    from: url
+  - to: dgif_currencyDateTime
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: TransportationStation
+  - to: dgif_featureType531
+    const: AQ125
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: FreightTerminal
+    crs: EPSG:25833
+    mapping: []
+- name: RailwaySwitches
+  description: ''
+  sources:
+  - id: sporveksel
+    format: gpkg
+    uri: data/Sporveksel.gpkg
+    layer: Sporveksel
+    crs: EPSG:25833
+    make_valid: true
+    where: 1=1
+    page_size: 2000
+  derived_sources: []
+  base: sporveksel
+  steps: []
+  mapping:
+  - to: objectId
+    from: objekt
+  - to: dgif_fullName
+    from: navn
+  - to: switchType
+    codelist:
+      source: vekseltype
+      case_insensitive: true
+      cases:
+      - value: simpleSwitch
+        match: Enkel veksel
+      - value: doubleSlipSwitch
+        match: Dobbel kryssveksel
+      - value: diamondCrossing
+        match: Sporkryss
+      - value: asymmetricDoubleSwitch
+        match: Usym.dobbeltveksel
+      - value: singleSlipSwitch
+        match: Enkel kryssveksel
+      - value: doubleDerailer
+        match: Dobbel avsporingstunge
+      default: noInformation
+  - to: description
+    from: beskrivelse
+  - to: dgif_currencyDateTime
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dgif_modificationDate
+    const: 01.01.1111
+    cast: TIMESTAMP
+  - to: dataWithdrawalDate
+    func: now
+    cast: DATE
+  - to: lat
+    func: lat
+  - to: lon
+    func: lon
+  - to: mgrs
+    func: mgrs
+  - to: dgif_sourceIdentifier
+    const: BaneNOR
+    cast: VARCHAR
+  - to: classification
+    const: NATO UNCLASSIFIED
+    cast: VARCHAR
+  - to: gradering
+    const: Ugradert
+    cast: VARCHAR
+  - to: opphav
+    const: BaneNOR
+    cast: VARCHAR
+  - to: dgif_featureType
+    const: noInformation
+  - to: dgif_featureType531
+    const: noInformation
+  - to: uuid
+    func: uuid
+  layers:
+  - layer: RailwaySwitch
+    crs: EPSG:25833
+    mapping: []

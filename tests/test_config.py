@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from duck_soup.config import (
+    CodeCase,
     CodeList,
     Config,
     MapItem,
@@ -136,3 +137,38 @@ def test_mapitem_rejects_multiple_sources():
 def test_mapitem_from_alias_accepted():
     m = MapItem(to="col", **{"from": "source_col"})
     assert m.from_ == "source_col"
+
+
+def test_mapitem_blank_from_treated_as_unset():
+    # The editor writes `from: ""` (not omitted) for a row still mid-edit. That must
+    # surface as the normal "needs exactly one of" validation error, not silently pass
+    # through as a real (empty) column reference that then breaks SQL generation.
+    with pytest.raises(ValidationError, match="exactly one of"):
+        MapItem(to="origin", **{"from": ""})
+
+
+def test_mapitem_blank_from_does_not_shadow_func():
+    m = MapItem(to="origin", **{"from": "", "func": "mgrs"})
+    assert m.from_ is None
+    assert m.func == "mgrs"
+
+
+def test_mapitem_blank_expr_treated_as_unset():
+    with pytest.raises(ValidationError, match="exactly one of"):
+        MapItem(to="origin", expr="")
+
+
+def test_codecase_is_blank_alone_is_valid():
+    c = CodeCase(is_blank=True, value="Unknown")
+    assert c.is_blank is True
+    assert c.match is None
+
+
+def test_codecase_rejects_is_blank_with_other_pattern():
+    with pytest.raises(ValidationError, match="exactly one of"):
+        CodeCase(is_blank=True, match="x", value="Unknown")
+
+
+def test_codecase_rejects_no_pattern():
+    with pytest.raises(ValidationError, match="exactly one of"):
+        CodeCase(value="Unknown")

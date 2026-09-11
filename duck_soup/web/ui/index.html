@@ -33,11 +33,22 @@
     <span class="tagline">duckdb geodata pipelines <i data-lucide="arrow-right" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px"></i> geopackage</span>
   </div>
   <div class="top-right">
-    <label class="field" style="flex-direction:row; align-items:center; gap:8px; margin:0">
-      <span style="color:var(--muted)">load</span>
-      <select id="loadSelect" style="width:auto; min-width:160px; padding:6px 36px 6px 12px"><option value="">— config —</option></select>
+    <label class="inline-field">
+      <span>load</span>
+      <select id="loadSelect" style="width:auto; min-width:150px; padding:6px 32px 6px 12px"><option value="">— config —</option></select>
     </label>
     <button class="ghost mini" id="newBtn"><i data-lucide="plus-circle" style="width:13px;height:13px"></i> new</button>
+
+    <span class="top-divider" aria-hidden="true"></span>
+
+    <label class="inline-field">
+      <span>save as</span>
+      <input id="saveName" placeholder="config name" title="Filename used when saving this config" style="width:120px">
+    </label>
+    <button id="validateBtn" class="ghost mini"><i data-lucide="check-square" style="width:13px;height:13px"></i> validate</button>
+    <button id="saveBtn" class="ghost mini"><i data-lucide="save" style="width:13px;height:13px"></i> save</button>
+    <button id="runBtn" class="primary mini"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
+    <button type="button" class="status idle" id="status" aria-label="Validation status — open the problems panel">idle</button>
   </div>
 </header>
 
@@ -61,7 +72,7 @@
         <label class="field grow">output geopackage
           <div style="display:flex;gap:6px">
             <input id="cfg_output" placeholder="output/data.gpkg" style="flex:1">
-            <button type="button" id="cfg_output_browse" class="mini ghost" title="Browse files" style="padding:10px;flex-shrink:0"><i data-lucide="folder" style="width:14px;height:14px"></i></button>
+            <button type="button" id="cfg_output_browse" class="mini ghost" title="Browse files" aria-label="Browse for the output GeoPackage path" style="padding:10px;flex-shrink:0"><i data-lucide="folder" style="width:14px;height:14px"></i></button>
           </div>
         </label>
       </div>
@@ -84,37 +95,46 @@
     <!-- Map -->
     <div id="map-container" style="position:relative;width:100%;height:100%;border-bottom:1px solid var(--line);">
       <div id="map" style="width:100%;height:100%;"></div>
+      <div id="map-empty" class="map-empty" hidden>
+        <i data-lucide="map-pin" style="width:22px;height:22px"></i>
+        <span>No geometry in this preview</span>
+        <small>The rows may be non-spatial, or the step dropped the geometry column.</small>
+      </div>
       <div id="map-toolbar" style="position:absolute;top:8px;left:8px;z-index:1000;background:rgba(10,8,25,0.85);border:1px solid var(--line);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:6px;">
         <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">view</span>
-        <select id="map-layer-select" style="background:#0d0a1f;border:none;color:var(--ink);font-family:var(--mono);font-size:11px;cursor:pointer;outline:none;max-width:180px;">
+        <select id="map-layer-select" aria-label="What to preview" style="background:#0d0a1f;border:none;color:var(--ink);font-family:var(--mono);font-size:11px;cursor:pointer;outline:none;max-width:180px;">
           <option value="">pipeline output</option>
         </select>
+        <span style="width:1px;height:16px;background:var(--line);"></span>
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">limit</span>
+        <input id="previewLimit" type="number" min="1" max="20000" step="100" value="1000" title="Max features to preview" aria-label="Maximum features to preview"
+          style="width:64px;background:#0d0a1f;border:1px solid var(--line);border-radius:4px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 4px;outline:none;">
+        <button id="bboxToggleBtn" type="button" class="ghost mini" aria-pressed="false" title="Only preview features within the current map view, instead of an arbitrary slice"
+          style="display:flex;align-items:center;gap:4px;padding:3px 7px;font-size:11px;height:22px;white-space:nowrap;flex-shrink:0;">
+          <i data-lucide="crosshair" style="width:12px;height:12px"></i> in view
+        </button>
       </div>
     </div>
 
     <!-- Bottom panel: Tabs & Actions -->
     <div id="bottom-panel" style="display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(135deg,var(--panel) 0%,var(--void) 100%);height:100%;">
-      <div class="tabs" style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);background:rgba(13,10,31,0.4);flex-shrink:0;">
-        <div style="display:flex;">
-          <button id="tab-btn-table" class="tab-btn active" data-tab="table-tab"><i data-lucide="table" style="width:13px;height:13px"></i> Data Table</button>
-          <button id="tab-btn-yaml" class="tab-btn" data-tab="yaml-tab"><i data-lucide="file-code" style="width:13px;height:13px"></i> YAML Config</button>
-          <button id="tab-btn-log" class="tab-btn" data-tab="log-tab"><i data-lucide="terminal" style="width:13px;height:13px"></i> Run Logs</button>
+      <div id="preview-progress" class="preview-progress" role="presentation"></div>
+
+      <div class="tabs" role="tablist" aria-label="Preview panels">
+        <div class="tabs-list">
+          <button id="tab-btn-table" class="tab-btn active" role="tab" aria-selected="true" aria-controls="table-tab" data-tab="table-tab"><i data-lucide="table" style="width:13px;height:13px"></i> Data Table</button>
+          <button id="tab-btn-yaml" class="tab-btn" role="tab" aria-selected="false" aria-controls="yaml-tab" tabindex="-1" data-tab="yaml-tab"><i data-lucide="file-code" style="width:13px;height:13px"></i> YAML Config</button>
+          <button id="tab-btn-log" class="tab-btn" role="tab" aria-selected="false" aria-controls="log-tab" tabindex="-1" data-tab="log-tab"><i data-lucide="terminal" style="width:13px;height:13px"></i> Run Logs</button>
+          <button id="tab-btn-problems" class="tab-btn" role="tab" aria-selected="false" aria-controls="problems-tab" tabindex="-1" data-tab="problems-tab"><i data-lucide="alert-circle" style="width:13px;height:13px"></i> Problems<span class="tab-badge" id="problemsBadge" hidden></span></button>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;padding:4px 12px 4px 4px;">
-          <span class="status idle" id="status" style="margin-right:4px;font-size:10px;padding:2px 6px;">idle</span>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">save as</span>
-            <input id="saveName" placeholder="config name" title="Filename used when saving this config" style="width:110px;padding:5px 8px;font-size:11px;height:28px;">
-            <button id="validateBtn" class="ghost mini" style="padding:5px 8px;height:28px;" title="Validate Config"><i data-lucide="check-square" style="width:13px;height:13px"></i></button>
-            <button id="saveBtn" class="ghost mini" style="padding:5px 8px;height:28px;" title="Save Config"><i data-lucide="save" style="width:13px;height:13px"></i></button>
-            <button id="runBtn" class="primary mini" style="padding:5px 10px;height:28px;"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
-          </div>
+        <div class="tabs-meta">
+          <span id="tableRowCount" class="row-count"></span>
         </div>
       </div>
 
-      <div id="table-tab" class="tab-content active" style="flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;">
+      <div id="table-tab" class="tab-content active" role="tabpanel" aria-labelledby="tab-btn-table" style="flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;">
         <div class="table-toolbar">
-          <input id="tableSearch" placeholder="Filter preview rows..." style="max-width:280px;">
+          <input id="tableSearch" placeholder="Filter preview rows..." aria-label="Filter preview rows" style="max-width:280px;">
           <button id="tableExportBtn" class="ghost mini" title="Export current preview data to CSV"><i data-lucide="download" style="width:13px;height:13px"></i> export csv</button>
         </div>
         <div id="preview-table-container" style="overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel2);max-height:calc(100% - 40px);flex:1;">
@@ -129,20 +149,28 @@
         </div>
       </div>
 
-      <div id="yaml-tab" class="tab-content yaml-wrap" style="flex:1;overflow:auto;padding:12px 16px;">
+      <div id="yaml-tab" class="tab-content yaml-wrap" role="tabpanel" aria-labelledby="tab-btn-yaml" style="flex:1;overflow:auto;padding:12px 16px;">
         <div class="yaml-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <h3 style="margin:0;font-size:10px;">generated yaml</h3>
-          <button class="mini ghost" id="copyYamlBtn" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="copy" style="width:11px;height:11px"></i> copy</button>
+          <button class="mini ghost" id="copyYamlBtn" aria-label="Copy generated YAML to clipboard" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="copy" style="width:11px;height:11px"></i> copy</button>
         </div>
         <pre id="yaml" style="flex:1;margin:0;">—</pre>
       </div>
 
-      <div id="log-tab" class="tab-content log-wrap" style="flex:1;overflow:auto;padding:12px 16px;">
+      <div id="log-tab" class="tab-content log-wrap" role="tabpanel" aria-labelledby="tab-btn-log" style="flex:1;overflow:auto;padding:12px 16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <h3 style="margin:0;font-size:10px;">run log</h3>
-          <button class="mini ghost" id="clearLogBtn" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="trash-2" style="width:11px;height:11px"></i> clear</button>
+          <button class="mini ghost" id="clearLogBtn" aria-label="Clear the run log" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="trash-2" style="width:11px;height:11px"></i> clear</button>
         </div>
         <div id="log" style="flex:1;background:var(--void);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto"><span class="log-line">no run yet</span></div>
+      </div>
+
+      <div id="problems-tab" class="tab-content problems-wrap" role="tabpanel" aria-labelledby="tab-btn-problems" style="flex:1;overflow:auto;padding:12px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0;font-size:10px;">problems</h3>
+        </div>
+        <div id="problemsLocators" class="problem-locators"></div>
+        <pre id="problemsDetail" style="flex:1;margin:0;">No problems — the config is valid.</pre>
       </div>
     </div>
   </aside>

@@ -3,9 +3,10 @@ import {
   Layers, GitMerge, ArrowUp, ArrowDown, ArrowLeft, X, Trash2, Plus, ChevronDown,
   Filter as FilterIcon, Combine, Camera,
 } from 'lucide'
-import { mkEl } from '../dom'
+import { mkEl, esc, wireCollapse } from '../dom'
 import { META } from '../state'
 import { comboField, wireCombos } from '../combo'
+import { mutate } from '../history'
 import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, Dissolve } from '../types'
 
 // ---- step card ----
@@ -133,13 +134,14 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
       <span class="tag" title="${STEP_HINTS[kind]}"><i data-lucide="${STEP_ICONS[kind]}" style="width:12px;height:12px;margin-right:2px"></i>${STEP_LABELS[kind]}</span>
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="spacer"></span>
-      <button class="mini ghost data-step-preview" title="Preview up to this step"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
-      <button class="mini ghost" data-up title="Move Up"><i data-lucide="arrow-up" style="width:12px;height:12px"></i></button>
-      <button class="mini ghost" data-down title="Move Down"><i data-lucide="arrow-down" style="width:12px;height:12px"></i></button>
-      <button class="mini danger ghost" data-del><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
+      <button class="mini ghost data-step-preview" title="Preview up to this step" aria-label="Preview the data up to and including this step"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
+      <button class="mini ghost" data-up title="Move up (Alt+Up)" aria-label="Move this step earlier"><i data-lucide="arrow-up" style="width:12px;height:12px"></i></button>
+      <button class="mini ghost" data-down title="Move down (Alt+Down)" aria-label="Move this step later"><i data-lucide="arrow-down" style="width:12px;height:12px"></i></button>
+      <button class="mini danger ghost" data-del aria-label="Remove this step"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
       <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;margin-left:8px;"></i>
     </div>
     <div class="card-content" style="margin-top:12px;">
+      <p class="hint" style="margin-bottom:10px">${STEP_HINTS[kind]}</p>
       ${bodyHtml}
     </div>`
 
@@ -163,17 +165,44 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
 
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
     e.stopPropagation()
+    mutate('remove step', { undoToast: `Removed ${STEP_LABELS[kind]} step` })
     c.classList.add('slide-out'); setTimeout(() => { c.remove(); syncFn() }, 250)
   })
-  c.querySelector('[data-up]')!.addEventListener('click', (e) => {
-    e.stopPropagation()
-    const p = c.previousElementSibling
-    if (p) { c.parentNode!.insertBefore(c, p); c.classList.add('card-swap'); setTimeout(() => c.classList.remove('card-swap'), 300); syncFn() }
-  })
-  c.querySelector('[data-down]')!.addEventListener('click', (e) => {
-    e.stopPropagation()
-    const n = c.nextElementSibling
-    if (n) { c.parentNode!.insertBefore(n, c); c.classList.add('card-swap'); setTimeout(() => c.classList.remove('card-swap'), 300); syncFn() }
+
+  const upBtn = c.querySelector<HTMLButtonElement>('[data-up]')!
+  const downBtn = c.querySelector<HTMLButtonElement>('[data-down]')!
+
+  // Steps at the ends of the list used to keep an enabled-looking button that did nothing.
+  const updateMoveButtons = () => {
+    upBtn.disabled = !c.previousElementSibling
+    downBtn.disabled = !c.nextElementSibling
+  }
+  // Siblings change as steps are added, removed or reordered around this card.
+  const observeSiblings = () => {
+    if (!c.parentElement) return
+    new MutationObserver(updateMoveButtons).observe(c.parentElement, { childList: true })
+  }
+
+  const move = (dir: -1 | 1) => {
+    const sib = dir === -1 ? c.previousElementSibling : c.nextElementSibling
+    if (!sib) return
+    mutate(dir === -1 ? 'move step up' : 'move step down')
+    if (dir === -1) c.parentNode!.insertBefore(c, sib)
+    else c.parentNode!.insertBefore(sib, c)
+    c.classList.add('card-swap')
+    setTimeout(() => c.classList.remove('card-swap'), 300)
+    updateMoveButtons()
+    syncFn()
+  }
+
+  upBtn.addEventListener('click', e => { e.stopPropagation(); move(-1) })
+  downBtn.addEventListener('click', e => { e.stopPropagation(); move(1) })
+
+  // Keyboard equivalent for the drag/click-only reorder.
+  c.addEventListener('keydown', e => {
+    if (!e.altKey) return
+    if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); upBtn.focus() }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); move(1); downBtn.focus() }
   })
 
   // fields rows (spatial_join, attribute_join, nearest_neighbor, intersect_overlay)
@@ -182,7 +211,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     if (!fieldsBox) return
     const r = mkEl('div', { className: 'kv' })
     r.style.marginTop = '6px'
-    r.innerHTML = `<input data-fo placeholder="output_name" value="${out}">
+    r.innerHTML = `<input data-fo placeholder="output_name" value="${esc(out)}">
       <span class="arrow"><i data-lucide="arrow-left" style="width:12px;height:12px;color:var(--muted)"></i></span>
       ${comboField('data-fc', col, col ? [col] : [], '— column —')}
       <button class="mini danger ghost" data-fdel><i data-lucide="x" style="width:12px;height:12px"></i></button>`
@@ -261,22 +290,10 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
   updateTitle()
 
-  const head = c.querySelector('.item-head')!
-  head.addEventListener('click', e => {
-    if ((e.target as Element).closest('button, input, select, a')) return
-    const wasCollapsed = c.classList.contains('collapsed')
-    if (wasCollapsed) {
-      const parent = c.parentElement
-      if (parent) {
-        parent.querySelectorAll(':scope > .card').forEach(sibling => {
-          if (sibling !== c) sibling.classList.add('collapsed')
-        })
-      }
-      c.classList.remove('collapsed')
-    } else {
-      c.classList.add('collapsed')
-    }
-  })
+  wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
+
+  // The card is appended by the caller, so defer until it has a parent to observe.
+  setTimeout(() => { updateMoveButtons(); observeSiblings() }, 0)
 
   c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
   c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))

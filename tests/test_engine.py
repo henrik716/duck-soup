@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from duck_soup.config import load_config
-from duck_soup.engine import preview_config_pipeline, run_config
+from duck_soup.config import CodeCase, CodeList, load_config
+from duck_soup.engine import Engine, preview_config_pipeline, run_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PIPELINES_DIR = REPO_ROOT / "pipelines"
@@ -83,3 +83,23 @@ def test_preview_pipeline_returns_rows_without_writing_output(tmp_path):
     assert len(rows) == 5
     assert not (tmp_path / "unused.gpkg").exists()
     assert {"name", "category", "county"} <= rows[0].keys()
+
+
+def test_case_condition_is_blank_matches_null_or_empty_string():
+    condition = Engine._case_condition('"category"', CodeCase(is_blank=True, value="Unknown"), True)
+    assert condition == '("category" IS NULL OR "category" = \'\')'
+
+
+def test_codelist_expr_routes_blank_and_specific_value_to_same_output():
+    cfg = load_config(PIPELINES_DIR / "test.yaml")
+    engine = Engine(cfg.pipelines[0].to_pipeline(cfg.output))
+    cl = CodeList(
+        source="category",
+        cases=[
+            CodeCase(match="n/a", value="Unknown"),
+            CodeCase(is_blank=True, value="Unknown"),
+        ],
+    )
+    expr = engine._codelist_expr(cl)
+    assert "IS NULL" in expr
+    assert expr.count("THEN 'Unknown'") == 2
