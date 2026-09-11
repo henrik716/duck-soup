@@ -225,58 +225,100 @@ export function updateDatalistsScoped(scope: Element): void {
   }
 
   // Point all "from" inputs to the right datalist
+  const noUpstreamText = 'No upstream columns yet — set the base source, or pull fields in a step'
   scope.querySelectorAll<HTMLInputElement>('[data-from-list]').forEach(inp => {
     const cur = inp.value
-    setComboOptions(inp, availableOptions)
+    setComboOptions(inp, availableOptions, noUpstreamText)
     ensureComboOption(inp, cur)
   })
 
-  // Populate each step's source-column selects from the inspected source schema
+  // Populate each step's source-column selects from the inspected source schema.
+  // `[data-src-col]` is attribute_join's `right`, which picks from the same schema as the
+  // pulled-fields column picker and so shares this refill.
   scope.querySelectorAll<HTMLElement>('.pl-steps .card').forEach(stepEl => {
     const srcId = (stepEl.querySelector<HTMLInputElement>('[data-k="source"]')?.value ?? '').trim()
     const cols = srcId ? resolveSchemaScoped(scope, srcId) : []
-    stepEl.querySelectorAll<HTMLInputElement>('[data-fc]').forEach(sel => {
+
+    // An empty dropdown used to open blank, which reads as broken. Say which of the two
+    // reasons it is instead.
+    const emptyText = !srcId
+      ? 'Pick a source for this step first'
+      : `"${srcId}" has no inspected columns yet — check its uri`
+
+    stepEl.querySelectorAll<HTMLInputElement>('[data-fc], [data-src-col]').forEach(sel => {
       const cur = sel.value
 
       const stepColOptions: ComboOptionDef[] = cols.map(c => ({
         value: c.name,
-        label: `<span style="font-family:var(--mono);">${c.name}</span> <span style="float:right;font-size:10px;color:var(--muted);background:rgba(255,255,255,0.05);padding:1px 4px;border-radius:3px;margin-left:8px;">${c.type || 'unknown'}</span>`
+        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span style="float:right;font-size:10px;color:var(--muted);background:rgba(255,255,255,0.05);padding:1px 4px;border-radius:3px;margin-left:8px;">${esc(c.type || 'unknown')}</span>`
       }))
 
-      setComboOptions(sel, stepColOptions)
+      setComboOptions(sel, stepColOptions, emptyText)
       if (cur) {
         ensureComboOption(sel, cur)
         sel.value = cur
       }
     })
+
+    // "all columns" can only do something once the source resolves to a schema.
+    const allBtn = stepEl.querySelector<HTMLButtonElement>('[data-addallfields]')
+    if (allBtn) {
+      allBtn.disabled = cols.length === 0
+      allBtn.title = cols.length === 0
+        ? emptyText
+        : `Pull every column of "${srcId}" that isn't pulled yet`
+    }
+  })
+}
+
+// A step's `source:` can point at a real source, a derived source or a mid-pipeline
+// snapshot, and the flat list of ids gave no way to tell which is which — the three behave
+// quite differently. Same right-floated badge treatment as the column pickers above.
+const SOURCE_KIND_BADGE: Record<string, { text: string; color: string; bg: string; border: string }> = {
+  source: { text: 'source', color: 'var(--muted)', bg: 'rgba(255,255,255,0.03)', border: 'var(--line)' },
+  derived: { text: 'derived', color: 'var(--accent)', bg: 'var(--accent-soft)', border: 'rgba(139,108,255,0.2)' },
+  snapshot: { text: 'snapshot', color: 'var(--spatial)', bg: 'rgba(0,235,215,0.08)', border: 'rgba(0,235,215,0.2)' },
+}
+
+function badgedSourceOptions(scope: Element): ComboOptionDef[] {
+  const derived = new Set(collectDerivedSourceIdsScoped(scope))
+  const snapshots = new Set(collectSnapshotIdsScoped(scope))
+  return collectAllSourceIdsScoped(scope).map(id => {
+    const kind = snapshots.has(id) ? 'snapshot' : derived.has(id) ? 'derived' : 'source'
+    const b = SOURCE_KIND_BADGE[kind]!
+    return {
+      value: id,
+      label: `<span style="font-family:var(--mono);">${esc(id)}</span> <span style="float:right;font-size:10px;color:${b.color};background:${b.bg};border:1px solid ${b.border};padding:1px 4px;border-radius:3px;margin-left:8px;">${b.text}</span>`,
+    }
   })
 }
 
 export function refreshBaseOptionsScoped(scope: Element): void {
   const ids = collectSourceIdsScoped(scope)
   const allIds = collectAllSourceIdsScoped(scope)
+  const allOptions = badgedSourceOptions(scope)
   const baseEl = scope.querySelector<HTMLInputElement>('.pl-base')!
   if (!baseEl) return
   const cur = baseEl.value
-  setComboOptions(baseEl, ids)
+  setComboOptions(baseEl, ids, 'No sources defined yet — add one above')
   if (ids.includes(cur)) baseEl.value = cur
 
   scope.querySelectorAll<HTMLInputElement>('.pl-steps [data-k="source"]').forEach(s => {
     const c = s.value
-    setComboOptions(s, allIds)
+    setComboOptions(s, allOptions, 'No sources defined yet — add one above')
     if (allIds.includes(c)) s.value = c
   })
 
   scope.querySelectorAll<HTMLInputElement>('.pl-derived-sources [data-k="from"]').forEach(s => {
     const c = s.value
-    setComboOptions(s, allIds)
+    setComboOptions(s, allOptions, 'No sources defined yet — add one above')
     if (allIds.includes(c)) s.value = c
   })
 
   const snapshotIds = collectSnapshotIdsScoped(scope)
   scope.querySelectorAll<HTMLInputElement>('.pl-steps [data-k="branch"]').forEach(s => {
     const c = s.value
-    setComboOptions(s, snapshotIds)
+    setComboOptions(s, snapshotIds, 'No snapshot steps yet — add one to fork the chain')
     if (snapshotIds.includes(c)) s.value = c
   })
 

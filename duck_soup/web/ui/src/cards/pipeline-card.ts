@@ -6,7 +6,7 @@ import { EXT_FORMAT } from '../state'
 import { comboField, wireCombos, ensureComboOption } from '../combo'
 import {
   refreshBaseOptionsScoped, updateDatalistsScoped,
-  collectAvailableColumnsScoped, collectAllSourceIdsScoped,
+  collectAvailableColumnsScoped, collectAllSourceIdsScoped, resolveSchemaScoped,
 } from '../schema'
 import { showToast } from '../toast'
 import { openStepGalleryModal } from '../step-gallery'
@@ -133,8 +133,9 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           <div class="pl-steps"></div>
           <div class="section-empty-hint" data-empty="steps" hidden>
             <span class="hint-icon">🔗</span>
-            <p>No steps yet. Use <button type="button" class="empty-action pl-empty-add-step">add step</button> to enrich, filter or reshape the base features.</p>
+            <p>No steps yet — add one below to enrich, filter or reshape the base features.</p>
           </div>
+          <button class="addbtn pl-add-step-bottom"><i data-lucide="plus" style="width:12px;height:12px"></i> add step</button>
         </div>
       </div>
 
@@ -168,14 +169,15 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
             <!-- Right Side: Mapped Fields Grid -->
             <div style="flex: 1; display: flex; flex-direction: column;">
               <div class="map-grid pl-map-header" style="margin-bottom:4px;padding:0 0 4px;border-bottom:1px solid var(--line)">
-                <span></span><span class="head">output column</span><span class="head">kind</span>
+                <span></span><span class="head">output column</span><span class="head">value source</span>
                 <span class="head">value</span><span class="head">cast</span><span></span>
               </div>
               <div class="pl-mapping" style="flex: 1; min-height: 100px;"></div>
               <div class="section-empty-hint" data-empty="mapping" hidden>
                 <span class="hint-icon">🧭</span>
-                <p>No output columns yet. Use <button type="button" class="empty-action pl-empty-add-map">+ column</button>, or click a field in the pool on the left.<br>With no mapping at all, every upstream column is written as-is.</p>
+                <p>No output columns yet — add one below, or click a field in the pool on the left.<br>With no mapping at all, every upstream column is written as-is.</p>
               </div>
+              <button class="addbtn pl-add-map-bottom"><i data-lucide="plus" style="width:12px;height:12px"></i> column</button>
             </div>
           </div>
         </div>
@@ -483,15 +485,52 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
       stepsEl.appendChild(newCard)
       refreshIcons()
       fullSync()
+      // The new card lands at the bottom of a list that's often taller than the viewport, so
+      // adding one could look like nothing happened. Focus scrolls it into view for free.
+      // Deferred because the gallery modal restores focus to its trigger as it closes.
+      setTimeout(() => {
+        const first = newCard.querySelector<HTMLInputElement>('.card-content input')
+        if (first) first.focus()
+        else newCard.scrollIntoView({ block: 'nearest' })
+      }, 50)
     })
   })
+  // A step card can't resolve a source id to its schema without importing schema.ts, which
+  // would close an import cycle back through this module — so it asks here instead. Like
+  // autoMapAll, the whole batch is one snapshot so a single undo reverses it.
+  stepsEl.addEventListener('pull-all-fields', e => {
+    const stepEl = e.target as HTMLElement & { _addField?: (out?: string, col?: string) => void }
+    if (!stepEl._addField) return
+    const srcId = (stepEl.querySelector<HTMLInputElement>('[data-k="source"]')?.value ?? '').trim()
+    if (!srcId) { showToast('Pick a source for this step first', 'info'); return }
+
+    const cols = resolveSchemaScoped(card, srcId)
+    if (cols.length === 0) { showToast(`No inspected schema for "${srcId}"`, 'info'); return }
+
+    const pulled = new Set([...stepEl.querySelectorAll<HTMLInputElement>('[data-fields] .kv [data-fc]')]
+      .map(i => i.value.trim()).filter(Boolean))
+    const missing = cols.map(c => c.name).filter(name => !pulled.has(name))
+    if (missing.length === 0) { showToast('Every column is already pulled', 'info'); return }
+
+    mutate('pull all fields', {
+      undoToast: `Pulled ${missing.length} field${missing.length !== 1 ? 's' : ''}`,
+    })
+    missing.forEach(name => stepEl._addField!('', name))
+    refreshIcons()
+    fullSync()
+  })
+
   card.querySelector('.pl-add-map')!.addEventListener('click', e => {
     e.stopPropagation()
     mutate('add mapping column')
     expandBlock('mapping')
-    mappingEl.appendChild(mapRow({}, scopedSync, plId))
+    const newRow = mapRow({}, scopedSync, plId)
+    mappingEl.appendChild(newRow)
     refreshIcons()
     scopedSync()
+    // Same reason as add-step: the row appends to the bottom, so without this, clicking add
+    // from the collapsed-section header looks like it did nothing.
+    setTimeout(() => newRow.querySelector<HTMLInputElement>('[data-to]')?.focus(), 50)
   })
   card.querySelector('.pl-auto-map')!.addEventListener('click', e => {
     e.stopPropagation()
@@ -578,12 +617,16 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   const baseEl = card.querySelector<HTMLInputElement>('.pl-base')!
   if (pdef.base) { ensureComboOption(baseEl, pdef.base); baseEl.value = pdef.base }
 
-  // Empty-state shortcut buttons reuse the real add handlers.
-  card.querySelector('.pl-empty-add-step')?.addEventListener('click', e => {
+  // The header add buttons stay — they're reachable while the section is collapsed, and they
+  // keep the six section headers uniform. But a new row appends to the bottom of a list that
+  // can be several screens long, and that's exactly where you are when you want another one,
+  // so each list also gets an add button where the row actually lands. Both delegate to the
+  // single real handler rather than duplicating it.
+  card.querySelector('.pl-add-step-bottom')?.addEventListener('click', e => {
     e.stopPropagation()
     ;(card.querySelector('.pl-add-step') as HTMLButtonElement | null)?.click()
   })
-  card.querySelector('.pl-empty-add-map')?.addEventListener('click', e => {
+  card.querySelector('.pl-add-map-bottom')?.addEventListener('click', e => {
     e.stopPropagation()
     ;(card.querySelector('.pl-add-map') as HTMLButtonElement | null)?.click()
   })

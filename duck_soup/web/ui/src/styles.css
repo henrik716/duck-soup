@@ -289,6 +289,22 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
 .kv input, .kv select, .kv .combo { flex: 1; }
 .kv .arrow { color: var(--muted); font-family: var(--mono); display: flex; align-items: center; }
 
+/* A dropdown with nothing to offer explains itself rather than opening as a blank box.
+   Deliberately not .combo-option — the keyboard/filter paths only ever match that class,
+   so this stays inert. */
+.combo-empty {
+  padding: 8px 10px; font-size: 11px; font-style: italic; color: var(--muted);
+  line-height: 1.4; cursor: default; user-select: none;
+}
+.fields-empty {
+  font-size: 11px; color: var(--muted); font-style: italic;
+  padding: 8px 2px 2px;
+}
+.codelist-btn.is-configured {
+  border-color: rgba(139, 108, 255, 0.35); background: var(--accent-soft); color: var(--ink);
+}
+.codelist-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .map-item { border-left: 2px solid transparent; padding-left: 0; margin-bottom: 4px; transition: var(--transition); }
 .map-item.has-detail { border-left-color: var(--line-glow); padding-left: 8px; }
 .codelist-panel { background: var(--panel2); border: 1px solid var(--line); border-radius: var(--radius-md);
@@ -1147,11 +1163,6 @@ button.status:hover { filter: brightness(1.25); }
 }
 .map-empty small { font-size: 10.5px; opacity: 0.75; max-width: 280px; }
 .map-empty[hidden] { display: none; }
-
-.section-empty-hint .empty-action {
-  background: none; border: none; padding: 0; color: var(--accent);
-  font-family: inherit; font-size: inherit; text-decoration: underline; cursor: pointer;
-}
 
 /* Card that will not make it into the generated config yet. */
 .card-warning {

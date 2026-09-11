@@ -9,7 +9,14 @@ export interface ComboOptionDef {
   label?: string
 }
 
-function comboOptionsHtml(options: (string | ComboOptionDef)[]): string {
+// An empty option list used to open as a blank box, which reads as broken rather than as
+// "there's nothing to offer yet". `emptyText` fills it with an explanation instead. It
+// deliberately uses its own class: every keyboard/filter path below queries `.combo-option`,
+// so `.combo-empty` is inert without any further special-casing.
+function comboOptionsHtml(options: (string | ComboOptionDef)[], emptyText = ''): string {
+  if (options.length === 0) {
+    return emptyText ? `<div class="combo-empty">${esc(emptyText)}</div>` : ''
+  }
   return options.map(o => {
     if (typeof o === 'string') {
       return `<div class="combo-option" role="option" data-value="${esc(o)}">${esc(o)}</div>`
@@ -21,20 +28,20 @@ function comboOptionsHtml(options: (string | ComboOptionDef)[]): string {
 }
 
 // attrHtml is the literal attribute text for the underlying <input>, e.g. `data-k="format"` or `class="pl-base"`
-export function comboField(attrHtml: string, value: string, options: (string | ComboOptionDef)[], placeholder = ''): string {
+export function comboField(attrHtml: string, value: string, options: (string | ComboOptionDef)[], placeholder = '', emptyText = ''): string {
   return `
     <div class="combo">
       <input ${attrHtml} placeholder="${esc(placeholder)}" value="${esc(value)}" autocomplete="off"
              role="combobox" aria-expanded="false" aria-autocomplete="list">
       <i data-lucide="chevron-down" class="combo-arrow"></i>
-      <div class="combo-list" role="listbox">${comboOptionsHtml(options)}</div>
+      <div class="combo-list" role="listbox">${comboOptionsHtml(options, emptyText)}</div>
     </div>`
 }
 
 // Replace a combo's option list in place (e.g. once a source's layers/columns are known)
-export function setComboOptions(input: Element, options: (string | ComboOptionDef)[]): void {
+export function setComboOptions(input: Element, options: (string | ComboOptionDef)[], emptyText = ''): void {
   const list = input.closest('.combo')?.querySelector<HTMLElement>('.combo-list')
-  if (list) list.innerHTML = comboOptionsHtml(options)
+  if (list) list.innerHTML = comboOptionsHtml(options, emptyText)
 }
 
 // Add a value to a combo's option list if it isn't already there (used when hydrating from saved config)
@@ -42,6 +49,8 @@ export function ensureComboOption(input: Element, value: string): void {
   if (!value) return
   const list = input.closest('.combo')?.querySelector<HTMLElement>('.combo-list')
   if (list && ![...list.querySelectorAll<HTMLElement>('.combo-option')].some(o => o.dataset['value'] === value)) {
+    // The list is no longer empty, so drop any "nothing to offer" placeholder first.
+    list.querySelector('.combo-empty')?.remove()
     list.insertAdjacentHTML('beforeend', `<div class="combo-option" role="option" data-value="${esc(value)}">${esc(value)}</div>`)
   }
 }

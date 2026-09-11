@@ -36,10 +36,24 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     : m.codelist !== undefined ? 'codelist' : 'from'
   const initVal = m.from ?? m.const ?? m.expr ?? m.func ?? ''
 
+  // These five are the whole vocabulary of the mapping section and were never explained
+  // anywhere in the UI. Same rich-label treatment as the func picker below.
+  const KIND_DESCRIPTIONS: Record<string, string> = {
+    from: 'copy an upstream column',
+    const: 'the same literal for every row',
+    expr: 'a SQL expression',
+    func: 'built-in (uuid, now, area, …)',
+    codelist: 'map values via rules or a CSV',
+  }
+  const KIND_OPTIONS: ComboOptionDef[] = ['from', 'const', 'expr', 'func', 'codelist'].map(k => ({
+    value: k,
+    label: `<span style="font-family:var(--mono);font-weight:600;">${k}</span> <span style="float:right;font-size:10px;color:var(--muted);margin-left:12px;">${esc(KIND_DESCRIPTIONS[k] || '')}</span>`,
+  }))
+
   row.innerHTML = `
     <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
     <input data-to placeholder="column" value="${esc(m.to)}">
-    ${comboField('data-kind', kind, ['from', 'const', 'expr', 'func', 'codelist'])}
+    ${comboField('data-kind', kind, KIND_OPTIONS)}
     <span data-valwrap></span>
     ${comboField('data-cast', m.cast ? m.cast.toUpperCase() : '', ['INTEGER', 'DOUBLE', 'VARCHAR', 'BOOLEAN', 'DATE', 'TIMESTAMP'], '— cast —')}
     <button class="mini danger ghost" data-del aria-label="Remove this output column"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`
@@ -47,10 +61,22 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
   const KIND_VALUES = ['from', 'const', 'expr', 'func', 'codelist'] as const
   const normalizeKind = (v: string): typeof KIND_VALUES[number] =>
     (KIND_VALUES as readonly string[]).includes(v) ? v as typeof KIND_VALUES[number] : 'from'
+  const isValidKind = (v: string) => (KIND_VALUES as readonly string[]).includes(v)
 
   const kindSel = row.querySelector<HTMLInputElement>('[data-kind]')!
   const valWrap = row.querySelector<HTMLElement>('[data-valwrap]')!
   wireCombos(row)
+
+  // This is a closed enum, but the combo accepts free text — so typing anything unrecognised
+  // used to silently mean `from`, quietly discarding whatever the row was configured as.
+  // Snap back to the last valid kind instead of reinterpreting the input.
+  let lastValidKind: string = kind
+  kindSel.addEventListener('blur', () => {
+    if (isValidKind(kindSel.value)) return
+    kindSel.value = lastValidKind
+    renderVal()
+    syncFn()
+  })
 
   let panel: HTMLElement | null = null
   let currentCodelist: Partial<CodeList> = typeof m.codelist === 'object' && m.codelist ? m.codelist : {}
@@ -107,13 +133,31 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
       wireCombos(valWrap)
       refreshIcons()
     } else if (k === 'codelist') {
-      const btn = mkEl('button', { className: 'mini ghost', type: 'button' })
-      btn.innerHTML = `<i data-lucide="sliders" style="width:12px;height:12px;color:var(--accent)"></i> configure rules`
+      const btn = mkEl('button', { className: 'mini ghost codelist-btn', type: 'button' })
+
+      // The button used to read "configure rules" forever, so a fully configured codelist
+      // and an untouched one looked identical from the mapping grid.
+      const summarise = (cl: Partial<CodeList>): string => {
+        if (cl.file) return `lookup: ${cl.file.split(/[\\/]/).pop() || cl.file}`
+        const n = cl.cases?.length ?? 0
+        if (!n) return 'configure rules…'
+        return `${n} rule${n !== 1 ? 's' : ''}${cl.default ? ` · default ${cl.default}` : ''}`
+      }
+      const paintBtn = () => {
+        const configured = !!currentCodelist.file || (currentCodelist.cases?.length ?? 0) > 0
+        btn.classList.toggle('is-configured', configured)
+        btn.innerHTML = `<i data-lucide="sliders" style="width:12px;height:12px;color:var(--accent)"></i> <span>${esc(summarise(currentCodelist))}</span>`
+        btn.title = configured ? 'Edit this codelist' : 'Set up the rules for this column'
+        refreshIcons()
+      }
+      paintBtn()
+
       btn.onclick = e => {
         e.preventDefault()
         const colName = row.querySelector<HTMLInputElement>('[data-to]')!.value.trim() || 'unnamed_column'
         openCodelistDrawer(colName, currentCodelist, updatedCodelist => {
           currentCodelist = updatedCodelist
+          paintBtn()
           syncFn()
         })
       }
@@ -245,8 +289,13 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     }
   }
   renderVal()
-  kindSel.addEventListener('input', () => { renderVal(); syncFn() })
-  kindSel.addEventListener('change', () => { renderVal(); syncFn() })
+  const onKindChange = () => {
+    if (isValidKind(kindSel.value)) lastValidKind = kindSel.value
+    renderVal()
+    syncFn()
+  }
+  kindSel.addEventListener('input', onKindChange)
+  kindSel.addEventListener('change', onKindChange)
 
   row.querySelector('[data-del]')!.addEventListener('click', () => {
     const to = row.querySelector<HTMLInputElement>('[data-to]')?.value.trim()

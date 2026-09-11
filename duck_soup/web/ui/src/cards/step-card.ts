@@ -1,6 +1,6 @@
 import {
   createIcons, MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser,
-  Layers, GitMerge, ArrowUp, ArrowDown, ArrowLeft, X, Trash2, Plus, ChevronDown,
+  Layers, GitMerge, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
   Filter as FilterIcon, Combine, Camera,
 } from 'lucide'
 import { mkEl, esc, wireCollapse } from '../dom'
@@ -63,15 +63,21 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   const hasPredicate = ['spatial_join', 'clip', 'erase'].includes(kind)
   const hasFields = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay'].includes(kind)
 
+  // Rendering these as the value rather than leaving the combo blank: collectPipelineDef
+  // already falls back to exactly these (`val(c,'predicate') || 'intersects'`), so a blank
+  // field always meant "intersects" — it just never said so. The emitted YAML is unchanged.
+  const predicateVal = (st as Partial<SpatialJoin>).predicate ?? 'intersects'
+  const matchVal = (st as Partial<SpatialJoin>).match ?? 'first'
+
   let bodyHtml = ''
   if (hasSrc) {
     bodyHtml += `<div class="row" style="margin-top:8px">
-      <label class="field grow">source${comboField('data-k="source"', '', sourceIds)}</label>
-      ${hasPredicate ? `<label class="field grow">predicate${comboField('data-k="predicate"', '', META.predicates)}</label>` : ''}
-      ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', '', ['first', 'all'], 'first')}</label>` : ''}
+      <label class="field grow">source${comboField('data-k="source"', '', sourceIds, '', 'No sources defined yet — add one above')}</label>
+      ${hasPredicate ? `<label class="field grow">predicate${comboField('data-k="predicate"', predicateVal, META.predicates)}</label>` : ''}
+      ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', matchVal, ['first', 'all'], 'first')}</label>` : ''}
       ${kind === 'attribute_join' ? `
-        <label class="field grow">left (SQL/literal)<input data-k="left" placeholder="'Embassies'"></label>
-        <label class="field grow">right column<input data-k="right" placeholder="dataset"></label>` : ''}
+        <label class="field grow">left (upstream column or SQL literal)${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}</label>
+        <label class="field grow">right (column on the join source)${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}</label>` : ''}
     </div>`
     if (kind === 'merge') {
       bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['merge']}</p>`
@@ -113,9 +119,13 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   }
   if (hasFields) {
     bodyHtml += `<div style="margin-top:10px">
-      <span class="head" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">pulled fields&nbsp; output ← source</span>
+      <span class="head" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">pulled fields&nbsp; source column → output name</span>
       <div data-fields></div>
-      <button class="mini ghost" data-addfield style="margin-top:6px"><i data-lucide="plus" style="width:12px;height:12px"></i> field</button>
+      <div class="fields-empty" data-fields-empty>Nothing pulled yet — this step will match features but copy no attributes.</div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="mini ghost" data-addfield><i data-lucide="plus" style="width:12px;height:12px"></i> field</button>
+        <button class="mini ghost" data-addallfields title="Pull every column of the join source that isn't pulled yet"><i data-lucide="plus" style="width:12px;height:12px"></i> all columns</button>
+      </div>
     </div>`
   }
 
@@ -206,24 +216,64 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   })
 
   // fields rows (spatial_join, attribute_join, nearest_neighbor, intersect_overlay)
+  //
+  // The row reads left-to-right the way the data flows: pick the source column first (the
+  // side the UI can actually populate), and the output name is auto-filled from it. The
+  // reverse order meant naming an output before you could see what columns existed.
   const fieldsBox = c.querySelector<HTMLElement>('[data-fields]')
+  const fieldsEmpty = c.querySelector<HTMLElement>('[data-fields-empty]')
+  const updateFieldsEmpty = () => {
+    if (fieldsEmpty && fieldsBox) fieldsEmpty.hidden = fieldsBox.children.length > 0
+  }
   const addField = (out = '', col = '') => {
     if (!fieldsBox) return
     const r = mkEl('div', { className: 'kv' })
     r.style.marginTop = '6px'
-    r.innerHTML = `<input data-fo placeholder="output_name" value="${esc(out)}">
-      <span class="arrow"><i data-lucide="arrow-left" style="width:12px;height:12px;color:var(--muted)"></i></span>
-      ${comboField('data-fc', col, col ? [col] : [], '— column —')}
-      <button class="mini danger ghost" data-fdel><i data-lucide="x" style="width:12px;height:12px"></i></button>`
-    r.querySelector('[data-fdel]')!.addEventListener('click', () => { r.remove(); syncFn() })
-    r.querySelector<HTMLInputElement>('[data-fo]')!.addEventListener('input', syncFn)
-    r.querySelector<HTMLInputElement>('[data-fc]')!.addEventListener('input', syncFn)
-    r.querySelector<HTMLInputElement>('[data-fc]')!.addEventListener('change', syncFn)
+    r.innerHTML = `${comboField('data-fc', col, col ? [col] : [], '— column —', 'Pick a source for this step first')}
+      <span class="arrow"><i data-lucide="arrow-right" style="width:12px;height:12px;color:var(--muted)"></i></span>
+      <input data-fo placeholder="output_name" value="${esc(out)}">
+      <button class="mini danger ghost" data-fdel aria-label="Remove this pulled field"><i data-lucide="x" style="width:12px;height:12px"></i></button>`
+    const outInp = r.querySelector<HTMLInputElement>('[data-fo]')!
+    const colInp = r.querySelector<HTMLInputElement>('[data-fc]')!
+
+    // Only ever overwrite a name we filled in ourselves — once the user types their own,
+    // changing the column must leave it alone. Adding a row with just a column (bulk "all
+    // columns") names it after that column up front.
+    if (!out && col) {
+      outInp.value = col
+      outInp.dataset['autofilled'] = '1'
+    }
+    const autoName = () => {
+      const picked = colInp.value.trim()
+      if (!picked) return
+      if (outInp.value.trim() === '' || outInp.dataset['autofilled'] === '1') {
+        outInp.value = picked
+        outInp.dataset['autofilled'] = '1'
+      }
+    }
+
+    r.querySelector('[data-fdel]')!.addEventListener('click', () => {
+      r.remove(); updateFieldsEmpty(); syncFn()
+    })
+    outInp.addEventListener('input', () => { delete outInp.dataset['autofilled']; syncFn() })
+    colInp.addEventListener('input', () => { autoName(); syncFn() })
+    colInp.addEventListener('change', () => { autoName(); syncFn() })
     wireCombos(r)
     fieldsBox.appendChild(r)
-    createIcons({ icons: { ArrowLeft, X, ChevronDown } })
+    updateFieldsEmpty()
+    createIcons({ icons: { ArrowRight, X, ChevronDown } })
   }
   c.querySelector('[data-addfield]')?.addEventListener('click', (e) => { e.stopPropagation(); addField(); syncFn() })
+
+  // Pulling 20 columns one row at a time was the main tedium here. The schema lives in
+  // schema.ts, which transitively imports this module, so rather than close that import
+  // cycle the card exposes _addField and asks the pipeline card (which already imports
+  // resolveSchemaScoped) to do the lookup — same shape as the preview-step event above.
+  ;(c as unknown as { _addField: typeof addField })._addField = addField
+  c.querySelector('[data-addallfields]')?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    c.dispatchEvent(new CustomEvent('pull-all-fields', { bubbles: true }))
+  })
 
   // dissolve by-col rows
   const byColsBox = c.querySelector<HTMLElement>('[data-by-cols]')
@@ -252,6 +302,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   // hydrate pulled fields
   if (hasFields) {
     Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
+    updateFieldsEmpty()
   }
   // hydrate dissolve by-cols
   if (kind === 'dissolve') {
