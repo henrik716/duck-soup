@@ -3,12 +3,13 @@ import { uploadFile } from '../api'
 import { mkEl, val, refreshIcons, getDragAfterElement, esc, qs, wireCollapse } from '../dom'
 import { mutate } from '../history'
 import { EXT_FORMAT } from '../state'
-import { comboField, wireCombos, ensureComboOption } from '../combo'
+import { wireCombos } from '../combo'
 import {
   refreshBaseOptionsScoped, updateDatalistsScoped,
   collectAvailableColumnsScoped, collectAllSourceIdsScoped, resolveSchemaScoped,
 } from '../schema'
 import { showToast } from '../toast'
+import { attachCrsFormatCheck } from '../validation'
 import { openStepGalleryModal } from '../step-gallery'
 import { sourceCard } from './source-card'
 import { derivedSourceCard } from './derived-source-card'
@@ -35,20 +36,48 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     <div class="pipeline-card-body">
       <div class="pl-datalists"></div>
 
-      <!-- Sources -->
-      <div class="pl-block collapsed" data-sec="sources">
-        <div class="pl-block-header">
-          <div class="pl-block-left">
-            <i data-lucide="database" class="pl-block-icon" style="width:13px;height:13px;color:var(--accent)"></i>
-            <span class="pl-block-title">sources</span>
-            <span class="pl-block-summary"></span>
-          </div>
-          <div class="pl-block-actions">
+      <div class="pl-tabs" role="tablist" aria-label="Pipeline sections">
+        <button class="pl-tab-btn" type="button" role="tab" data-sec="sources" id="pl-tab-sources-${plId}" aria-controls="pl-panel-sources-${plId}">
+          <i data-lucide="database" class="pl-tab-icon" style="width:13px;height:13px;color:var(--accent)"></i>
+          <span class="pl-tab-title">sources</span>
+          <span class="pl-tab-summary"></span>
+        </button>
+        <button class="pl-tab-btn" type="button" role="tab" data-sec="derived_sources" id="pl-tab-derived_sources-${plId}" aria-controls="pl-panel-derived_sources-${plId}">
+          <i data-lucide="git-branch" class="pl-tab-icon" style="width:13px;height:13px;color:var(--accent)"></i>
+          <span class="pl-tab-title">derived sources</span>
+          <span class="pl-tab-summary"></span>
+        </button>
+        <button class="pl-tab-btn" type="button" role="tab" data-sec="steps" id="pl-tab-steps-${plId}" aria-controls="pl-panel-steps-${plId}">
+          <i data-lucide="git-merge" class="pl-tab-icon" style="width:13px;height:13px;color:var(--spatial)"></i>
+          <span class="pl-tab-title">steps</span>
+          <span class="pl-tab-summary"></span>
+        </button>
+        <button class="pl-tab-btn" type="button" role="tab" data-sec="mapping" id="pl-tab-mapping-${plId}" aria-controls="pl-panel-mapping-${plId}">
+          <i data-lucide="columns-2" class="pl-tab-icon" style="width:13px;height:13px;color:var(--ok)"></i>
+          <span class="pl-tab-title">mapping</span>
+          <span class="pl-tab-summary"></span>
+        </button>
+        <button class="pl-tab-btn" type="button" role="tab" data-sec="output" id="pl-tab-output-${plId}" aria-controls="pl-panel-output-${plId}">
+          <i data-lucide="package" class="pl-tab-icon" style="width:13px;height:13px;color:var(--ok)"></i>
+          <span class="pl-tab-title">output layers</span>
+          <span class="pl-tab-summary"></span>
+        </button>
+      </div>
+
+      <div class="pl-panels">
+        <!-- Sources -->
+        <div class="pl-panel" data-sec="sources" id="pl-panel-sources-${plId}" role="tabpanel" aria-labelledby="pl-tab-sources-${plId}">
+          <div class="pl-panel-actions">
+            <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
             <button class="addbtn pl-add-source" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
-            <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
-        </div>
-        <div class="pl-block-content">
+          <input type="hidden" class="pl-base" value="${esc(pdef.base)}">
+          <label class="field" style="max-width:280px;margin-bottom:10px">
+            working CRS
+            <input class="pl-working-crs" placeholder="defaults to base source's CRS" value="${esc(pdef.working_crs)}">
+          </label>
+          <p class="hint" style="margin-bottom:10px"><i data-lucide="info" style="width:11px;height:11px;margin-right:4px;vertical-align:middle"></i>Internal CRS used for every join/step (spatial joins, buffer, clip, etc.) and for area/length calcs — pick a projected (metric) CRS if you use those. Every source is reprojected into this CRS before processing, then reprojected again to the output layer's CRS. Leave blank to use the base source's declared CRS.</p>
+          <p class="hint" style="margin-bottom:10px">Click the <i data-lucide="star" style="width:11px;height:11px;margin:0 2px;vertical-align:middle"></i> on a source below to make it the base — its features flow through the whole pipeline.</p>
           <div class="sources-dropzone" role="button" tabindex="0" aria-label="Add source files — drag and drop, or activate to browse your computer">
             <i data-lucide="upload-cloud" style="width:24px;height:24px;margin-bottom:4px"></i>
             <span class="title">Drag &amp; drop spatial files here</span>
@@ -68,22 +97,12 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           </div>
           <div class="pl-sources"></div>
         </div>
-      </div>
 
-      <!-- Derived sources -->
-      <div class="pl-block collapsed" data-sec="derived_sources">
-        <div class="pl-block-header">
-          <div class="pl-block-left">
-            <i data-lucide="git-branch" class="pl-block-icon" style="width:13px;height:13px;color:var(--accent)"></i>
-            <span class="pl-block-title">derived sources</span>
-            <span class="pl-block-summary"></span>
-          </div>
-          <div class="pl-block-actions">
+        <!-- Derived sources -->
+        <div class="pl-panel" data-sec="derived_sources" id="pl-panel-derived_sources-${plId}" role="tabpanel" aria-labelledby="pl-tab-derived_sources-${plId}">
+          <div class="pl-panel-actions">
             <button class="addbtn pl-add-derived" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
-            <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
-        </div>
-        <div class="pl-block-content">
           <div class="pl-derived-sources"></div>
           <div class="section-empty-hint" data-empty="derived_sources" hidden>
             <span class="hint-icon">🌿</span>
@@ -91,45 +110,12 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           </div>
           <p class="hint" style="margin-top:6px">Fork part of a source, transform it, then join it back into the base.</p>
         </div>
-      </div>
 
-      <!-- Base -->
-      <div class="pl-block collapsed" data-sec="base">
-        <div class="pl-block-header">
-          <div class="pl-block-left">
-            <i data-lucide="play" class="pl-block-icon" style="width:13px;height:13px;color:var(--accent)"></i>
-            <span class="pl-block-title">base source</span>
-            <span class="pl-block-summary"></span>
-          </div>
-          <div class="pl-block-actions">
-            <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
-            <i data-lucide="chevron-down" class="pl-chevron"></i>
-          </div>
-        </div>
-        <div class="pl-block-content">
-          <div style="max-width:280px">${comboField('class="pl-base"', pdef.base ?? '', [])}</div>
-          <label class="field grow" style="margin-top:10px">
-            working CRS
-            <input class="pl-working-crs" placeholder="defaults to base source's CRS" value="${esc(pdef.working_crs)}">
-          </label>
-          <p class="hint" style="margin-top:6px"><i data-lucide="info" style="width:11px;height:11px;margin-right:4px;vertical-align:middle"></i>Internal CRS used for every join/step (spatial joins, buffer, clip, etc.) and for area/length calcs — pick a projected (metric) CRS if you use those. Every source is reprojected into this CRS before processing, then reprojected again to the output layer's CRS. Leave blank to use the base source's declared CRS.</p>
-        </div>
-      </div>
-
-      <!-- Steps -->
-      <div class="pl-block collapsed" data-sec="steps">
-        <div class="pl-block-header">
-          <div class="pl-block-left">
-            <i data-lucide="git-merge" class="pl-block-icon" style="width:13px;height:13px;color:var(--spatial)"></i>
-            <span class="pl-block-title">steps</span>
-            <span class="pl-block-summary"></span>
-          </div>
-          <div class="pl-block-actions">
+        <!-- Steps -->
+        <div class="pl-panel" data-sec="steps" id="pl-panel-steps-${plId}" role="tabpanel" aria-labelledby="pl-tab-steps-${plId}">
+          <div class="pl-panel-actions">
             <button class="addbtn pl-add-step" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add step</button>
-            <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
-        </div>
-        <div class="pl-block-content">
           <div class="pl-steps"></div>
           <div class="section-empty-hint" data-empty="steps" hidden>
             <span class="hint-icon">🔗</span>
@@ -137,23 +123,13 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           </div>
           <button class="addbtn pl-add-step-bottom"><i data-lucide="plus" style="width:12px;height:12px"></i> add step</button>
         </div>
-      </div>
 
-      <!-- Mapping -->
-      <div class="pl-block collapsed" data-sec="mapping">
-        <div class="pl-block-header">
-          <div class="pl-block-left">
-            <i data-lucide="columns-2" class="pl-block-icon" style="width:13px;height:13px;color:var(--ok)"></i>
-            <span class="pl-block-title">mapping</span>
-            <span class="pl-block-summary"></span>
-          </div>
-          <div class="pl-block-actions">
+        <!-- Mapping -->
+        <div class="pl-panel" data-sec="mapping" id="pl-panel-mapping-${plId}" role="tabpanel" aria-labelledby="pl-tab-mapping-${plId}">
+          <div class="pl-panel-actions">
             <button class="addbtn pl-add-map" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> column</button>
             <button class="mini ghost pl-auto-map" style="border:1px dashed var(--line);color:var(--muted);padding:3px 9px;" title="Auto-map all available columns" aria-label="Map every available source column"><i data-lucide="sparkles" style="width:11px;height:11px"></i></button>
-            <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
-        </div>
-        <div class="pl-block-content">
           <div class="auto-map-banner-container"></div>
           <div class="mapping-container-layout" style="display: flex; gap: 20px; align-items: stretch; min-height: 200px;">
             <!-- Left Side: Available Fields Pool -->
@@ -175,28 +151,18 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
               <div class="pl-mapping" style="flex: 1; min-height: 100px;"></div>
               <div class="section-empty-hint" data-empty="mapping" hidden>
                 <span class="hint-icon">🧭</span>
-                <p>No output columns yet — add one below, or click a field in the pool on the left.<br>With no mapping at all, every upstream column is written as-is.</p>
+                <p>No output columns yet — add one below, click a field in the pool on the left, or hit <strong>✨ auto-map</strong> above to map every available column at once.<br>With no mapping at all, every upstream column is written as-is.</p>
               </div>
               <button class="addbtn pl-add-map-bottom"><i data-lucide="plus" style="width:12px;height:12px"></i> column</button>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Output layers -->
-      <div class="pl-block collapsed" data-sec="output">
-        <div class="pl-block-header">
-          <div class="pl-block-left">
-            <i data-lucide="package" class="pl-block-icon" style="width:13px;height:13px;color:var(--ok)"></i>
-            <span class="pl-block-title">output layers</span>
-            <span class="pl-block-summary"></span>
-          </div>
-          <div class="pl-block-actions">
+        <!-- Output layers -->
+        <div class="pl-panel" data-sec="output" id="pl-panel-output-${plId}" role="tabpanel" aria-labelledby="pl-tab-output-${plId}">
+          <div class="pl-panel-actions">
             <button class="addbtn pl-add-layer" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add layer</button>
-            <i data-lucide="chevron-down" class="pl-chevron"></i>
           </div>
-        </div>
-        <div class="pl-block-content">
           <div class="pl-output-layers"></div>
           <p class="hint" style="margin-top:6px">Each layer writes the same upstream chain, optionally narrowed by its own filter — e.g. one layer for matched rows, another for unmatched.</p>
         </div>
@@ -211,32 +177,39 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   }
   ;(card as any)._scopedSync = scopedSync
 
-  // Sections are independently collapsible. Expanding one used to force the other five
-  // shut, which — combined with the per-card accordion inside each section — meant you
-  // could never see a source and the step consuming it at the same time.
-  const expandBlock = (secName: string) => {
-    card.querySelector<HTMLElement>(`.pl-block[data-sec="${secName}"]`)?.classList.remove('collapsed')
-    persistBlockState()
+  // Sections are an exclusive tab bar — one visible at a time. (An earlier version kept them
+  // as independently-collapsible blocks specifically so you could see e.g. a source and the
+  // step consuming it simultaneously; switched to tabs on request, trading that away for a
+  // shorter card per section.)
+  const activateSection = (secName: string) => {
+    card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn').forEach(btn => {
+      const active = btn.dataset['sec'] === secName
+      btn.classList.toggle('active', active)
+      btn.setAttribute('aria-selected', String(active))
+      btn.tabIndex = active ? 0 : -1
+    })
+    card.querySelectorAll<HTMLElement>('.pl-panel').forEach(p => {
+      p.classList.toggle('active', p.dataset['sec'] === secName)
+    })
+    persistActiveSection(secName)
   }
+  ;(card as any)._activateSection = activateSection
 
-  // Which sections are open is a working-layout preference, not config — remember it so it
+  // Which section is showing is a working-layout preference, not config — remember it so it
   // survives a reload and an undo (which rebuilds this DOM wholesale).
   const blockStateKey = () => `ducksoup.blocks.${qs<HTMLInputElement>('#cfg_name')?.value.trim() || 'default'}`
 
-  const persistBlockState = () => {
-    const open = [...card.querySelectorAll<HTMLElement>('.pl-block')]
-      .filter(b => !b.classList.contains('collapsed'))
-      .map(b => b.getAttribute('data-sec'))
-    try { localStorage.setItem(blockStateKey(), JSON.stringify(open)) } catch { /* private mode */ }
+  const persistActiveSection = (sec: string) => {
+    try { localStorage.setItem(blockStateKey(), sec) } catch { /* private mode */ }
   }
 
-  const restoreBlockState = () => {
-    let open: string[] = []
-    try { open = JSON.parse(localStorage.getItem(blockStateKey()) ?? '[]') } catch { return }
-    if (!Array.isArray(open) || open.length === 0) return
-    card.querySelectorAll<HTMLElement>('.pl-block').forEach(b => {
-      b.classList.toggle('collapsed', !open.includes(b.getAttribute('data-sec') ?? ''))
-    })
+  const KNOWN_SECTIONS = ['sources', 'derived_sources', 'steps', 'mapping', 'output']
+  const restoreActiveSection = (): string => {
+    // Older builds stored this key as a JSON array of open sections, not a single id — fall
+    // back to the default rather than "activating" that raw string and matching no tab.
+    let stored: string | null = null
+    try { stored = localStorage.getItem(blockStateKey()) } catch { /* private mode */ }
+    return stored && KNOWN_SECTIONS.includes(stored) ? stored : 'sources'
   }
 
   const sourcesEl = card.querySelector<HTMLElement>('.pl-sources')!
@@ -299,12 +272,12 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     const layerNames = layerCards.map(c => c.querySelector<HTMLInputElement>('[data-k="layer"]')?.value.trim()).filter(Boolean)
 
     const setSummary = (sec: string, text: string) => {
-      const el = card.querySelector<HTMLElement>(`.pl-block[data-sec="${sec}"] .pl-block-summary`)
+      const el = card.querySelector<HTMLElement>(`.pl-tab-btn[data-sec="${sec}"] .pl-tab-summary`)
       if (el) el.textContent = text
     }
-    setSummary('sources', srcCount ? `${srcCount} source${srcCount !== 1 ? 's' : ''}` : '')
+    const srcSummary = srcCount ? `${srcCount} source${srcCount !== 1 ? 's' : ''}` : ''
+    setSummary('sources', baseVal ? `${srcSummary} · base: ${baseVal}` : srcSummary)
     setSummary('derived_sources', derivedCount ? `${derivedCount} derived` : '')
-    setSummary('base', baseVal || '')
     setSummary('steps', stepCount ? `${stepCount} step${stepCount !== 1 ? 's' : ''}` : 'none')
     setSummary('mapping', mapCount ? `${mapCount} column${mapCount !== 1 ? 's' : ''}` : '')
     setSummary('output', layerNames.length ? layerNames.join(', ') : '')
@@ -322,14 +295,19 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   }
   const fullSync = () => { scopedSync(); updateSummaries() }
 
-  card.querySelectorAll<HTMLElement>('.pl-block').forEach(block => {
-    wireCollapse(block, {
-      headerSel: '.pl-block-header',
-      chevronSel: '.pl-chevron',
-      bodySel: '.pl-block-content',
-    })
-    block.querySelector('.pl-block-header')!.addEventListener('click', persistBlockState)
-    block.querySelector('.pl-chevron')?.closest('button')?.addEventListener('click', persistBlockState)
+  card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => activateSection(btn.dataset['sec'] ?? 'sources'))
+  })
+  // Roving tabindex: arrow keys move focus between tabs, matching the sidebar's own tab strip.
+  card.querySelector<HTMLElement>('.pl-tabs')!.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    const tabs = [...card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn')]
+    const i = tabs.indexOf(document.activeElement as HTMLButtonElement)
+    if (i < 0) return
+    e.preventDefault()
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]
+    next.focus()
+    activateSection(next.dataset['sec'] ?? 'sources')
   })
 
   // Wire base source preview button
@@ -343,12 +321,24 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     }))
   })
 
+  // A source card can't reach the pipeline-level `.pl-base` field directly (it's rendered
+  // generically, with no pipeline scope) — it dispatches a bubbling event and this listens.
+  sourcesEl.addEventListener('set-base', e => {
+    const id = (e as CustomEvent<{ id: string }>).detail.id
+    const baseEl = card.querySelector<HTMLInputElement>('.pl-base')!
+    if (baseEl.value === id) return
+    mutate('set base source')
+    baseEl.value = id
+    scopedSync()
+    updateSummaries()
+  })
+
   // ---- add buttons ----
   card.querySelector('.pl-add-source')!.addEventListener('click', e => {
     e.stopPropagation()
     mutate('add source')
     // expand sources section if collapsed
-    expandBlock('sources')
+    activateSection('sources')
     const newCard = sourceCard({}, fullSync)
     newCard.classList.remove('collapsed')
     sourcesEl.appendChild(newCard)
@@ -359,7 +349,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   card.querySelector('.pl-add-derived')!.addEventListener('click', e => {
     e.stopPropagation()
     mutate('add derived source')
-    expandBlock('derived_sources')
+    activateSection('derived_sources')
     const newCard = derivedSourceCard({}, fullSync, collectAllSourceIdsScoped(card))
     newCard.classList.remove('collapsed')
     derivedEl.appendChild(newCard)
@@ -374,7 +364,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
       const fmt = btn.dataset['fmt'] as Source['format']
       const uri = btn.dataset['uri'] || ''
       mutate('add source')
-      expandBlock('sources')
+      activateSection('sources')
       const newCard = sourceCard({ format: fmt, uri }, fullSync)
       newCard.classList.remove('collapsed')
       sourcesEl.appendChild(newCard)
@@ -424,7 +414,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
           const newSrc = { id, format: fmt as any, uri: res.path }
 
           mutate('add uploaded source')
-          card.querySelector('.pl-block[data-sec="sources"]')?.classList.remove('collapsed')
+          activateSection('sources')
           const newCard = sourceCard(newSrc, fullSync)
           newCard.classList.remove('collapsed')
           sourcesEl.appendChild(newCard)
@@ -479,7 +469,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     e.stopPropagation()
     openStepGalleryModal(k => {
       mutate('add step')
-      expandBlock('steps')
+      activateSection('steps')
       const newCard = stepCard(k, {}, fullSync, collectAllSourceIdsScoped(card))
       newCard.classList.remove('collapsed')
       stepsEl.appendChild(newCard)
@@ -523,7 +513,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   card.querySelector('.pl-add-map')!.addEventListener('click', e => {
     e.stopPropagation()
     mutate('add mapping column')
-    expandBlock('mapping')
+    activateSection('mapping')
     const newRow = mapRow({}, scopedSync, plId)
     mappingEl.appendChild(newRow)
     refreshIcons()
@@ -534,19 +524,43 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   })
   card.querySelector('.pl-auto-map')!.addEventListener('click', e => {
     e.stopPropagation()
-    expandBlock('mapping')
+    activateSection('mapping')
     autoMapAll()
   })
 
   card.querySelector('.pl-add-layer')!.addEventListener('click', e => {
     e.stopPropagation()
     mutate('add output layer')
-    expandBlock('output')
+    activateSection('output')
     const newCard = outputLayerCard({}, fullSync)
     newCard.classList.remove('collapsed')
     layersEl.appendChild(newCard)
     refreshIcons()
     fullSync()
+  })
+
+  // ---- step drag-reorder ----
+  let stepDragSnapshotTaken = false
+  stepsEl.addEventListener('dragover', e => {
+    e.preventDefault()
+    const dragging = stepsEl.querySelector<HTMLElement>('.card.dragging')
+    if (!dragging) return
+    if (!stepDragSnapshotTaken) { mutate('reorder step'); stepDragSnapshotTaken = true }
+
+    const after = getDragAfterElement(stepsEl, e.clientY, '.card')
+    stepsEl.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+    if (after) after.classList.add('drop-target-above')
+    else stepsEl.lastElementChild?.classList.add('drop-target-below')
+
+    if (after === null) stepsEl.appendChild(dragging)
+    else if (after !== dragging.nextElementSibling) stepsEl.insertBefore(dragging, after)
+  })
+  stepsEl.addEventListener('drop', () => {
+    stepDragSnapshotTaken = false
+    stepsEl.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+    syncFn()
   })
 
   // ---- mapping drag-reorder ----
@@ -600,11 +614,8 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   // ---- input changes ----
   card.querySelector<HTMLInputElement>('.pl-name')!.addEventListener('input', syncFn)
   card.querySelector<HTMLInputElement>('.pl-working-crs')!.addEventListener('input', syncFn)
+  attachCrsFormatCheck(card.querySelector<HTMLInputElement>('.pl-working-crs')!)
   wireCombos(card)
-  card.querySelector<HTMLInputElement>('.pl-base')!.addEventListener('change', () => { scopedSync(); updateSummaries() })
-  card.querySelector<HTMLInputElement>('.pl-base')!.addEventListener('input', () => { scopedSync(); updateSummaries() })
-
-
 
   // ---- hydrate (always stays collapsed — summaries show content at a glance) ----
   ;(pdef.sources || []).forEach(s => sourcesEl.appendChild(sourceCard(s, fullSync)))
@@ -614,8 +625,6 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   ;(pdef.layers && pdef.layers.length ? pdef.layers : [{ layer: '', crs: 'EPSG:25833' }]).forEach(ol => layersEl.appendChild(outputLayerCard(ol, fullSync)))
 
   refreshBaseOptionsScoped(card)
-  const baseEl = card.querySelector<HTMLInputElement>('.pl-base')!
-  if (pdef.base) { ensureComboOption(baseEl, pdef.base); baseEl.value = pdef.base }
 
   // The header add buttons stay — they're reachable while the section is collapsed, and they
   // keep the six section headers uniform. But a new row appends to the bottom of a list that
@@ -631,7 +640,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     ;(card.querySelector('.pl-add-map') as HTMLButtonElement | null)?.click()
   })
 
-  restoreBlockState()
+  activateSection(restoreActiveSection())
   updateSummaries()
   // createIcons is called by the caller after the card is in the DOM
   return card

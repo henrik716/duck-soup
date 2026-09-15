@@ -25,7 +25,7 @@ import {
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange } from './map'
 import { updateLineageDiagram } from './lineage'
-import { qs, mkEl, esc } from './dom'
+import { qs, mkEl, esc, wireCollapse } from './dom'
 import { META } from './state'
 import { pipelineCard } from './cards/pipeline-card'
 import { buildMetadataSection } from './metadata'
@@ -33,8 +33,9 @@ import { collectConfig, hydrate } from './config-io'
 import { showToast } from './toast'
 import { closeFileExplorer, openFileExplorer } from './file-explorer'
 import { updateTable, showTableError } from './table'
-import { setPreviewBusy, resetPreviewBusy } from './busy'
+import { setPreviewBusy, resetPreviewBusy, setRunBusy } from './busy'
 import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from './history'
+import { openPasteYamlModal } from './paste-yaml'
 import type { Config, PreviewRow } from './types'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
@@ -104,16 +105,23 @@ function confirmDiscard(action: string): boolean {
 }
 
 // ---- preview highlighting ----
+function findBaseSourceCard(plCard: HTMLElement): HTMLElement | null {
+  const baseId = plCard.querySelector<HTMLInputElement>('.pl-base')?.value
+  if (!baseId) return null
+  return Array.from(plCard.querySelectorAll<HTMLElement>('.pl-sources > .card'))
+    .find(c => c.querySelector<HTMLInputElement>('[data-k="id"]')?.value.trim() === baseId) ?? null
+}
+
 function highlightPreviewingStep(): void {
   clearStepHighlights()
   if (activePreview.type !== 'step' || activePreview.stepIdx === undefined) return
 
-  const plCards = Array.from(document.querySelectorAll('.pipeline-card'))
+  const plCards = Array.from(document.querySelectorAll<HTMLElement>('.pipeline-card'))
   const plCard = plCards[activePreview.pipelineIdx ?? 0]
   if (!plCard) return
 
   const target = activePreview.stepIdx === 0
-    ? plCard.querySelector<HTMLElement>('.pl-block[data-sec="base"]')
+    ? findBaseSourceCard(plCard)
     : Array.from(plCard.querySelectorAll<HTMLElement>('.pl-steps > .card'))[activePreview.stepIdx - 1]
   target?.classList.add('is-previewing')
 }
@@ -166,7 +174,15 @@ function updatePreviewBanner(): void {
     if (sel) sel.value = ''
     setActivePreview({ type: 'output', pipelineIdx: activePreview.pipelineIdx })
   })
-  createIcons({ icons: appIcons })
+  // Neither element above carries a data-lucide icon, so there's nothing here for
+  // createIcons() to do — and calling it anyway had a real cost: this function runs from a
+  // document-wide 'focusin' listener (tracking which pipeline card is active), and
+  // createIcons() replaces every [data-lucide] icon in the whole document, including
+  // whichever icon button the user's mousedown just focused. Replacing that button's icon
+  // mid-click meant mousedown and mouseup landed on two different DOM nodes, which made the
+  // browser drop the resulting 'click' event entirely — the reported "have to click a
+  // pipeline's chevron twice" bug (first click focused it and silently ate the click; only
+  // the second click, with focus already settled, actually toggled it).
 }
 
 /** The one way to change what's being previewed. */
@@ -284,8 +300,8 @@ const SECTION_FOR_FIELD: Record<string, string> = {
   steps: 'steps',
   mapping: 'mapping',
   layers: 'output',
-  base: 'base',
-  working_crs: 'base',
+  base: 'sources',
+  working_crs: 'sources',
 }
 
 const CARDS_SELECTOR: Record<string, string> = {
@@ -314,8 +330,8 @@ function gotoProblem(path: string): void {
   const sec = SECTION_FOR_FIELD[parts[2] ?? '']
   if (!sec) { flash(plCard); return }
 
-  const block = plCard.querySelector<HTMLElement>(`.pl-block[data-sec="${sec}"]`)
-  block?.classList.remove('collapsed')
+  ;(plCard as HTMLElement & { _activateSection?: (sec: string) => void })._activateSection?.(sec)
+  const block = plCard.querySelector<HTMLElement>(`.pl-panel[data-sec="${sec}"]`)
 
   const idx = Number(parts[3])
   const selector = CARDS_SELECTOR[sec]
@@ -485,6 +501,7 @@ async function run(): Promise<void> {
   // A run you can't see is a run you can't debug. Previously a failure only toasted
   // "check logs" without ever showing them.
   switchTab('log-tab')
+  setRunBusy(true)
 
   const runBtn = qs<HTMLButtonElement>('#runBtn')!
   const originalHtml = runBtn.innerHTML
@@ -499,7 +516,7 @@ async function run(): Promise<void> {
   renderBtn()
   const ticker = window.setInterval(renderBtn, 1000)
 
-  const add = (t: string, cls = '') => {
+  const add = (t: string, cls = '', id = '') => {
     let html = t
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -517,7 +534,7 @@ async function run(): Promise<void> {
     // Highlight output path writing
     html = html.replace(/(writing \S+|→ wrote \S+)/g, '<span class="log-keyword-path">$1</span>')
 
-    const d = mkEl('div', { className: `log-line ${cls}` })
+    const d = mkEl('div', { className: `log-line ${cls}`, id })
     d.innerHTML = html
     log.appendChild(d)
     log.scrollTop = log.scrollHeight
@@ -531,9 +548,14 @@ async function run(): Promise<void> {
   }
   const stamp = new Date().toLocaleTimeString()
   add(`[${stamp}] starting ${cfg.name} (${cfg.pipelines.length} pipeline${cfg.pipelines.length !== 1 ? 's' : ''}) …`)
+  // /api/run is still one synchronous request — nothing streams in until it's all done — so
+  // without this the log tab looks inert for however long the run takes. Removed the moment
+  // real output (or an error) arrives.
+  add('running…', 'log-pulse', 'log-pulse-line')
 
   try {
     const d = await runConfig(cfg)
+    document.getElementById('log-pulse-line')?.remove()
     ;(d.log || []).forEach(l => add(l))
     const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
     if (d.ok) {
@@ -551,9 +573,11 @@ async function run(): Promise<void> {
     setStatus('bad', 'run failed', String(e))
     showToast('Network error during run', 'bad')
   } finally {
+    document.getElementById('log-pulse-line')?.remove()
     clearInterval(ticker)
     runBtn.disabled = false
     runBtn.innerHTML = originalHtml
+    setRunBusy(false)
     createIcons({ icons: appIcons })
   }
 }
@@ -606,6 +630,68 @@ function newConfig(): void {
   markSaved()
 }
 
+// Imported YAML isn't tied to a saved file (same as "new") — it replaces whatever's open
+// rather than merging into it, so it goes through the same reset sequence as newConfig/load.
+function importConfig(cfg: Config): void {
+  activePreview = { type: 'output' }
+  clearStepHighlights()
+  resetPreviewBusy()
+  clearHistory()
+  hydrate(cfg, sync)
+  updatePreviewBanner()
+  loadedConfigName = ''
+  const loadSel = qs<HTMLSelectElement>('#loadSelect')
+  if (loadSel) loadSel.value = ''
+  const saveNameEl = qs<HTMLInputElement>('#saveName')
+  if (saveNameEl) saveNameEl.value = cfg.name || ''
+  markSaved()
+  showToast('Pipeline imported from pasted YAML', 'ok')
+}
+
+const LINEAGE_COLLAPSED_KEY = 'ducksoup.lineageCollapsed'
+
+// The lineage diagram is a single global panel (not per-config, unlike the pl-block sections'
+// own collapse-state persistence), so a plain global flag is enough. Persisting via a
+// MutationObserver on the class attribute — rather than a click listener alongside
+// wireCollapse's own — means it stays correct regardless of whether the toggle came from
+// clicking the header or the chevron button (which stops the click from bubbling to the header).
+function wireLineageCollapse(): void {
+  const container = document.getElementById('lineage-diagram-container')
+  if (!container) return
+
+  let collapsed = false
+  try { collapsed = localStorage.getItem(LINEAGE_COLLAPSED_KEY) === '1' } catch { /* private mode */ }
+  container.classList.toggle('collapsed', collapsed)
+
+  wireCollapse(container, { headerSel: '.lineage-header', chevronSel: '.card-chevron', bodySel: '#lineage-diagram' })
+
+  new MutationObserver(() => {
+    try { localStorage.setItem(LINEAGE_COLLAPSED_KEY, container.classList.contains('collapsed') ? '1' : '0') } catch { /* private mode */ }
+  }).observe(container, { attributes: true, attributeFilter: ['class'] })
+}
+
+// Global shortcuts for the three header actions reached for most often. Same
+// textarea/contentEditable guard as wireHistoryShortcuts (history.ts) — a real text editor
+// (the expression drawer) or any free-text field mid-edit keeps its native/own key handling.
+function wireGlobalShortcuts(): void {
+  document.addEventListener('keydown', e => {
+    const t = e.target as HTMLElement | null
+    if (t && (t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+    if (!(e.ctrlKey || e.metaKey)) return
+
+    if (e.key.toLowerCase() === 's' && !e.shiftKey) {
+      e.preventDefault()
+      save()
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      run()
+    } else if (e.shiftKey && e.key.toLowerCase() === 'v') {
+      e.preventDefault()
+      validate()
+    }
+  })
+}
+
 // ---- init ----
 async function init(): Promise<void> {
   setStatus('busy', 'loading…')
@@ -616,6 +702,8 @@ async function init(): Promise<void> {
   initMap()
   initHistory(sync)
   wireHistoryShortcuts()
+  wireGlobalShortcuts()
+  wireLineageCollapse()
 
   // Track which pipeline card the user is actually working in, so the output preview
   // follows edits to pipeline 2+ instead of always showing pipeline 1's output. Left alone
@@ -749,6 +837,11 @@ async function init(): Promise<void> {
     if (!confirmDiscard('Start a new config')) return
     if (loadSel) loadSel.value = ''
     newConfig()
+  })
+
+  qs('#pasteYamlBtn')?.addEventListener('click', () => {
+    if (!confirmDiscard('Import a pipeline')) return
+    openPasteYamlModal(importConfig)
   })
 
   window.addEventListener('beforeunload', e => {

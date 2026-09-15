@@ -13,6 +13,11 @@ const DIM_DELAY_MS = 150
 
 let depth = 0
 let dimTimer = 0
+// Separate from `depth` on purpose: a run and a preview can overlap (a debounced preview
+// firing while a run is in flight, or vice versa), and resetPreviewBusy()'s unconditional
+// zeroing of `depth` on config load/new/import must not also hide a still-running run's
+// indicator — nor should a run finishing hide a preview that's still loading.
+let runActive = false
 
 function bar(): HTMLElement | null {
   return qs<HTMLElement>('#preview-progress')
@@ -29,7 +34,7 @@ export function setPreviewBusy(busy: boolean): void {
   depth = Math.max(0, depth + (busy ? 1 : -1))
   const active = depth > 0
 
-  bar()?.classList.toggle('active', active)
+  bar()?.classList.toggle('active', active || runActive)
 
   clearTimeout(dimTimer)
   if (active) {
@@ -43,6 +48,13 @@ export function setPreviewBusy(busy: boolean): void {
 export function resetPreviewBusy(): void {
   depth = 0
   clearTimeout(dimTimer)
-  bar()?.classList.remove('active')
+  bar()?.classList.toggle('active', runActive)
   applyDim(false)
+}
+
+/** A run's own busy state — shares the same progress bar as preview loading, but tracked
+ *  independently so the two can't clobber each other's indicator when they overlap. */
+export function setRunBusy(busy: boolean): void {
+  runActive = busy
+  bar()?.classList.toggle('active', depth > 0 || runActive)
 }

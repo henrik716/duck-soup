@@ -129,6 +129,27 @@ def inspect_source(req: InspectRequest) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+class ParseYamlRequest(BaseModel):
+    yaml: str
+
+
+@app.post("/api/parse_yaml")
+def parse_yaml(req: ParseYamlRequest) -> dict:
+    """Paste-to-import: same parse/validate path `/api/pipelines/{name}` GET already
+    uses for a file on disk, just against pasted text instead of a saved YAML file."""
+    try:
+        raw = yaml.safe_load(req.yaml)
+    except yaml.YAMLError as e:
+        return {"ok": False, "error": f"invalid YAML: {e}"}
+    if not isinstance(raw, dict):
+        return {"ok": False, "error": "YAML must decode to a mapping (a pipeline config)"}
+    try:
+        cfg = load_config_dict(raw)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "config": cfg.model_dump(by_alias=True, exclude_none=True)}
+
+
 class ValidateRequest(BaseModel):
     config: dict
 

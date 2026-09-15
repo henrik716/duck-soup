@@ -77,6 +77,41 @@ def test_validate_rejects_config_with_unknown_base(client):
     assert "not among sources" in body["error"]
 
 
+def test_parse_yaml_accepts_valid_pipeline_yaml(client):
+    text = (PIPELINES_DIR / "test.yaml").read_text(encoding="utf-8")
+    r = client.post("/api/parse_yaml", json={"yaml": text})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["config"]["pipelines"][0]["base"] == "places"
+
+
+def test_parse_yaml_rejects_malformed_yaml(client):
+    r = client.post("/api/parse_yaml", json={"yaml": "sources: [this is not: valid: yaml"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "invalid YAML" in body["error"]
+
+
+def test_parse_yaml_rejects_non_mapping_yaml(client):
+    r = client.post("/api/parse_yaml", json={"yaml": "- just\n- a\n- list\n"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "mapping" in body["error"]
+
+
+def test_parse_yaml_rejects_semantically_invalid_config(client):
+    cfg = _test_config_dict()
+    cfg["pipelines"][0]["base"] = "does_not_exist"
+    r = client.post("/api/parse_yaml", json={"yaml": yaml.dump(cfg)})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "not among sources" in body["error"]
+
+
 def test_preview_returns_rows_for_valid_config(client):
     r = client.post("/api/preview", json={"config": _test_config_dict(), "pipeline_idx": 0, "limit": 10})
     assert r.status_code == 200

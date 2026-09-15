@@ -155,11 +155,13 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
       btn.onclick = e => {
         e.preventDefault()
         const colName = row.querySelector<HTMLInputElement>('[data-to]')!.value.trim() || 'unnamed_column'
+        const card = row.closest('.pipeline-card')
+        const available = card ? [...collectAvailableColumnsScoped(card)] : []
         openCodelistDrawer(colName, currentCodelist, updatedCodelist => {
           currentCodelist = updatedCodelist
           paintBtn()
           syncFn()
-        })
+        }, available)
       }
       valWrap.appendChild(btn)
       refreshIcons()

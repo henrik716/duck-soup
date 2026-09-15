@@ -3,7 +3,7 @@ import { mkEl, appIcons, esc } from './dom'
 import { highlightExpr } from './expr-highlight'
 import { EXPR_SNIPPET_CATEGORIES, EXPR_FUNCTION_NAMES } from './expr-snippets'
 import { ExprAutocomplete, type AutocompleteItem } from './expr-autocomplete'
-import { previewConfig } from './api'
+import { attachLiveValidation, renderValidationMsg, type LiveValidationHandle } from './validation'
 import type { AvailableColumnDetail } from './schema'
 import type { Config } from './types'
 
@@ -27,7 +27,7 @@ const BRACKET_PAIRS: Record<string, string> = { '(': ')', '[': ']', "'": "'" }
 // the right row's context without needing to be re-wired per open.
 let currentAutocompleteItems: AutocompleteItem[] = []
 let currentBuildPreviewConfig: ((draftExpr: string) => Config | null) | undefined
-let runValidationNow: (() => void) | undefined
+let validation: LiveValidationHandle | undefined
 let closeAutocomplete: (() => void) | undefined
 
 const PREVIEW_COL = '_expr_preview'
@@ -42,7 +42,7 @@ export function openExprDrawer(
   if (!drawer) {
     drawer = mkEl('div', { id: 'exprDrawer', className: 'drawer-overlay' })
     drawer.innerHTML = `
-      <div class="drawer-card" style="width: 100vw; max-width: 100vw; height: 100vh;">
+      <div class="drawer-card fullscreen">
         <div class="drawer-header">
           <h3><i data-lucide="edit-3" style="width:16px;height:16px;color:var(--accent)"></i> Expression Builder</h3>
           <button class="mini ghost" id="closeExprDrawerBtn" aria-label="Close drawer"><i data-lucide="x" style="width:16px;height:16px"></i></button>
@@ -92,57 +92,22 @@ export function openExprDrawer(
 
     // Debounced "does this parse against real sample data" check, reusing /api/preview
     // with a synthetic single-column mapping rather than a dedicated backend endpoint.
-    let validateTimer: ReturnType<typeof setTimeout> | undefined
-    let validateSeq = 0
-    const runValidation = async () => {
-      const draft = ta.value.trim()
-      if (!draft || !currentBuildPreviewConfig) {
-        msgEl.textContent = ''
-        msgEl.className = 'expr-validation-msg'
-        return
-      }
-      const cfg = currentBuildPreviewConfig(draft)
-      if (!cfg) {
-        msgEl.textContent = ''
-        msgEl.className = 'expr-validation-msg'
-        return
-      }
-      const seq = ++validateSeq
-      msgEl.textContent = 'Checking…'
-      msgEl.className = 'expr-validation-msg pending'
-      try {
-        const d = await previewConfig(cfg, 0, 5)
-        if (seq !== validateSeq) return // a newer edit superseded this check
-        if (d.ok && d.rows) {
-          const samples = d.rows.map(r => JSON.stringify((r as Record<string, unknown>)[PREVIEW_COL]))
-          msgEl.textContent = samples.length ? `✓ valid — sample: ${samples.join(', ')}` : '✓ valid'
-          msgEl.className = 'expr-validation-msg ok'
-        } else {
-          msgEl.textContent = d.error || 'invalid expression'
-          msgEl.className = 'expr-validation-msg bad'
-        }
-      } catch {
-        if (seq !== validateSeq) return
-        msgEl.textContent = 'validation request failed'
-        msgEl.className = 'expr-validation-msg bad'
-      }
-    }
-    const scheduleValidation = () => {
-      if (validateTimer) clearTimeout(validateTimer)
-      validateTimer = setTimeout(runValidation, 500)
-    }
-    runValidationNow = () => { if (validateTimer) clearTimeout(validateTimer); runValidation() }
+    // currentBuildPreviewConfig is reassigned per openExprDrawer() call (this drawer is a
+    // singleton reused across rows), so it's read through a wrapper rather than captured.
+    validation = attachLiveValidation({
+      getValue: () => ta.value,
+      buildPreviewConfig: draft => currentBuildPreviewConfig ? currentBuildPreviewConfig(draft) : null,
+      render: (state, message) => renderValidationMsg(msgEl, state, message),
+      previewCol: PREVIEW_COL,
+    })
 
     ta.addEventListener('input', () => {
       syncHighlight()
       autocomplete.update()
-      scheduleValidation()
+      validation!.schedule()
     })
     ta.addEventListener('scroll', () => { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft })
-    ta.addEventListener('blur', () => {
-      if (validateTimer) clearTimeout(validateTimer)
-      runValidation()
-    })
+    ta.addEventListener('blur', () => { validation!.runNow() })
 
     ta.addEventListener('keydown', e => {
       if (autocomplete.handleKeydown(e)) return
@@ -239,5 +204,5 @@ export function openExprDrawer(
   drawer.classList.add('show')
   createIcons({ icons: appIcons })
   setTimeout(() => ta.focus(), 0)
-  if (initVal.trim() && buildPreviewConfig) runValidationNow?.()
+  if (initVal.trim() && buildPreviewConfig) validation?.runNow()
 }

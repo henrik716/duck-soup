@@ -329,13 +329,13 @@ export function refreshBaseOptionsScoped(scope: Element): void {
     const isBase = !!id && id === baseId
     c.style.borderColor = isBase ? 'rgba(139,108,255,0.6)' : 'var(--line)'
     c.style.boxShadow = isBase ? '0 0 15px rgba(139,108,255,0.15)' : 'none'
-    let badge = c.querySelector<HTMLElement>('.base-badge')
-    if (isBase && !badge) {
-      badge = mkEl('span', { className: 'base-badge', textContent: 'BASE' })
-      badge.style.cssText = 'font-size:10px;color:var(--accent);border:1px solid rgba(139,108,255,0.3);background:var(--accent-soft);padding:1px 5px;border-radius:4px;margin-left:8px;font-family:var(--mono);font-weight:600;'
-      c.querySelector('.item-head')!.insertBefore(badge, c.querySelector('.spacer'))
-    } else if (!isBase && badge) {
-      badge.remove()
+    const starBtn = c.querySelector<HTMLButtonElement>('[data-set-base]')
+    if (starBtn) {
+      starBtn.classList.toggle('is-base', isBase)
+      starBtn.setAttribute('aria-pressed', String(isBase))
+      const label = isBase ? 'Base source' : 'Set as base source'
+      starBtn.title = label
+      starBtn.setAttribute('aria-label', label)
     }
   })
 }

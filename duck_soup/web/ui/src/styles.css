@@ -15,6 +15,10 @@
   --accent-soft-border: rgba(139, 108, 255, 0.25);
   --spatial: #00ebd7;
   --spatial-soft: rgba(0, 235, 215, 0.12);
+  /* The map's drawn preview features specifically — deliberately its own token, not --spatial,
+     which several non-map elements (step icons, lineage nodes, badges, syntax highlighting)
+     also key off and shouldn't change color along with the map. */
+  --map-feature: #c85fe0;
   --warn: #ff6b6b;
   --warn-soft: rgba(255, 107, 107, 0.12);
   --ok: #63ffad;
@@ -52,7 +56,10 @@ header.top {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: sticky; top: 0; z-index: 100;
-  height: 64px;
+  /* Not a fixed height: the action bar wraps onto extra lines well before any of the
+     narrow-viewport breakpoints below kick in, and a fixed height + sticky positioning meant
+     the overflowing second row sat on top of the page content instead of pushing it down. */
+  min-height: 64px;
   box-sizing: border-box;
 }
 .brand { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .5px; }
@@ -60,10 +67,14 @@ header.top {
 .tagline { color: var(--muted); font-size: 13px; font-family: var(--mono); display: flex; align-items: center; }
 .top-right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
 
-.wrap { display: grid; grid-template-columns: minmax(0, 58%) minmax(0, 42%); gap: 0; align-items: stretch; flex: 1; height: calc(100vh - 64px); overflow: hidden; }
+/* flex: 1 (not a height: calc(100vh - Npx) tied to the header's assumed height) so this
+   always fills whatever space the header didn't use, however tall it actually rendered —
+   min-height: 0 keeps the flex child shrinkable so the panels inside can still scroll
+   internally instead of the whole page growing past the viewport. */
+.wrap { display: grid; grid-template-columns: minmax(0, 58%) minmax(0, 42%); gap: 0; align-items: stretch; flex: 1; min-height: 0; overflow: hidden; }
 @media (max-width: 980px) {
   body { overflow: auto; height: auto; }
-  .wrap { grid-template-columns: 1fr; height: auto; overflow: visible; }
+  .wrap { grid-template-columns: 1fr; overflow: visible; }
   .builder { height: auto; overflow: visible; }
   aside.side { grid-template-rows: 400px 400px !important; height: 800px !important; position: relative; border-left: none !important; border-top: 1px solid var(--line); }
 }
@@ -277,6 +288,10 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
   padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid rgba(139, 108, 255, 0.15);
 }
 .item-head .spacer { flex: 1; }
+.set-base-btn.is-base {
+  color: var(--accent); border-color: rgba(139, 108, 255, 0.35); background: var(--accent-soft);
+}
+.set-base-btn.is-base svg { fill: var(--accent); }
 
 .map-grid { display: grid; grid-template-columns: 18px 1.1fr 95px 1.4fr 85px 32px; gap: 8px; align-items: center; }
 .map-grid .head { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
@@ -284,7 +299,7 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
 .drag-handle { display: flex; align-items: center; color: var(--muted); opacity: 0.4; cursor: grab; transition: opacity 0.15s; }
 .drag-handle:hover { opacity: 1; }
 .drag-handle:active { cursor: grabbing; }
-.map-item.dragging { opacity: 0.35; outline: 1px dashed var(--line-glow); border-radius: var(--radius-sm); }
+.map-item.dragging, .card.dragging { opacity: 0.35; outline: 1px dashed var(--line-glow); border-radius: var(--radius-sm); }
 .kv { display: flex; gap: 6px; align-items: center; }
 .kv input, .kv select, .kv .combo { flex: 1; }
 .kv .arrow { color: var(--muted); font-family: var(--mono); display: flex; align-items: center; }
@@ -308,10 +323,12 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
 .map-item { border-left: 2px solid transparent; padding-left: 0; margin-bottom: 4px; transition: var(--transition); }
 .map-item.has-detail { border-left-color: var(--line-glow); padding-left: 8px; }
 .codelist-panel { background: var(--panel2); border: 1px solid var(--line); border-radius: var(--radius-md);
-  padding: 12px; margin: 8px 0 12px; }
+  padding: 12px; margin: 8px 0 12px; width: 100%; max-width: 760px; }
 .codelist-panel .row { margin-bottom: 8px; }
 
-.case-row { display: grid; grid-template-columns: 110px 1fr 1fr 26px 26px 32px; gap: 6px; align-items: center; margin-bottom: 8px; }
+/* Wider than the default 520px drawer's 110px/1fr/1fr columns used to allow — the pattern and
+   value fields were the ones actually getting cramped. */
+.case-row { display: grid; grid-template-columns: 130px 1.5fr 1.5fr 26px 26px 32px; gap: 8px; align-items: center; margin-bottom: 8px; }
 .case-row [data-cup], .case-row [data-cdown] { padding: 4px; display: inline-flex; align-items: center; justify-content: center; }
 .case-row select { padding: 8px 10px; }
 
@@ -334,6 +351,11 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
   border: 1px solid rgba(139, 108, 255, 0.2);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.04);
 }
+/* !important: #lineage-diagram carries its own inline display:flex (its normal, non-collapsed
+   layout), which otherwise wins over any external stylesheet rule regardless of selector
+   specificity. */
+#lineage-diagram-container.collapsed #lineage-diagram { display: none !important; }
+.lineage-header { cursor: pointer; user-select: none; }
 .lineage-node {
   display: inline-flex;
   align-items: center;
@@ -648,46 +670,32 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .pl-remove { opacity: 0.3; transition: opacity 0.15s; }
 .pipeline-card-header:hover .pl-remove { opacity: 1; }
 
-/* ---- sub-sections inside pipeline card ---- */
-.pl-block {
-  border-bottom: 1px solid var(--line);
+/* ---- sub-sections inside pipeline card, as a tab bar ---- */
+.pl-tabs {
+  display: flex; flex-wrap: nowrap; overflow-x: auto;
+  border-bottom: 1px solid var(--line); background: rgba(13, 10, 31, 0.3);
 }
-.pl-block:last-child { border-bottom: none; }
-
-.pl-block-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; cursor: pointer; user-select: none;
-  transition: background 0.15s;
+.pl-tab-btn {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: 9px 14px; cursor: pointer; user-select: none; transition: var(--transition);
+  font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap;
 }
-.pl-block-header:hover { background: rgba(255, 255, 255, 0.02); }
-
-.pl-block-left {
-  display: flex; align-items: center; gap: 8px;
-}
-.pl-block-icon { flex-shrink: 0; }
-.pl-block-title {
-  font-family: var(--mono); font-size: 11px; font-weight: 500;
-  color: var(--ink); text-transform: uppercase; letter-spacing: 0.08em;
-}
-.pl-block-summary {
+.pl-tab-btn:hover { color: var(--ink); background: rgba(255, 255, 255, 0.02); }
+.pl-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(139, 108, 255, 0.05); }
+.pl-tab-icon { flex-shrink: 0; }
+.pl-tab-summary {
   font-family: var(--mono); font-size: 10px; color: var(--muted);
   background: rgba(255,255,255,0.05); border: 1px solid var(--line);
   border-radius: 10px; padding: 1px 7px; white-space: nowrap;
-  display: none;
 }
-.pl-block.collapsed .pl-block-summary { display: inline-block; }
+.pl-tab-btn.active .pl-tab-summary { border-color: rgba(139, 108, 255, 0.25); }
 
-.pl-block-actions {
-  display: flex; align-items: center; gap: 6px;
-}
-.pl-chevron {
-  width: 14px; height: 14px; color: var(--muted);
-  transition: transform 0.2s; flex-shrink: 0;
-}
-.pl-block.collapsed .pl-chevron { transform: rotate(-90deg); }
-.pl-block.collapsed .pl-block-content { display: none; }
-
-.pl-block-content { padding: 12px 16px 16px; }
+.pl-panels { position: relative; }
+.pl-panel { display: none; padding: 12px 16px 16px; }
+.pl-panel.active { display: block; }
+.pl-panel-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
 
 /* ---- Drag & Drop Zone for Sources ---- */
 .sources-dropzone {
@@ -840,6 +848,9 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
   transform: translateX(100%); transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .drawer-overlay.show .drawer-card { transform: translateX(0); }
+/* Opt-in for drawers editing something substantial enough to want the whole viewport (the
+   expression builder, the codelist rule editor) rather than the default narrow slide-out. */
+.drawer-card.fullscreen { width: 100vw; max-width: 100vw; height: 100vh; }
 .drawer-header { padding: 18px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .drawer-header h3 { margin: 0; font-family: var(--display); font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .drawer-body { padding: 20px 24px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
@@ -876,6 +887,9 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .expr-validation-msg.ok { color: var(--ok); }
 .expr-validation-msg.bad { color: var(--warn); }
 .expr-validation-msg.pending { color: var(--muted); }
+/* Cheap client-side checks (unknown column, malformed CRS) — flags the input itself rather
+   than a separate message, since there's nothing more to say than "hover for why". */
+input.field-invalid, .combo input.field-invalid { border-color: var(--warn) !important; }
 .expr-autocomplete-popup {
   display: none; position: fixed; z-index: 1100; min-width: 180px; max-width: 320px;
   background: var(--panel-solid); border: 1px solid var(--line-glow); border-radius: var(--radius-sm);
@@ -1090,7 +1104,7 @@ th.sortable.sorted-desc .sort-indicator {
 /* The tagline is the first thing to go when the action bar needs the room. */
 @media (max-width: 1180px) { .tagline { display: none; } }
 @media (max-width: 900px) {
-  header.top { height: auto; flex-wrap: wrap; row-gap: 10px; }
+  header.top { row-gap: 10px; }
   .top-right { width: 100%; margin-left: 0; }
 }
 
@@ -1100,6 +1114,11 @@ button.status:hover { filter: brightness(1.25); }
 .status.busy { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft-border); }
 .status.busy::before { animation: statusPulse 1.1s ease-in-out infinite; }
 @keyframes statusPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* Run Logs tab's "something's happening" line while /api/run's one synchronous request is
+   still in flight — reuses the status pill's own pulse animation rather than a new one. */
+.log-line.log-pulse { color: var(--accent); animation: statusPulse 1.1s ease-in-out infinite; }
+.log-line.log-pulse::before { content: "● "; }
 
 /* Unsaved-changes marker on the save button. */
 #saveBtn { position: relative; }
@@ -1222,8 +1241,8 @@ button.status:hover { filter: brightness(1.25); }
 .chevron-btn:hover { color: var(--ink); background: rgba(255, 255, 255, 0.05); }
 
 /* ---- drag reorder affordance ---- */
-.map-item.drop-target-above { box-shadow: 0 -2px 0 0 var(--accent); }
-.map-item.drop-target-below { box-shadow: 0 2px 0 0 var(--accent); }
+.map-item.drop-target-above, .card.drop-target-above { box-shadow: 0 -2px 0 0 var(--accent); }
+.map-item.drop-target-below, .card.drop-target-below { box-shadow: 0 2px 0 0 var(--accent); }
 
 /* ---- focus visibility ----
    Previously only inputs had a focus ring; every button, tab, option, gallery item and

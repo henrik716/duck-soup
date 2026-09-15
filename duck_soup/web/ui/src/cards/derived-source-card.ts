@@ -2,7 +2,9 @@ import { createIcons, GitBranch, Trash2, ChevronDown } from 'lucide'
 import { mkEl, wireCollapse } from '../dom'
 import { wireCombos, comboField } from '../combo'
 import { mutate } from '../history'
-import type { DerivedSource } from '../types'
+import { collectPipelineDef } from './pipeline-card'
+import { attachLiveValidation, renderValidationMsg } from '../validation'
+import type { Config, DerivedSource } from '../types'
 
 // ---- derived source card ----
 // A filtered/buffered view of an existing source, registered under its own
@@ -25,6 +27,7 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
       </div>
       <label class="field" style="margin-top:8px">where (optional SQL filter)
         <input data-k="where" placeholder="facility_type = 'ISPS'">
+        <div class="expr-validation-msg" data-where-validation></div>
       </label>
       <div class="row" style="margin-top:8px">
         <label class="field grow">buffer distance (optional, working CRS units)<input data-k="buffer" type="number" step="any" placeholder="none"></label>
@@ -59,6 +62,40 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
 
   const idInp = c.querySelector<HTMLInputElement>('[data-k="id"]')!
   const fromInp = c.querySelector<HTMLInputElement>('[data-k="from"]')!
+
+  // `where` runs over the `from` source's own columns, not the pipeline's base — a minimal
+  // single-source throwaway config rather than the pipeline's real (and possibly unrelated)
+  // base chain. Only resolves when `from` points at a real source; a `from` chained through
+  // another derived source or snapshot is skipped rather than resolving the whole chain.
+  const whereInp = c.querySelector<HTMLInputElement>('[data-k="where"]')!
+  const whereMsg = c.querySelector<HTMLElement>('[data-where-validation]')!
+  const whereValidation = attachLiveValidation({
+    getValue: () => whereInp.value,
+    buildPreviewConfig: (draft): Config | null => {
+      const card = c.closest('.pipeline-card') as HTMLElement | null
+      const fromId = fromInp.value.trim()
+      if (!card || !fromId) return null
+      const pdef = collectPipelineDef(card)
+      const fromSource = pdef.sources.find(s => s.id === fromId)
+      if (!fromSource) return null
+      return {
+        name: 'derived_where_preview',
+        output: 'preview.gpkg',
+        pipelines: [{
+          name: 'p',
+          sources: [fromSource],
+          base: fromSource.id,
+          steps: [],
+          mapping: [{ to: '_check', expr: `CASE WHEN (${draft}) THEN 1 ELSE 0 END` }],
+          layers: [{ layer: 'preview', crs: 'EPSG:25833' }],
+        }],
+      }
+    },
+    render: (state, message) => renderValidationMsg(whereMsg, state, message),
+  })
+  whereInp.addEventListener('input', () => whereValidation.schedule())
+  whereInp.addEventListener('blur', () => whereValidation.runNow())
+
   const titleEl = c.querySelector<HTMLElement>('.item-title')!
   const updateTitle = () => {
     const id = idInp.value.trim()

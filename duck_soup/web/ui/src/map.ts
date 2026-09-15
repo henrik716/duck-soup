@@ -10,13 +10,16 @@ let geojsonGroup: L.FeatureGroup | null = null
 // `var(--token)` does not resolve — features silently fall back to the SVG default (black)
 // on a dark basemap. So resolve the tokens to literal colors instead. Done lazily and
 // memoised: at module-eval time the stylesheet may not be applied yet.
-let _colors: { spatial: string; accent: string; ink: string } | null = null
-function colors(): { spatial: string; accent: string; ink: string } {
+let _colors: { feature: string; accent: string; ink: string } | null = null
+function colors(): { feature: string; accent: string; ink: string } {
   if (_colors) return _colors
   const cs = getComputedStyle(document.documentElement)
   const read = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback
   _colors = {
-    spatial: read('--spatial', '#00ebd7'),
+    // Its own dedicated token, not --spatial — that variable is shared with several other UI
+    // elements (step icons, lineage nodes, badges, syntax highlighting) that shouldn't recolor
+    // along with the map's drawn features.
+    feature: read('--map-feature', '#ff5ec4'),
     accent: read('--accent', '#9d85ff'),
     ink: read('--ink', '#f0edff'),
   }
@@ -77,9 +80,14 @@ export function getMapBounds(): [number, number, number, number] | null {
   return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
 }
 
-/** Fires `cb` after the user finishes panning/zooming (Leaflet's debounced 'moveend'). */
+/** Fires `cb` after the user finishes a real pan or zoom gesture. Deliberately not 'moveend':
+ *  that also fires for Leaflet's programmatic autoPan (e.g. nudging the view to reveal a
+ *  popup that doesn't fully fit), which previously meant clicking a feature could itself
+ *  trigger a bbox-mode re-preview a moment later — clearing and redrawing every layer,
+ *  including the one whose popup had just opened, so it closed itself. */
 export function onViewChange(cb: () => void): void {
-  map?.on('moveend', cb)
+  map?.on('dragend', cb)
+  map?.on('zoomend', cb)
 }
 
 function setEmptyOverlay(visible: boolean): void {
@@ -106,11 +114,11 @@ export function updateMap(rows: PreviewRow[], activeStep?: any, opts?: { fitBoun
       try {
         const geom = JSON.parse(row.__geojson as string)
         const layer = L.geoJSON(geom, {
-          style: { color: c.spatial, weight: 3, opacity: 0.8 },
+          style: { color: c.feature, weight: 3, opacity: 0.8 },
           pointToLayer: (_point, latlng) =>
             L.circleMarker(latlng, {
               radius: 6,
-              fillColor: c.spatial,
+              fillColor: c.feature,
               color: c.ink,
               weight: 1,
               opacity: 1,

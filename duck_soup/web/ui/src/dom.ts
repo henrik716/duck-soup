@@ -115,7 +115,7 @@ export function wireCollapse(
 
   header.addEventListener('click', e => {
     // Don't swallow clicks meant for the controls living inside the header.
-    if ((e.target as Element).closest('button,input,select,textarea,a')) return
+    if ((e.target as Element).closest('button,input,select,textarea,a,.drag-handle')) return
     toggleCollapsed()
   })
   toggle?.addEventListener('click', e => { e.stopPropagation(); toggleCollapsed() })
@@ -124,8 +124,8 @@ export function wireCollapse(
   ;(card as HTMLElement & { _syncCollapse?: () => void })._syncCollapse = sync
 }
 
-export function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | null {
-  const items = [...container.querySelectorAll<HTMLElement>('.map-item:not(.dragging)')]
+export function getDragAfterElement(container: HTMLElement, y: number, itemSelector = '.map-item'): HTMLElement | null {
+  const items = [...container.querySelectorAll<HTMLElement>(`${itemSelector}:not(.dragging)`)]
   return items.reduce<{ offset: number; el: HTMLElement | null }>(
     (closest, el) => {
       const box = el.getBoundingClientRect()

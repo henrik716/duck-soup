@@ -1,4 +1,4 @@
-import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle } from 'lucide'
+import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle, Star } from 'lucide'
 import { inspectSource, inspectFile } from '../api'
 import { mkEl, val, wireCollapse } from '../dom'
 import { mutate } from '../history'
@@ -6,6 +6,7 @@ import { META, SOURCE_SCHEMAS, EXT_FORMAT } from '../state'
 import { comboField, wireCombos, setComboOptions, ensureComboOption } from '../combo'
 import { updateSourceBadge } from '../schema'
 import { openFileExplorer } from '../file-explorer'
+import { attachCrsFormatCheck } from '../validation'
 import type { Source } from '../types'
 
 // ---- source card ----
@@ -17,6 +18,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="schema-badge" style="margin-left:8px;"></span>
       <span class="spacer"></span>
+      <button type="button" class="mini ghost set-base-btn" data-set-base title="Set as base source" aria-label="Set as base source" aria-pressed="false"><i data-lucide="star" style="width:12px;height:12px"></i></button>
       <button class="mini danger ghost" data-del aria-label="Remove this source"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
       <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;margin-left:8px;"></i>
     </div>
@@ -49,6 +51,13 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
     </div>`
 
   wireCombos(c)
+
+  c.querySelector('[data-set-base]')!.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const id = val(c, 'id')
+    if (!id) return
+    c.dispatchEvent(new CustomEvent('set-base', { bubbles: true, detail: { id } }))
+  })
 
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
     e.stopPropagation()
@@ -223,6 +232,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
     i.addEventListener('change', doInspectFile)
   })
   c.querySelector('[data-k="id"]')!.addEventListener('input', doInspect)
+  attachCrsFormatCheck(c.querySelector<HTMLInputElement>('[data-k="crs"]')!)
 
   if (s.uri) {
     setTimeout(async () => {
@@ -255,6 +265,6 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
-  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle } })
+  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle, Star } })
   return c
 }

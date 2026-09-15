@@ -1,7 +1,9 @@
 import { createIcons, Package, Trash2, ChevronDown } from 'lucide'
 import { mkEl, wireCollapse } from '../dom'
 import { mutate } from '../history'
-import type { OutputLayer } from '../types'
+import { collectPipelineDef } from './pipeline-card'
+import { attachCrsFormatCheck, attachLiveValidation, renderValidationMsg } from '../validation'
+import type { Config, OutputLayer } from '../types'
 
 // ---- output layer card ----
 // One entry in a pipeline's `layers:` list — the same upstream chain, written
@@ -23,7 +25,9 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
         <label class="field grow">CRS<input data-k="crs" placeholder="EPSG:25833"></label>
       </div>
       <label class="field" style="margin-top:8px">filter (optional SQL; rows where this is false are excluded from this layer)
-        <input data-k="filter" placeholder="county IS NOT NULL"></label>
+        <input data-k="filter" placeholder="county IS NOT NULL">
+        <div class="expr-validation-msg" data-filter-validation></div>
+      </label>
     </div>`
 
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
@@ -45,8 +49,37 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
     i.addEventListener('change', syncFn)
   })
 
+  // The engine applies this filter to the step chain's own columns, before this layer's
+  // mapping runs (see engine.py's _final_select: `layer.filter` narrows `prev`, the
+  // pre-mapping view) — so the throwaway check config uses the pipeline's real steps as-is,
+  // not its mapping.
+  const filterInp = c.querySelector<HTMLInputElement>('[data-k="filter"]')!
+  const filterMsg = c.querySelector<HTMLElement>('[data-filter-validation]')!
+  const filterValidation = attachLiveValidation({
+    getValue: () => filterInp.value,
+    buildPreviewConfig: (draft): Config | null => {
+      const card = c.closest('.pipeline-card') as HTMLElement | null
+      if (!card) return null
+      const pdef = collectPipelineDef(card)
+      if (!pdef.base) return null
+      return {
+        name: 'layer_filter_preview',
+        output: 'preview.gpkg',
+        pipelines: [{
+          ...pdef,
+          mapping: [{ to: '_check', expr: `CASE WHEN (${draft}) THEN 1 ELSE 0 END` }],
+          layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
+        }],
+      }
+    },
+    render: (state, message) => renderValidationMsg(filterMsg, state, message),
+  })
+  filterInp.addEventListener('input', () => filterValidation.schedule())
+  filterInp.addEventListener('blur', () => filterValidation.runNow())
+
   const layerInp = c.querySelector<HTMLInputElement>('[data-k="layer"]')!
   const crsInp = c.querySelector<HTMLInputElement>('[data-k="crs"]')!
+  attachCrsFormatCheck(crsInp)
   const titleEl = c.querySelector<HTMLElement>('.item-title')!
   const updateTitle = () => {
     const name = layerInp.value.trim()

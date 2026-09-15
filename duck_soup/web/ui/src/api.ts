@@ -4,6 +4,7 @@ import type {
   InspectFileResponse,
   InspectResponse,
   MetaResponse,
+  ParseYamlResponse,
   PipelineLoadResponse,
   PreviewResponse,
   RunResponse,
@@ -37,6 +38,15 @@ export async function savePipeline(name: string, config: Config): Promise<Respon
     headers: JSON_HEADERS,
     body: JSON.stringify({ config }),
   })
+}
+
+export async function parseYaml(yamlText: string): Promise<ParseYamlResponse> {
+  const r = await fetch('/api/parse_yaml', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ yaml: yamlText }),
+  })
+  return r.json()
 }
 
 export async function validateConfig(config: Config): Promise<ValidateResponse> {

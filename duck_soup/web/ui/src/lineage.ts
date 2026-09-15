@@ -654,17 +654,17 @@ function setupGlobalHoverEffects(outer: HTMLElement): void {
 
       let targetElement: HTMLElement | null = null
 
-      // Expand the target section without shutting the others — blocks are independently
-      // collapsible now, and navigating here shouldn't undo the user's chosen layout.
-      const expandBlockOnly = (block: HTMLElement) => {
-        block.classList.remove('collapsed')
+      // Sections are an exclusive tab bar — switch to the target section's tab (via the hook
+      // pipeline-card.ts exposes) rather than un-collapsing a block, which no longer exists.
+      const activateSection = (sec: string) => {
+        ;(targetCard as HTMLElement & { _activateSection?: (sec: string) => void })._activateSection?.(sec)
       }
 
       if (node.classList.contains('lineage-src-node')) {
         const srcId = node.getAttribute('data-source-id')
-        const block = targetCard.querySelector<HTMLElement>('.pl-block[data-sec="sources"]')
+        activateSection('sources')
+        const block = targetCard.querySelector<HTMLElement>('.pl-panel[data-sec="sources"]')
         if (block) {
-          expandBlockOnly(block)
           const srcCards = Array.from(block.querySelectorAll<HTMLElement>('.pl-sources > .card'))
           for (const card of srcCards) {
             const idInput = card.querySelector<HTMLInputElement>('[data-k="id"]')
@@ -678,26 +678,25 @@ function setupGlobalHoverEffects(outer: HTMLElement): void {
           }
         }
       } else if (node.classList.contains('lineage-base-node')) {
-        const block = targetCard.querySelector<HTMLElement>('.pl-block[data-sec="base"]')
+        activateSection('sources')
+        const block = targetCard.querySelector<HTMLElement>('.pl-panel[data-sec="sources"]')
         if (block) {
-          expandBlockOnly(block)
-          targetElement = block
+          const baseId = block.querySelector<HTMLInputElement>('.pl-base')?.value
+          const srcCards = Array.from(block.querySelectorAll<HTMLElement>('.pl-sources > .card'))
+          targetElement = (baseId && srcCards.find(card => card.querySelector<HTMLInputElement>('[data-k="id"]')?.value.trim() === baseId)) || block
         }
       } else if (node.classList.contains('lineage-step-node')) {
         const stepIdxStr = node.dataset.stepIndex
-        const block = targetCard.querySelector<HTMLElement>('.pl-block[data-sec="steps"]')
+        activateSection('steps')
+        const block = targetCard.querySelector<HTMLElement>('.pl-panel[data-sec="steps"]')
         if (block && stepIdxStr !== undefined) {
-          expandBlockOnly(block)
           const stepIdx = parseInt(stepIdxStr, 10)
           const stepCards = Array.from(block.querySelectorAll<HTMLElement>('.pl-steps > .card'))
           targetElement = stepCards[stepIdx] || block
         }
       } else if (node.classList.contains('lineage-layer-node')) {
-        const block = targetCard.querySelector<HTMLElement>('.pl-block[data-sec="output"]')
-        if (block) {
-          expandBlockOnly(block)
-          targetElement = block
-        }
+        activateSection('output')
+        targetElement = targetCard.querySelector<HTMLElement>('.pl-panel[data-sec="output"]')
       }
 
       if (targetElement) {

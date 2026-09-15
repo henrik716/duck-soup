@@ -1,13 +1,16 @@
 import {
   createIcons, MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser,
   Layers, GitMerge, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
-  Filter as FilterIcon, Combine, Camera,
+  Filter as FilterIcon, Combine, Camera, GripVertical,
 } from 'lucide'
 import { mkEl, esc, wireCollapse } from '../dom'
 import { META } from '../state'
 import { comboField, wireCombos } from '../combo'
 import { mutate } from '../history'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, Dissolve } from '../types'
+import { collectPipelineDef } from './pipeline-card'
+import { resolveSchemaScoped, collectAvailableColumnsScoped } from '../schema'
+import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, Dissolve, Config } from '../types'
 
 // ---- step card ----
 const STEP_ICONS: Record<string, string> = {
@@ -76,7 +79,8 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
       ${hasPredicate ? `<label class="field grow">predicate${comboField('data-k="predicate"', predicateVal, META.predicates)}</label>` : ''}
       ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', matchVal, ['first', 'all'], 'first')}</label>` : ''}
       ${kind === 'attribute_join' ? `
-        <label class="field grow">left (upstream column or SQL literal)${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}</label>
+        <label class="field grow">left (upstream column or SQL literal)${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}
+          <div class="expr-validation-msg" data-left-validation></div></label>
         <label class="field grow">right (column on the join source)${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}</label>` : ''}
     </div>`
     if (kind === 'merge') {
@@ -85,7 +89,8 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   }
   if (kind === 'filter') {
     bodyHtml += `<div class="row" style="margin-top:8px">
-      <label class="field grow">where (SQL boolean expression)<input data-k="where" placeholder="matched_name IS NOT NULL"></label>
+      <label class="field grow">where (SQL boolean expression)<input data-k="where" placeholder="matched_name IS NOT NULL">
+        <div class="expr-validation-msg" data-where-validation></div></label>
     </div>`
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['filter']}</p>`
   }
@@ -141,6 +146,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
 
   c.innerHTML = `
     <div class="item-head" style="cursor:pointer; user-select:none;">
+      <span class="drag-handle" tabindex="0" role="button" aria-label="Reorder this step — drag, or hold Alt and press the up or down arrow"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
       <span class="tag" title="${STEP_HINTS[kind]}"><i data-lucide="${STEP_ICONS[kind]}" style="width:12px;height:12px;margin-right:2px"></i>${STEP_LABELS[kind]}</span>
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="spacer"></span>
@@ -156,6 +162,70 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     </div>`
 
   wireCombos(c)
+
+  // Builds a throwaway single-column preview Config scoped to the steps that run *before*
+  // this card, mirroring the pipeline state this field's SQL actually executes against —
+  // reused by both attribute_join.left and filter.where below. Only called from user
+  // interaction (not on hydrate), so loading a saved pipeline with many such steps doesn't
+  // fire a burst of /api/preview requests for fields nobody is currently looking at.
+  const buildStepFieldPreviewConfig = (fieldExpr: string, wrapBoolean: boolean): Config | null => {
+    const card = c.closest('.pipeline-card') as HTMLElement | null
+    if (!card) return null
+    const pdef = collectPipelineDef(card)
+    if (!pdef.base) return null
+    const idx = c.parentElement ? Array.from(c.parentElement.children).indexOf(c) : -1
+    const priorSteps = idx >= 0 ? pdef.steps.slice(0, idx) : pdef.steps
+    const expr = wrapBoolean ? `CASE WHEN (${fieldExpr}) THEN 1 ELSE 0 END` : fieldExpr
+    return {
+      name: 'field_preview',
+      output: 'preview.gpkg',
+      pipelines: [{
+        ...pdef,
+        steps: priorSteps,
+        mapping: [{ to: '_check', expr }],
+        layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
+      }],
+    }
+  }
+
+  if (kind === 'attribute_join') {
+    const leftInp = c.querySelector<HTMLInputElement>('[data-k="left"]')!
+    const leftMsg = c.querySelector<HTMLElement>('[data-left-validation]')!
+    const leftValidation = attachLiveValidation({
+      getValue: () => leftInp.value,
+      buildPreviewConfig: draft => buildStepFieldPreviewConfig(draft, false),
+      render: (state, message) => renderValidationMsg(leftMsg, state, message),
+    })
+    leftInp.addEventListener('input', () => leftValidation.schedule())
+    leftInp.addEventListener('blur', () => leftValidation.runNow())
+
+    // `right` is a bare column name on the join source, not arbitrary SQL — checking it
+    // against the join source's real schema is instant and needs no network round trip.
+    // (Deliberately not read back from the combo's own option list: that list re-injects
+    // whatever the field currently holds via ensureComboOption, on every keystroke elsewhere
+    // in the card, so a bogus value would get "validated" by its own presence a moment later.)
+    const rightInp = c.querySelector<HTMLInputElement>('[data-k="right"]')!
+    const rightCheck = attachMembershipCheck(rightInp, () => {
+      const card = c.closest('.pipeline-card')
+      const srcId = c.querySelector<HTMLInputElement>('[data-k="source"]')?.value.trim() || ''
+      return card && srcId ? resolveSchemaScoped(card, srcId).map(col => col.name) : []
+    })
+    const srcInp = c.querySelector<HTMLInputElement>('[data-k="source"]')
+    srcInp?.addEventListener('change', () => rightCheck.check())
+    srcInp?.addEventListener('input', () => rightCheck.check())
+  }
+
+  if (kind === 'filter') {
+    const whereInp = c.querySelector<HTMLInputElement>('[data-k="where"]')!
+    const whereMsg = c.querySelector<HTMLElement>('[data-where-validation]')!
+    const whereValidation = attachLiveValidation({
+      getValue: () => whereInp.value,
+      buildPreviewConfig: draft => buildStepFieldPreviewConfig(draft, true),
+      render: (state, message) => renderValidationMsg(whereMsg, state, message),
+    })
+    whereInp.addEventListener('input', () => whereValidation.schedule())
+    whereInp.addEventListener('blur', () => whereValidation.runNow())
+  }
 
   c.querySelector('.data-step-preview')!.addEventListener('click', (e) => {
     e.stopPropagation()
@@ -207,6 +277,20 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
 
   upBtn.addEventListener('click', e => { e.stopPropagation(); move(-1) })
   downBtn.addEventListener('click', e => { e.stopPropagation(); move(1) })
+
+  // Drag-to-reorder, matching the pattern mapping rows already use — the actual reorder
+  // mutation snapshot and insertion-point logic live in the .pl-steps container's
+  // dragover/drop handlers (pipeline-card.ts), same as .pl-mapping's. Alt+Arrow above stays
+  // as the keyboard-only equivalent.
+  const dragHandle = c.querySelector<HTMLElement>('.drag-handle')!
+  dragHandle.addEventListener('mousedown', () => { c.draggable = true })
+  c.addEventListener('dragstart', () => { c.classList.add('dragging') })
+  c.addEventListener('dragend', () => {
+    c.draggable = false
+    c.classList.remove('dragging')
+    c.parentElement?.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+  })
 
   // Keyboard equivalent for the drag/click-only reorder.
   c.addEventListener('keydown', e => {
@@ -288,6 +372,10 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     inp.addEventListener('input', syncFn)
     inp.addEventListener('change', syncFn)
     wireCombos(r)
+    attachMembershipCheck(inp, () => {
+      const card = c.closest('.pipeline-card')
+      return card ? collectAvailableColumnsScoped(card) : []
+    })
     byColsBox.appendChild(r)
     createIcons({ icons: { X, ChevronDown } })
   }
@@ -349,6 +437,6 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
   c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
 
-  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera } })
+  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical } })
   return c
 }

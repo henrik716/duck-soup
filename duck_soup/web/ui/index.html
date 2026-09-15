@@ -38,6 +38,7 @@
       <select id="loadSelect" style="width:auto; min-width:150px; padding:6px 32px 6px 12px"><option value="">— config —</option></select>
     </label>
     <button class="ghost mini" id="newBtn"><i data-lucide="plus-circle" style="width:13px;height:13px"></i> new</button>
+    <button class="ghost mini" id="pasteYamlBtn" title="Paste a pipeline YAML to import it"><i data-lucide="file-code" style="width:13px;height:13px"></i> import</button>
 
     <span class="top-divider" aria-hidden="true"></span>
 
@@ -45,9 +46,9 @@
       <span>save as</span>
       <input id="saveName" placeholder="config name" title="Filename used when saving this config" style="width:120px">
     </label>
-    <button id="validateBtn" class="ghost mini"><i data-lucide="check-square" style="width:13px;height:13px"></i> validate</button>
-    <button id="saveBtn" class="ghost mini"><i data-lucide="save" style="width:13px;height:13px"></i> save</button>
-    <button id="runBtn" class="primary mini"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
+    <button id="validateBtn" class="ghost mini" title="Ctrl+Shift+V"><i data-lucide="check-square" style="width:13px;height:13px"></i> validate</button>
+    <button id="saveBtn" class="ghost mini" title="Ctrl+S"><i data-lucide="save" style="width:13px;height:13px"></i> save</button>
+    <button id="runBtn" class="primary mini" title="Ctrl+Enter"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
     <button type="button" class="status idle" id="status" aria-label="Validation status — open the problems panel">idle</button>
   </div>
 </header>
@@ -57,11 +58,14 @@
 
     <!-- ETL Lineage Diagram -->
     <div id="lineage-diagram-container" class="card" style="margin-bottom:24px;padding:14px 18px;border-color:rgba(139,108,255,0.25);">
-      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+      <div class="lineage-header" style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;display:flex;justify-content:space-between;align-items:center;">
         <span>ETL Pipeline Lineage</span>
-        <span style="color:var(--accent);font-size:10px;">interactive flow</span>
+        <span style="display:flex;align-items:center;gap:10px;">
+          <span style="color:var(--accent);font-size:10px;">interactive flow</span>
+          <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;"></i>
+        </span>
       </div>
-      <div id="lineage-diagram" style="display:flex;flex-direction:column;gap:8px;overflow-x:auto;padding:10px 0;min-height:60px;"></div>
+      <div id="lineage-diagram" style="display:flex;flex-direction:column;gap:8px;overflow-x:auto;padding:10px 0;margin-top:10px;min-height:60px;"></div>
     </div>
 
     <!-- Config header: shared name + output path -->

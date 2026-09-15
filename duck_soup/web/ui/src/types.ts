@@ -243,3 +243,9 @@ export interface PipelineLoadResponse {
   config: Config
   warning?: string | null
 }
+
+export interface ParseYamlResponse {
+  ok: boolean
+  config?: Config
+  error?: string
+}

@@ -3,6 +3,7 @@ import { mkEl, appIcons, esc } from '../dom'
 import { comboField, wireCombos } from '../combo'
 import { openFileExplorer } from '../file-explorer'
 import { openOverlay, closeOverlay } from '../overlay'
+import { attachMembershipCheck } from '../validation'
 import type { CodeCase, CodeList } from '../types'
 
 // ---- codelist helpers ----
@@ -40,7 +41,7 @@ function caseRow(cr: Partial<CodeCase> = {}, syncFn: () => void): HTMLElement {
   return r
 }
 
-function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void): HTMLElement {
+function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, availableColumns: string[] = []): HTMLElement {
   const isFile = !!cl.file
   const panel = mkEl('div', { className: 'codelist-panel' })
   panel.innerHTML = `
@@ -102,6 +103,11 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void): HTMLElem
     openFileExplorer(panel.querySelector<HTMLInputElement>('[data-cl-file]')!))
 
   panel.querySelectorAll('input,[data-cl-ci]').forEach(i => i.addEventListener('input', syncFn))
+
+  // Bare upstream column name — checking it against the known column set is instant and
+  // needs no network round trip (unlike the SQL-expression fields elsewhere).
+  attachMembershipCheck(panel.querySelector<HTMLInputElement>('[data-cl-source]')!, () => availableColumns)
+
   createIcons({ icons: { Plus, Folder } })
   return panel
 }
@@ -131,17 +137,22 @@ function readCodelistPanel(panel: HTMLElement): CodeList {
   return cl
 }
 
-export function openCodelistDrawer(title: string, initCodelist: Partial<CodeList>, onSave: (cl: CodeList) => void): void {
+export function openCodelistDrawer(
+  title: string,
+  initCodelist: Partial<CodeList>,
+  onSave: (cl: CodeList) => void,
+  availableColumns: string[] = [],
+): void {
   let drawer = document.getElementById('codelistDrawer') as HTMLElement | null
   if (!drawer) {
     drawer = mkEl('div', { id: 'codelistDrawer', className: 'drawer-overlay' })
     drawer.innerHTML = `
-      <div class="drawer-card">
+      <div class="drawer-card fullscreen">
         <div class="drawer-header">
           <h3><i data-lucide="sliders" style="width:16px;height:16px;color:var(--accent)"></i> Configure Codelist</h3>
           <button class="mini ghost" id="closeDrawerBtn" aria-label="Close drawer"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
-        <div class="drawer-body" id="drawerBody"></div>
+        <div class="drawer-body" id="drawerBody" style="align-items:center;"></div>
         <div style="padding: 16px 24px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:12px;">
           <button type="button" class="ghost mini" id="cancelDrawerBtn">Cancel</button>
           <button type="button" class="primary mini" id="saveDrawerBtn">Apply Rules</button>
@@ -164,7 +175,7 @@ export function openCodelistDrawer(title: string, initCodelist: Partial<CodeList
   drawer.querySelector('.drawer-header h3')!.innerHTML =
     `<i data-lucide="sliders" style="width:16px;height:16px;color:var(--accent)"></i> Codelist: <span style="color:var(--ink);font-family:var(--mono);font-size:13px">${title}</span>`
 
-  const panel = codelistPanel(initCodelist, () => {})
+  const panel = codelistPanel(initCodelist, () => {}, availableColumns)
   drawerBody.appendChild(panel)
 
   const el = drawer

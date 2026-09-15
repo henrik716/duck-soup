@@ -48,7 +48,16 @@ export function hydrate(cfg: Partial<Config>, syncFn: () => void): void {
 
   const container = document.querySelector<HTMLElement>('#pipelines')!
   container.innerHTML = ''
-  ;(cfg.pipelines || []).forEach(p => container.appendChild(pipelineCard(p, syncFn)))
+  const pipelines = cfg.pipelines || []
+  pipelines.forEach(p => container.appendChild(pipelineCard(p, syncFn)))
+  // Multiple pipelines start minimized so the list is scannable at a glance; a single
+  // pipeline (the common case) stays open since there's nothing else to compare it against.
+  if (pipelines.length > 1) {
+    container.querySelectorAll<HTMLElement>('.pipeline-card').forEach(card => {
+      card.classList.add('collapsed')
+      ;(card as HTMLElement & { _syncCollapse?: () => void })._syncCollapse?.()
+    })
+  }
   createIcons({ icons: appIcons })
 
   syncFn()
