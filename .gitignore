@@ -15,6 +15,11 @@ duck_soup/web/ui/node_modules/
 output/*.gpkg
 !output/.gitkeep
 
+# Personal/local data and pipelines (already-tracked test fixtures are unaffected)
+data/*.gpkg
+data/*.geojson
+pipelines/*.yaml
+
 # Editor/OS
 .vscode/
 .DS_Store
