@@ -68,16 +68,15 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
         <!-- Sources -->
         <div class="pl-panel" data-sec="sources" id="pl-panel-sources-${plId}" role="tabpanel" aria-labelledby="pl-tab-sources-${plId}">
           <div class="pl-panel-actions">
+            <label class="field inline" title="Internal CRS used for every join/step (spatial joins, buffer, clip, etc.) and for area/length calcs — pick a projected (metric) CRS if you use those. Every source is reprojected into this CRS before processing, then reprojected again to the output layer's CRS. Leave blank to use the base source's declared CRS.">
+              <span>working CRS <i data-lucide="info" style="width:10px;height:10px;vertical-align:middle"></i></span>
+              <input class="pl-working-crs" placeholder="auto (base CRS)" value="${esc(pdef.working_crs)}">
+            </label>
+            <span class="spacer"></span>
             <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
             <button class="addbtn pl-add-source" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
           </div>
           <input type="hidden" class="pl-base" value="${esc(pdef.base)}">
-          <label class="field" style="max-width:280px;margin-bottom:10px">
-            working CRS
-            <input class="pl-working-crs" placeholder="defaults to base source's CRS" value="${esc(pdef.working_crs)}">
-          </label>
-          <p class="hint" style="margin-bottom:10px"><i data-lucide="info" style="width:11px;height:11px;margin-right:4px;vertical-align:middle"></i>Internal CRS used for every join/step (spatial joins, buffer, clip, etc.) and for area/length calcs — pick a projected (metric) CRS if you use those. Every source is reprojected into this CRS before processing, then reprojected again to the output layer's CRS. Leave blank to use the base source's declared CRS.</p>
-          <p class="hint" style="margin-bottom:10px">Click the <i data-lucide="star" style="width:11px;height:11px;margin:0 2px;vertical-align:middle"></i> on a source below to make it the base — its features flow through the whole pipeline.</p>
           <div class="sources-dropzone" role="button" tabindex="0" aria-label="Add source files — drag and drop, or activate to browse your computer">
             <i data-lucide="upload-cloud" style="width:24px;height:24px;margin-bottom:4px"></i>
             <span class="title">Drag &amp; drop spatial files here</span>

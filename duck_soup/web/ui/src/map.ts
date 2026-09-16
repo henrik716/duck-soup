@@ -26,6 +26,16 @@ function colors(): { feature: string; accent: string; ink: string } {
   return _colors
 }
 
+// The map container clips anything outside its own bounds (`.leaflet-container` is
+// `overflow: hidden`, needed for tile masking) — so a popup taller than the container fits
+// nowhere no matter how far autoPan pans the map, and its bottom rows become unreachable. Size
+// the popup to what's actually available right now (the map panel is resizable) instead of a
+// fixed guess, leaving room for the toolbar it opens below plus its own tip/margins.
+function popupMaxHeight(): number {
+  const available = (map?.getSize().y ?? 300) - 90
+  return Math.max(120, Math.min(available, 400))
+}
+
 export function initMap(): void {
   try {
     // Esri's free (keyless) "Canvas" basemap — the same ArcGIS Online service already
@@ -155,7 +165,19 @@ export function updateMap(rows: PreviewRow[], activeStep?: any, opts?: { fitBoun
           .map(([k, v]) => `<strong>${esc(k)}:</strong> ${v !== null ? esc(v) : 'NULL'}`)
           .join('<br>')
 
-        if (tooltipContent) layer.bindPopup(tooltipContent)
+        if (tooltipContent) {
+          // The floating #map-toolbar (view/limit/in-view controls) sits absolutely
+          // positioned over the map's top-left corner, outside Leaflet's own layout system —
+          // autoPan only keeps popups clear of the *map container* edges, so without this
+          // padding it happily opens a popup right underneath the toolbar on smaller screens,
+          // burying the first few attribute rows. Reserving that corner tells autoPan to treat
+          // it like reserved chrome, same as it already does for the container edges.
+          layer.bindPopup(tooltipContent, {
+            autoPanPaddingTopLeft: L.point(10, 48),
+            autoPanPaddingBottomRight: L.point(10, 10),
+            maxHeight: popupMaxHeight(),
+          })
+        }
         layer.addTo(geojsonGroup!)
       } catch (e) {
         console.error('Failed to parse geojson', e)

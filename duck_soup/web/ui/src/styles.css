@@ -230,6 +230,8 @@ h2.block-title b { color: var(--ink); font-weight: 700; }
 
 label.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted);
   font-family: var(--mono); letter-spacing: .04em; flex: 1 1 120px; }
+label.field.inline { flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto; }
+label.field.inline input { width: 150px; }
 
 input, select, textarea {
   background: var(--panel2); color: var(--ink); border: 1px solid var(--line);
@@ -696,6 +698,7 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .pl-panel { display: none; padding: 12px 16px 16px; }
 .pl-panel.active { display: block; }
 .pl-panel-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
+.spacer { flex: 1; }
 
 /* ---- Drag & Drop Zone for Sources ---- */
 .sources-dropzone {
@@ -1038,6 +1041,47 @@ th.sortable.sorted-desc .sort-indicator {
 }
 .leaflet-control-layers-list label:hover {
   color: var(--ink);
+}
+
+/* Custom Popup Styling */
+.leaflet-popup-pane {
+  /* #map-toolbar (index.html) floats over the map at z-index:1000, outside Leaflet's pane
+     stack (default popup pane is 700) — without this a popup opened near the top-left corner
+     renders underneath the toolbar instead of on top of it. */
+  z-index: 1001 !important;
+}
+.leaflet-popup-content-wrapper {
+  background: var(--panel-solid) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--ink) !important;
+  font-family: var(--display) !important;
+  box-shadow: var(--shadow) !important;
+}
+.leaflet-popup-content {
+  margin: 12px 16px !important;
+  /* No fixed max-height here — map.ts sets Leaflet's own `maxHeight` popup option per popup,
+     sized to the map container's actual current height (which varies with panel/window size),
+     and toggles this overflow via its `.leaflet-popup-scrolled` class. A hardcoded cap here
+     would either clip content that still had room, or fail to cap it on a short map. */
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.leaflet-popup-content strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+.leaflet-popup-tip {
+  background: var(--panel-solid) !important;
+  box-shadow: none !important;
+}
+.leaflet-popup-close-button {
+  color: var(--muted) !important;
+}
+.leaflet-popup-close-button:hover {
+  color: var(--ink) !important;
 }
 
 /* Custom Zoom Control Styling */

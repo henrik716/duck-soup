@@ -716,6 +716,7 @@ async function init(): Promise<void> {
     if (idx >= 0 && activePreview.pipelineIdx !== idx) {
       activePreview.pipelineIdx = idx
       updatePreviewBanner()
+      runPreview()
     }
   })
 
