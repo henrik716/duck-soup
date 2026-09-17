@@ -34,9 +34,12 @@ from ..engine import run_config, preview_config_pipeline
 from ..sources import read_expr, parquet_geometry_info, attach_postgres, _sql_ident
 from ..derive import DUCKDB_LOCK, register_udfs
 
-ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.cwd()))
+ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
 PIPELINE_DIR = ROOT / "pipelines"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+PIPELINE_DIR.mkdir(parents=True, exist_ok=True)
+print(f"Using {ROOT} for pipelines/data/output (override with DUCK_SOUP_ROOT)")
 
 app = FastAPI(title="Duck Soup editor")
 
