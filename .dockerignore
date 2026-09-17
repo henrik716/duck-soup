@@ -1,0 +1,11 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+tests
+pipelines
+data
+output
+duck_soup/web/ui/node_modules
+duck_soup/web/ui/dist

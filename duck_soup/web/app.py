@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 import tempfile
 import traceback
 from contextlib import redirect_stdout
@@ -33,7 +34,7 @@ from ..engine import run_config, preview_config_pipeline
 from ..sources import read_expr, parquet_geometry_info, attach_postgres, _sql_ident
 from ..derive import DUCKDB_LOCK, register_udfs
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.cwd()))
 PIPELINE_DIR = ROOT / "pipelines"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 

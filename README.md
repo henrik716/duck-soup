@@ -11,6 +11,24 @@ Under the hood, everything runs inside DuckDB using the powerful **spatial** ext
 
 ---
 
+## Run it
+
+No repo clone needed — pick one:
+
+```bash
+# Docker (no Python needed): mounts the current directory as /data,
+# so pipelines/, data/, output/ etc. are read from and written to it
+docker run -p 8000:8000 -v "$PWD":/data ghcr.io/henrik716/duck-soup
+
+# or: pip / pipx (needs Python 3.11+)
+pipx install duck-soup-etl
+duck-soup serve
+```
+
+Then open http://localhost:8000. Internet access is needed on first run so DuckDB
+can download its `spatial` extension. See "Install" below for a from-source setup
+(needed if you want to modify the code or frontend).
+
 ## Key Features
 
 - **YAML-driven pipelines:** Describe inputs, join/geoprocessing steps, schema mapping, and output layers in one neat configuration file.
@@ -80,7 +98,7 @@ build matching the running DuckDB core version — pinning DuckDB is what keeps 
 spatial extension version reproducible. Bump the pin (and this note) together when
 upgrading.
 
-## Install
+## Install (from source)
 
 Create a virtual environment, activate it, and install the package with dependencies:
 

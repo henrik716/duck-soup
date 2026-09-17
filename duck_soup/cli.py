@@ -9,7 +9,7 @@ from .engine import run_config
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="duck_soup", description="Run a Duck Soup pipeline")
+    parser = argparse.ArgumentParser(prog="duck-soup", description="Run a Duck Soup pipeline")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="Run a pipeline YAML")
@@ -18,7 +18,17 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check", help="Validate a pipeline YAML without running")
     check.add_argument("pipeline")
 
+    serve = sub.add_parser("serve", help="Launch the web editor")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+
     args = parser.parse_args(argv)
+
+    if args.cmd == "serve":
+        import uvicorn
+        uvicorn.run("duck_soup.web.app:app", host=args.host, port=args.port)
+        return 0
+
     cfg = load_config(args.pipeline)
 
     if args.cmd == "check":
