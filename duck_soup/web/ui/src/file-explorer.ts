@@ -54,15 +54,20 @@ export async function loadFileExplorerDir(subpath: string): Promise<void> {
     }
 
     data.entries.forEach((entry: { name: string; path: string; is_dir: boolean }) => {
-      const activate = entry.is_dir
+      // A File Geodatabase (.gdb) is itself a directory, but it's a leaf source, not
+      // something to browse into — the only way to pick one at all is to select the
+      // folder itself, same as a regular file.
+      const isGdb = entry.is_dir && entry.name.toLowerCase().endsWith('.gdb')
+      const selectAsSource = () => {
+        if (activeExplorerTarget) {
+          activeExplorerTarget.value = entry.path
+          activeExplorerTarget.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        closeFileExplorer()
+      }
+      const activate = entry.is_dir && !isGdb
         ? () => loadFileExplorerDir(entry.path)
-        : () => {
-            if (activeExplorerTarget) {
-              activeExplorerTarget.value = entry.path
-              activeExplorerTarget.dispatchEvent(new Event('input', { bubbles: true }))
-            }
-            closeFileExplorer()
-          }
+        : selectAsSource
       listEl.appendChild(makeRow(
         `explorer-item ${entry.is_dir ? 'directory' : 'file'}`,
         `<i data-lucide="${entry.is_dir ? 'folder' : 'file'}" style="width:14px;height:14px"></i> <span>${esc(entry.name)}</span>`,

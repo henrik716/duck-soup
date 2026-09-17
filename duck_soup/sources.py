@@ -396,6 +396,14 @@ def _maybe_linearize(
     return uri, layer
 
 
+def _geometry_column_via_describe(con: duckdb.DuckDBPyConnection, base: str) -> str | None:
+    """Find a table expression's GEOMETRY-typed column by DESCRIBEing it, rather than via
+    ST_Read_Meta. Used when ST_Read_Meta can't be trusted to report the field (see callers).
+    """
+    rows = con.execute(f"DESCRIBE SELECT * FROM {base}").fetchall()
+    return next((r[0] for r in rows if str(r[1]).upper().startswith("GEOMETRY")), None)
+
+
 def _read_expr_normalized(
     uri: str,
     layer: str | None,
@@ -418,12 +426,22 @@ def _read_expr_normalized(
     to conjure a geometry field into existence. See `_read_csv_geometry` for the one case
     (csv X_POSSIBLE_NAMES/GEOM_POSSIBLE_NAMES) where the open options themselves are what
     create the geometry field, which needs a different detection path entirely.
+
+    ST_Read_Meta also isn't reliable for every *format* GDAL itself opens fine — confirmed
+    empirically for a File Geodatabase (an Esri "NVE" gdb export): `ST_Read_Meta(path)`
+    returned zero rows outright, even though `ST_Read(path)` opened its layer and read rows
+    without complaint. When that happens, `_layer_geometry_field` comes back empty and this
+    used to silently skip the rename, so engine.py's hard-coded `EXCLUDE (geom)` blew up on
+    the real column name (e.g. Esri's `SHAPE`) with a binder error. Falling back to the same
+    DESCRIBE-based detection `_read_csv_geometry`/`parquet_geometry_info` already use covers
+    this — it's slightly more work than the metadata lookup, but only for the formats where
+    the metadata lookup already came back empty-handed.
     """
     base = _st_read(uri, layer=layer, extra=extra)
     if con is None:
         return base
     gfield = _layer_geometry_field(con, uri, layer)
-    name = gfield["name"] if gfield else None
+    name = gfield["name"] if gfield else _geometry_column_via_describe(con, base)
     if not name or name == "geom":
         return base
     return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
@@ -489,8 +507,7 @@ def _read_csv_geometry(uri: str, con: duckdb.DuckDBPyConnection | None, extra: s
     base = _st_read(uri, extra=extra)
     if con is None:
         return base
-    rows = con.execute(f"DESCRIBE SELECT * FROM {base}").fetchall()
-    name = next((r[0] for r in rows if str(r[1]).upper().startswith("GEOMETRY")), None)
+    name = _geometry_column_via_describe(con, base)
     if not name or name == "geom":
         return base
     return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"

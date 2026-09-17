@@ -15,7 +15,7 @@ import shutil
 
 import duckdb
 import yaml
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, Form, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -284,11 +284,22 @@ def list_files(subpath: str = "") -> dict:
 
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)) -> dict:
+async def upload_file(file: UploadFile = File(...), relpath: str = Form("")) -> dict:
     try:
         data_dir = ROOT / "data"
         data_dir.mkdir(exist_ok=True)
-        target_path = data_dir / file.filename
+        # `relpath` lets a multi-file source (e.g. a File Geodatabase folder, uploaded as
+        # many internal files by the frontend's directory-drop handler) land together under
+        # one subdirectory instead of flat in `data/`. It's client-supplied, so it's resolved
+        # and checked against `data_dir` rather than trusted outright — otherwise a
+        # crafted relpath like "../../../etc/passwd" could write outside the data directory.
+        rel = Path(relpath.strip() or file.filename)
+        if rel.is_absolute() or ".." in rel.parts:
+            return {"ok": False, "error": "invalid relative path"}
+        target_path = (data_dir / rel).resolve()
+        if not target_path.is_relative_to(data_dir.resolve()):
+            return {"ok": False, "error": "invalid relative path"}
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         with target_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         return {"ok": True, "path": str(target_path.relative_to(ROOT)).replace("\\", "/")}

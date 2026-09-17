@@ -257,3 +257,43 @@ def test_files_endpoint_lists_data_directory(client):
     body = r.json()
     names = {e["name"] for e in body["entries"]}
     assert "test.geojson" in names
+
+
+def test_upload_with_relpath_lands_under_subdirectory(client):
+    # A File Geodatabase drop uploads each of its internal files individually, with
+    # `relpath` set so they all land together under one folder instead of flat in data/.
+    target = REPO_ROOT / "data" / "test_gdb_upload"
+    try:
+        r = client.post(
+            "/api/upload",
+            files={"file": ("a00000001.gdbtable", b"fake gdb bytes")},
+            data={"relpath": "test_gdb_upload/a00000001.gdbtable"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["path"] == "data/test_gdb_upload/a00000001.gdbtable"
+        assert (target / "a00000001.gdbtable").read_bytes() == b"fake gdb bytes"
+    finally:
+        if target.exists():
+            for f in target.iterdir():
+                f.unlink()
+            target.rmdir()
+
+
+@pytest.mark.parametrize("bad_relpath", ["../escaped_upload_test.txt", "/etc/escaped_upload_test.txt"])
+def test_upload_rejects_relpath_escaping_data_dir(client, bad_relpath):
+    escapee = REPO_ROOT / "escaped_upload_test.txt"
+    try:
+        r = client.post(
+            "/api/upload",
+            files={"file": ("f.txt", b"nope")},
+            data={"relpath": bad_relpath},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is False
+        assert not escapee.exists()
+    finally:
+        if escapee.exists():
+            escapee.unlink()

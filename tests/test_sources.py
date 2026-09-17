@@ -115,6 +115,30 @@ def test_read_expr_csv_header_row_none_leaves_gdal_auto_detection(spatial_con):
     assert "name" in cols
 
 
+def test_read_expr_falls_back_to_describe_when_st_read_meta_finds_no_geometry_field(spatial_con, tmp_path, monkeypatch):
+    # Regression test: ST_Read_Meta isn't reliable for every format ST_Read itself opens fine
+    # — confirmed empirically against a real File Geodatabase export, where ST_Read_Meta
+    # returned zero rows outright even though ST_Read opened its layer and read rows without
+    # complaint. When that happened, _layer_geometry_field came back empty and the rename used
+    # to be silently skipped, so engine.py's hard-coded `EXCLUDE (geom)` blew up on the real
+    # column name (Esri's `SHAPE`) with a binder error. Reproduced here by forcing
+    # _layer_geometry_field to come back empty (rather than depending on an actual gdb
+    # fixture) against a gpkg whose geometry column is deliberately not named "geom".
+    gpkg_path = tmp_path / "shape_col.gpkg"
+    spatial_con.execute("CREATE TABLE t AS SELECT 1 AS id, ST_Point(10.75, 59.90) AS shape")
+    spatial_con.execute(
+        f"COPY t TO '{gpkg_path}' (FORMAT GDAL, DRIVER 'GPKG', LAYER_CREATION_OPTIONS 'GEOMETRY_NAME=shape')"
+    )
+    monkeypatch.setattr(sources_mod, "_layer_geometry_field", lambda con, uri, layer: None)
+
+    src = Source(id="pts", format="gpkg", uri=str(gpkg_path))
+    read = read_expr(src, tmp_path, con=spatial_con)
+
+    cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
+    assert "geom" in cols
+    assert "shape" not in cols
+
+
 def test_read_expr_parquet_without_connection_returns_bare_read_parquet():
     # Mirrors _read_expr_normalized's con=None short-circuit for GDAL formats: without a
     # connection there's no way to inspect the schema, so no renaming is attempted.

@@ -16,17 +16,17 @@ from pydantic import AfterValidator, BaseModel, Field, model_validator
 # DuckDB's ST_Read (GDAL); arcgis_rest is fetched (paginated) to a temp file first.
 SOURCE_FORMATS = [
     "gpkg",       # GeoPackage
-    "geojson",    # GeoJSON file or URL
-    "gml",        # GML / INSPIRE
-    "fgdb",       # Esri File Geodatabase (.gdb folder)
-    "wfs",        # OGC WFS endpoint
-    "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
     "oapif",      # OGC API - Features endpoint
-    "parquet",    # (Geo)Parquet
+    "geojson",    # GeoJSON file or URL
+    "wfs",        # OGC WFS endpoint
+    "gml",        # GML / INSPIRE
     "flatgeobuf", # FlatGeobuf
-    "shp",        # Shapefile
-    "xlsx",       # Excel sheet (tabular, no geometry)
+    "parquet",    # (Geo)Parquet
     "csv",        # CSV (tabular, no geometry)
+    "xlsx",       # Excel sheet (tabular, no geometry)
+    "fgdb",       # Esri File Geodatabase (.gdb folder)
+    "shp",        # Shapefile
+    "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
 ]
 
 # Formats that carry geometry by default.

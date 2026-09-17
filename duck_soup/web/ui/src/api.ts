@@ -125,9 +125,10 @@ export async function fetchFiles(subpath: string): Promise<FilesResponse> {
   return r.json()
 }
 
-export async function uploadFile(file: File): Promise<{ ok: boolean; path?: string; error?: string }> {
+export async function uploadFile(file: File, relpath?: string): Promise<{ ok: boolean; path?: string; error?: string }> {
   const formData = new FormData()
   formData.append('file', file)
+  if (relpath) formData.append('relpath', relpath)
   const r = await fetch('/api/upload', {
     method: 'POST',
     body: formData,

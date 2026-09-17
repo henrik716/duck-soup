@@ -9,6 +9,32 @@ import { openFileExplorer } from '../file-explorer'
 import { attachCrsFormatCheck } from '../validation'
 import type { Source } from '../types'
 
+// A csv whose geometry lives in a WKT/WKB column or a lon/lat pair usually names those
+// columns something predictable — check for the common spellings so the geometry picker
+// can suggest (not require) the right choice instead of making the user hunt through the
+// column list themselves. Only ever used as a first-guess default, never enforced.
+// Friendly display labels for the format combo — options otherwise fall back to their raw
+// code (e.g. "gpkg"), which is clear enough on its own; "oapif" alone isn't.
+const FORMAT_LABELS: Record<string, string> = { oapif: '<span title="OGC API - Features">OAPIF</span>' }
+
+const CSV_WKT_COLUMN_NAMES = ['geom', 'geometry', 'wkt', 'the_geom', 'shape', 'wkt_geom', 'geom_wkt']
+const CSV_X_COLUMN_NAMES = ['lon', 'lng', 'long', 'longitude', 'x']
+const CSV_Y_COLUMN_NAMES = ['lat', 'latitude', 'y']
+
+type CsvGeometrySuggestion =
+  | { mode: 'wkt'; geomField: string }
+  | { mode: 'xy'; xField: string; yField: string }
+
+function detectCsvGeometryColumns(colNames: string[]): CsvGeometrySuggestion | null {
+  const lower = colNames.map(n => n.toLowerCase())
+  const wktIdx = lower.findIndex(n => CSV_WKT_COLUMN_NAMES.includes(n))
+  if (wktIdx >= 0) return { mode: 'wkt', geomField: colNames[wktIdx] }
+  const xIdx = lower.findIndex(n => CSV_X_COLUMN_NAMES.includes(n))
+  const yIdx = lower.findIndex(n => CSV_Y_COLUMN_NAMES.includes(n))
+  if (xIdx >= 0 && yIdx >= 0) return { mode: 'xy', xField: colNames[xIdx], yField: colNames[yIdx] }
+  return null
+}
+
 // ---- source card ----
 export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLElement {
   const c = mkEl('div', { className: 'card collapsed' })
@@ -29,7 +55,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       </div>
       <div class="row">
         <label class="field grow">id<input data-k="id" placeholder="places"></label>
-        <label class="field grow">format<span class="auto-chip" data-auto-format hidden>from extension</span>${comboField('data-k="format"', s.format ?? '', META.formats)}</label>
+        <label class="field grow">format<span class="auto-chip" data-auto-format hidden>from extension</span>${comboField('data-k="format"', s.format ?? '', META.formats.map(f => FORMAT_LABELS[f] ? { value: f, label: FORMAT_LABELS[f] } : f))}</label>
       </div>
       <label class="field" style="margin-top:8px">uri / path / url
         <div style="display:flex;gap:6px">
@@ -56,7 +82,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
         </label>
       </div>
       <div class="row" data-csv-geom style="display:none; margin-top:8px;">
-        <label class="field grow">geometry
+        <label class="field grow">geometry<span class="auto-chip" data-auto-geom hidden>detected</span>
           <select data-geom-mode>
             <option value="">none (tabular only)</option>
             <option value="xy">point from X / Y columns</option>
@@ -147,6 +173,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   const toggleOapif = () => {
     const hint = c.querySelector<HTMLElement>('[data-oapif]')!
     hint.style.display = fmt.value === 'oapif' ? 'block' : 'none'
+    fmt.title = fmt.value === 'oapif' ? 'OGC API - Features' : ''
   }
   fmt.addEventListener('input', toggleArcgis)
   fmt.addEventListener('change', toggleArcgis)
@@ -343,6 +370,39 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
               const sel = c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)
               if (sel) setComboOptions(sel, colOptions)
             })
+            // A fresh csv with no geometry chosen yet: if a column looks like an obvious
+            // WKT/WKB field, or there's a plausible lon/lat pair, pre-select it instead of
+            // leaving the user to go find the right column name themselves — same
+            // "auto-fill + say so" treatment as the auto-detected format/CRS chips above.
+            // Never fires again once something's actually picked (including "none"), so it
+            // won't clobber a deliberate choice on a later re-inspect.
+            if (!xField && !yField && !geomField && geomModeSel.value === '') {
+              const suggestion = detectCsvGeometryColumns(colOptions)
+              if (suggestion?.mode === 'wkt') {
+                geomModeSel.value = 'wkt'
+                const geomInp = c.querySelector<HTMLInputElement>('[data-k="geom_field"]')
+                if (geomInp) {
+                  showChip('[data-auto-geom]', true)
+                  ensureComboOption(geomInp, suggestion.geomField)
+                  geomInp.value = suggestion.geomField
+                  toggleCsvGeomSub()
+                  geomInp.dispatchEvent(new Event('change', { bubbles: true }))
+                }
+              } else if (suggestion?.mode === 'xy') {
+                geomModeSel.value = 'xy'
+                const xInp = c.querySelector<HTMLInputElement>('[data-k="x_field"]')
+                const yInp = c.querySelector<HTMLInputElement>('[data-k="y_field"]')
+                if (xInp && yInp) {
+                  showChip('[data-auto-geom]', true)
+                  ensureComboOption(xInp, suggestion.xField)
+                  xInp.value = suggestion.xField
+                  ensureComboOption(yInp, suggestion.yField)
+                  yInp.value = suggestion.yField
+                  toggleCsvGeomSub()
+                  yInp.dispatchEvent(new Event('change', { bubbles: true }))
+                }
+              }
+            }
           }
         } else {
           delete SOURCE_SCHEMAS[id]
