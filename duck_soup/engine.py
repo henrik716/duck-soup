@@ -599,6 +599,7 @@ class Engine:
             # via the `duckdb` dependency pin in pyproject.toml (see the tested version
             # noted there and in README.md) — bump both together when upgrading.
             con.execute("INSTALL spatial; LOAD spatial;")
+            con.execute("INSTALL postgres; LOAD postgres;")
             register_udfs(con)
 
             with tempfile.TemporaryDirectory() as tmp:
@@ -675,6 +676,7 @@ class Engine:
             # via the `duckdb` dependency pin in pyproject.toml (see the tested version
             # noted there and in README.md) — bump both together when upgrading.
             con.execute("INSTALL spatial; LOAD spatial;")
+            con.execute("INSTALL postgres; LOAD postgres;")
             register_udfs(con)
 
             with tempfile.TemporaryDirectory() as tmp:

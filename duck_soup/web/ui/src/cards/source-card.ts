@@ -9,28 +9,33 @@ import { openFileExplorer } from '../file-explorer'
 import { attachCrsFormatCheck } from '../validation'
 import type { Source } from '../types'
 
-// A csv whose geometry lives in a WKT/WKB column or a lon/lat pair usually names those
-// columns something predictable — check for the common spellings so the geometry picker
-// can suggest (not require) the right choice instead of making the user hunt through the
-// column list themselves. Only ever used as a first-guess default, never enforced.
+// An xlsx/csv source whose geometry lives in a WKT/WKB column or a lon/lat pair usually
+// names those columns something predictable — check for the common spellings so the
+// geometry picker can suggest (not require) the right choice instead of making the user
+// hunt through the column list themselves. Only ever used as a first-guess default, never
+// enforced.
 // Friendly display labels for the format combo — options otherwise fall back to their raw
 // code (e.g. "gpkg"), which is clear enough on its own; "oapif" alone isn't.
-const FORMAT_LABELS: Record<string, string> = { oapif: '<span title="OGC API - Features">OAPIF</span>' }
+const FORMAT_LABELS: Record<string, string> = {
+  oapif: '<span title="OGC API - Features">OAPIF</span>',
+  postgres: '<span title="PostgreSQL / PostGIS">Postgres</span>',
+}
 
-const CSV_WKT_COLUMN_NAMES = ['geom', 'geometry', 'wkt', 'the_geom', 'shape', 'wkt_geom', 'geom_wkt']
-const CSV_X_COLUMN_NAMES = ['lon', 'lng', 'long', 'longitude', 'x']
-const CSV_Y_COLUMN_NAMES = ['lat', 'latitude', 'y']
+const TABULAR_GEOM_FORMATS = ['xlsx', 'csv']
+const WKT_COLUMN_NAMES = ['geom', 'geometry', 'wkt', 'the_geom', 'shape', 'wkt_geom', 'geom_wkt']
+const X_COLUMN_NAMES = ['lon', 'lng', 'long', 'longitude', 'x']
+const Y_COLUMN_NAMES = ['lat', 'latitude', 'y']
 
-type CsvGeometrySuggestion =
+type TabularGeometrySuggestion =
   | { mode: 'wkt'; geomField: string }
   | { mode: 'xy'; xField: string; yField: string }
 
-function detectCsvGeometryColumns(colNames: string[]): CsvGeometrySuggestion | null {
+function detectTabularGeometryColumns(colNames: string[]): TabularGeometrySuggestion | null {
   const lower = colNames.map(n => n.toLowerCase())
-  const wktIdx = lower.findIndex(n => CSV_WKT_COLUMN_NAMES.includes(n))
+  const wktIdx = lower.findIndex(n => WKT_COLUMN_NAMES.includes(n))
   if (wktIdx >= 0) return { mode: 'wkt', geomField: colNames[wktIdx] }
-  const xIdx = lower.findIndex(n => CSV_X_COLUMN_NAMES.includes(n))
-  const yIdx = lower.findIndex(n => CSV_Y_COLUMN_NAMES.includes(n))
+  const xIdx = lower.findIndex(n => X_COLUMN_NAMES.includes(n))
+  const yIdx = lower.findIndex(n => Y_COLUMN_NAMES.includes(n))
   if (xIdx >= 0 && yIdx >= 0) return { mode: 'xy', xField: colNames[xIdx], yField: colNames[yIdx] }
   return null
 }
@@ -81,7 +86,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           </select>
         </label>
       </div>
-      <div class="row" data-csv-geom style="display:none; margin-top:8px;">
+      <div class="row" data-tabular-geom style="display:none; margin-top:8px;">
         <label class="field grow">geometry<span class="auto-chip" data-auto-geom hidden>detected</span>
           <select data-geom-mode>
             <option value="">none (tabular only)</option>
@@ -90,7 +95,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           </select>
         </label>
       </div>
-      <div class="row" data-csv-geom-xy style="display:none; margin-top:8px;">
+      <div class="row" data-tabular-geom-xy style="display:none; margin-top:8px;">
         <label class="field grow">X / longitude column
           ${comboField('data-k="x_field"', s.x_field ?? '', [], '—')}
         </label>
@@ -98,13 +103,14 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           ${comboField('data-k="y_field"', s.y_field ?? '', [], '—')}
         </label>
       </div>
-      <div class="row" data-csv-geom-wkt style="display:none; margin-top:8px;">
+      <div class="row" data-tabular-geom-wkt style="display:none; margin-top:8px;">
         <label class="field grow">WKT / WKB column
           ${comboField('data-k="geom_field"', s.geom_field ?? '', [], '—')}
         </label>
       </div>
       <p class="hint" data-arcgis style="display:none">ArcGIS REST: uri = the service root (…/MapServer or …/FeatureServer, no trailing id). Pick the sublayer below. Geometry fetched as EPSG:4326.</p>
       <p class="hint" data-oapif style="display:none">OGC API - Features: uri = the API root (e.g. https://host) — not an /items URL. Pick the collection below.</p>
+      <p class="hint" data-postgres style="display:none">Postgres / PostGIS: uri = a full connection string (e.g. postgresql://user:pass@host:5432/dbname). Pick the table below (schema.table, or just table for the public schema).</p>
       <div class="schema-list" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--line);padding-top:6px;"></div>
     </div>`
 
@@ -158,6 +164,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
     shp: 'data/places.shp',
     xlsx: 'data/places.xlsx',
     csv: 'data/places.csv',
+    postgres: 'postgresql://user:pass@host:5432/dbname',
   }
   const uriPlaceholderInp = c.querySelector<HTMLInputElement>('[data-uri-placeholder]')!
   const updateUriPlaceholder = () => {
@@ -175,49 +182,59 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
     hint.style.display = fmt.value === 'oapif' ? 'block' : 'none'
     fmt.title = fmt.value === 'oapif' ? 'OGC API - Features' : ''
   }
+  const togglePostgres = () => {
+    const hint = c.querySelector<HTMLElement>('[data-postgres]')!
+    hint.style.display = fmt.value === 'postgres' ? 'block' : 'none'
+  }
   fmt.addEventListener('input', toggleArcgis)
   fmt.addEventListener('change', toggleArcgis)
   fmt.addEventListener('input', toggleOapif)
   fmt.addEventListener('change', toggleOapif)
+  fmt.addEventListener('input', togglePostgres)
+  fmt.addEventListener('change', togglePostgres)
   toggleArcgis()
   toggleOapif()
+  togglePostgres()
   updateUriPlaceholder()
 
   // Header-row override: xlsx/csv only (GDAL's HEADERS open option exists for both drivers).
   const toggleHeaderRow = () => {
     const row = c.querySelector<HTMLElement>('[data-header-row]')!
-    row.style.display = (fmt.value === 'xlsx' || fmt.value === 'csv') ? 'flex' : 'none'
+    row.style.display = TABULAR_GEOM_FORMATS.includes(fmt.value) ? 'flex' : 'none'
   }
-  // Geometry-from-columns: csv only — the XLSX driver has no geometry-related open options
-  // at all (confirmed against GDAL's docs/source), it's purely a tabular driver.
+  // Geometry-from-columns: xlsx/csv only. Not a GDAL feature either driver provides — the
+  // XLSX driver has no geometry support at all, and even the CSV driver's own
+  // X_POSSIBLE_NAMES/GEOM_POSSIBLE_NAMES open options came with real sharp edges (see
+  // sources.py's _apply_tabular_geometry) — so the engine builds the geometry itself in SQL,
+  // identically for both formats.
   const geomModeSel = c.querySelector<HTMLSelectElement>('[data-geom-mode]')!
-  const toggleCsvGeom = () => {
-    const row = c.querySelector<HTMLElement>('[data-csv-geom]')!
-    row.style.display = fmt.value === 'csv' ? 'flex' : 'none'
+  const toggleTabularGeom = () => {
+    const row = c.querySelector<HTMLElement>('[data-tabular-geom]')!
+    row.style.display = TABULAR_GEOM_FORMATS.includes(fmt.value) ? 'flex' : 'none'
   }
-  const toggleCsvGeomSub = () => {
-    const xyRow = c.querySelector<HTMLElement>('[data-csv-geom-xy]')!
-    const wktRow = c.querySelector<HTMLElement>('[data-csv-geom-wkt]')!
-    const active = fmt.value === 'csv' ? geomModeSel.value : ''
+  const toggleTabularGeomSub = () => {
+    const xyRow = c.querySelector<HTMLElement>('[data-tabular-geom-xy]')!
+    const wktRow = c.querySelector<HTMLElement>('[data-tabular-geom-wkt]')!
+    const active = TABULAR_GEOM_FORMATS.includes(fmt.value) ? geomModeSel.value : ''
     xyRow.style.display = active === 'xy' ? 'flex' : 'none'
     wktRow.style.display = active === 'wkt' ? 'flex' : 'none'
   }
   fmt.addEventListener('input', toggleHeaderRow)
   fmt.addEventListener('change', toggleHeaderRow)
-  fmt.addEventListener('input', toggleCsvGeom)
-  fmt.addEventListener('change', toggleCsvGeom)
-  fmt.addEventListener('input', toggleCsvGeomSub)
-  fmt.addEventListener('change', toggleCsvGeomSub)
-  geomModeSel.addEventListener('input', toggleCsvGeomSub)
-  geomModeSel.addEventListener('change', toggleCsvGeomSub)
+  fmt.addEventListener('input', toggleTabularGeom)
+  fmt.addEventListener('change', toggleTabularGeom)
+  fmt.addEventListener('input', toggleTabularGeomSub)
+  fmt.addEventListener('change', toggleTabularGeomSub)
+  geomModeSel.addEventListener('input', toggleTabularGeomSub)
+  geomModeSel.addEventListener('change', toggleTabularGeomSub)
   // geom_mode is derived UI state, not a saved field — pick its initial value from
   // whichever real geometry field(s) were hydrated onto the card.
   geomModeSel.value = s.x_field && s.y_field ? 'xy' : s.geom_field ? 'wkt' : ''
   geomModeSel.addEventListener('input', syncFn)
   geomModeSel.addEventListener('change', syncFn)
   toggleHeaderRow()
-  toggleCsvGeom()
-  toggleCsvGeomSub()
+  toggleTabularGeom()
+  toggleTabularGeomSub()
 
   // A value the editor filled in on your behalf should say so — these used to overwrite a
   // deliberate choice with no visible trace.
@@ -252,6 +269,8 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           /\/wfs[./? ]|\/wfs$/.test(lower) ||
           /\.wfs[./? ]|\.wfs$/.test(lower)) {
         detected = 'wfs'
+      } else if (/^postgres(ql)?:\/\//.test(lower)) {
+        detected = 'postgres'
       }
     }
     if (detected && fmt.value !== detected) {
@@ -260,6 +279,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       fmt.dispatchEvent(new Event('change', { bubbles: true }))
       toggleArcgis()
       toggleOapif()
+      togglePostgres()
     }
   }
 
@@ -347,6 +367,10 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
         updateSourceBadge(c, { ok: false, error: 'select a sublayer from the dropdown first' })
         return
       }
+      if (format === 'postgres' && !layer) {
+        updateSourceBadge(c, { ok: false, error: 'select a table from the dropdown first' })
+        return
+      }
       const srcObj = {
         id, format, uri,
         ...(layer ? { layer } : {}),
@@ -364,20 +388,20 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           updateSourceBadge(c, { ok: true, columns: d.columns })
           // Offer the just-inspected columns as suggestions for the geometry-column
           // pickers below — same idea as doInspectFile populating the `layer` combo.
-          if (format === 'csv') {
+          if (TABULAR_GEOM_FORMATS.includes(format)) {
             const colOptions = d.columns.map(col => col.name)
             ;['x_field', 'y_field', 'geom_field'].forEach(k => {
               const sel = c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)
               if (sel) setComboOptions(sel, colOptions)
             })
-            // A fresh csv with no geometry chosen yet: if a column looks like an obvious
-            // WKT/WKB field, or there's a plausible lon/lat pair, pre-select it instead of
-            // leaving the user to go find the right column name themselves — same
-            // "auto-fill + say so" treatment as the auto-detected format/CRS chips above.
-            // Never fires again once something's actually picked (including "none"), so it
-            // won't clobber a deliberate choice on a later re-inspect.
+            // A fresh xlsx/csv with no geometry chosen yet: if a column looks like an
+            // obvious WKT/WKB field, or there's a plausible lon/lat pair, pre-select it
+            // instead of leaving the user to go find the right column name themselves —
+            // same "auto-fill + say so" treatment as the auto-detected format/CRS chips
+            // above. Never fires again once something's actually picked (including
+            // "none"), so it won't clobber a deliberate choice on a later re-inspect.
             if (!xField && !yField && !geomField && geomModeSel.value === '') {
-              const suggestion = detectCsvGeometryColumns(colOptions)
+              const suggestion = detectTabularGeometryColumns(colOptions)
               if (suggestion?.mode === 'wkt') {
                 geomModeSel.value = 'wkt'
                 const geomInp = c.querySelector<HTMLInputElement>('[data-k="geom_field"]')
@@ -385,7 +409,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
                   showChip('[data-auto-geom]', true)
                   ensureComboOption(geomInp, suggestion.geomField)
                   geomInp.value = suggestion.geomField
-                  toggleCsvGeomSub()
+                  toggleTabularGeomSub()
                   geomInp.dispatchEvent(new Event('change', { bubbles: true }))
                 }
               } else if (suggestion?.mode === 'xy') {
@@ -398,7 +422,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
                   xInp.value = suggestion.xField
                   ensureComboOption(yInp, suggestion.yField)
                   yInp.value = suggestion.yField
-                  toggleCsvGeomSub()
+                  toggleTabularGeomSub()
                   yInp.dispatchEvent(new Event('change', { bubbles: true }))
                 }
               }

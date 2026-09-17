@@ -21,7 +21,7 @@ const appIcons = {
 }
 import {
   fetchMeta, fetchPipelineNames, fetchPipeline, savePipeline,
-  validateConfig, previewConfig, runConfig,
+  validateConfig, previewConfig, runConfig, exportScript,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange } from './map'
 import { updateLineageDiagram } from './lineage'
@@ -492,6 +492,32 @@ async function save(): Promise<void> {
   }
 }
 
+// ---- export as standalone script ----
+async function exportScriptFile(): Promise<void> {
+  const cfg = collectConfig()
+  const name = qs<HTMLInputElement>('#saveName')?.value.trim() || cfg.name
+
+  try {
+    const d = await exportScript(cfg, name)
+    if (d.ok && d.script) {
+      const blob = new Blob([d.script], { type: 'text/x-python;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', d.filename || `${name}.py`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      showToast(`Exported: ${d.filename}`, 'ok')
+    } else {
+      showToast(d.error || 'Export failed', 'bad')
+    }
+  } catch (e) {
+    showToast(String(e instanceof Error ? e.message : e), 'bad')
+  }
+}
+
 // ---- run ----
 async function run(): Promise<void> {
   const cfg = collectConfig()
@@ -822,6 +848,7 @@ async function init(): Promise<void> {
   qs('#validateBtn')?.addEventListener('click', validate)
   qs('#saveBtn')?.addEventListener('click', save)
   qs('#runBtn')?.addEventListener('click', run)
+  qs('#exportScriptBtn')?.addEventListener('click', exportScriptFile)
 
   const loadSel = qs<HTMLSelectElement>('#loadSelect')
   loadSel?.addEventListener('change', e => {

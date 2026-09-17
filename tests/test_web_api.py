@@ -1,6 +1,7 @@
 """FastAPI endpoint tests for the pipeline editor backend (duck_soup/web/app.py)."""
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -251,6 +252,24 @@ def test_run_endpoint_writes_geopackage(client, tmp_path):
     assert (tmp_path / "web_run.gpkg").exists()
 
 
+def test_export_script_endpoint_returns_runnable_script(client):
+    cfg = _test_config_dict()
+    r = client.post("/api/export_script", json={"config": cfg, "name": "my_pipeline"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["filename"] == "my_pipeline.py"
+    script = body["script"]
+    assert "run_config" in script
+    assert f"name: {cfg['name']}" in script
+    compile(script, "<export>", "exec")  # the template itself must be valid Python
+
+
+def test_export_script_endpoint_rejects_invalid_config(client):
+    r = client.post("/api/export_script", json={"config": {"not": "a valid pipeline"}})
+    assert r.status_code == 422
+
+
 def test_files_endpoint_lists_data_directory(client):
     r = client.get("/api/files", params={"subpath": "data"})
     assert r.status_code == 200
@@ -261,8 +280,9 @@ def test_files_endpoint_lists_data_directory(client):
 
 def test_upload_with_relpath_lands_under_subdirectory(client):
     # A File Geodatabase drop uploads each of its internal files individually, with
-    # `relpath` set so they all land together under one folder instead of flat in data/.
-    target = REPO_ROOT / "data" / "test_gdb_upload"
+    # `relpath` set so they all land together under one folder instead of flat in the
+    # upload dir.
+    target = Path(tempfile.gettempdir()) / "duck_soup_uploads" / "test_gdb_upload"
     try:
         r = client.post(
             "/api/upload",
@@ -272,7 +292,7 @@ def test_upload_with_relpath_lands_under_subdirectory(client):
         assert r.status_code == 200
         body = r.json()
         assert body["ok"] is True
-        assert body["path"] == "data/test_gdb_upload/a00000001.gdbtable"
+        assert body["path"] == str(target / "a00000001.gdbtable")
         assert (target / "a00000001.gdbtable").read_bytes() == b"fake gdb bytes"
     finally:
         if target.exists():

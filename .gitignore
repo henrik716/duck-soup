@@ -18,6 +18,15 @@ output/*.gpkg
 # Personal/local data and pipelines (already-tracked test fixtures are unaffected)
 data/*.gpkg
 data/*.geojson
+data/*.fgb
+data/*.parquet
+data/*.gdb/
+data/*.shp
+data/*.shx
+data/*.dbf
+data/*.prj
+data/*.cpg
+data/*.qmd
 pipelines/*.yaml
 
 # Editor/OS

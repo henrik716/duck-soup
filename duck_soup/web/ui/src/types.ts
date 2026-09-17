@@ -1,6 +1,6 @@
 export type SourceFormat =
   | 'gpkg' | 'geojson' | 'gml' | 'fgdb' | 'wfs'
-  | 'arcgis_rest' | 'oapif' | 'parquet' | 'flatgeobuf' | 'shp' | 'xlsx' | 'csv'
+  | 'arcgis_rest' | 'oapif' | 'parquet' | 'flatgeobuf' | 'shp' | 'xlsx' | 'csv' | 'postgres'
 
 export type JoinPredicate = 'intersects' | 'contains' | 'within'
 
@@ -235,6 +235,13 @@ export interface RunResponse {
   log?: string[]
   error?: string
   trace?: string
+}
+
+export interface ExportScriptResponse {
+  ok: boolean
+  script?: string
+  filename?: string
+  error?: string
 }
 
 export interface FilesResponse {

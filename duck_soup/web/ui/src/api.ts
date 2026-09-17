@@ -1,5 +1,6 @@
 import type {
   Config,
+  ExportScriptResponse,
   FilesResponse,
   InspectFileResponse,
   InspectResponse,
@@ -99,6 +100,15 @@ export async function runConfig(config: Config): Promise<RunResponse> {
   } finally {
     clearTimeout(timer)
   }
+}
+
+export async function exportScript(config: Config, name: string): Promise<ExportScriptResponse> {
+  const r = await fetch('/api/export_script', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ config, name }),
+  })
+  return r.json()
 }
 
 export async function inspectSource(source: Source): Promise<InspectResponse> {

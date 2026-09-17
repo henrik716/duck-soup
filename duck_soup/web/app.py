@@ -30,7 +30,7 @@ from ..config import (
     load_config_dict,
 )
 from ..engine import run_config, preview_config_pipeline
-from ..sources import read_expr, parquet_geometry_info
+from ..sources import read_expr, parquet_geometry_info, attach_postgres, _sql_ident
 from ..derive import DUCKDB_LOCK, register_udfs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,6 +116,7 @@ def inspect_source(req: InspectRequest) -> dict:
             con = duckdb.connect()
             try:
                 con.execute("INSTALL spatial; LOAD spatial;")
+                con.execute("INSTALL postgres; LOAD postgres;")
                 register_udfs(con)
                 with tempfile.TemporaryDirectory() as tmp:
                     workdir = Path(tmp)
@@ -192,6 +193,61 @@ async def run(req: RunRequest) -> dict:
             "log": log_lines,
             "trace": traceback.format_exc(),
         }
+
+
+class ExportScriptRequest(BaseModel):
+    config: dict
+    name: str = "pipeline"
+
+
+def _render_export_script(name: str, yaml_text: str) -> str:
+    """A standalone .py file that runs `yaml_text` via duck_soup, no UI/server needed."""
+    embedded = yaml_text.replace('"""', '\\"\\"\\"')
+    return f'''#!/usr/bin/env python3
+"""{name} — Duck Soup pipeline, exported as a standalone script.
+
+Run with:
+    pip install duck_soup   # or: pip install -e . from a duck_soup checkout
+    python {name}.py
+
+Relative source/output paths in the pipeline are resolved against the current working
+directory when this script runs (not against this file's location) — same as
+`duck_soup.cli run`.
+"""
+from __future__ import annotations
+
+import sys
+
+import yaml
+from duck_soup.config import load_config_dict
+from duck_soup.engine import run_config
+
+PIPELINE_YAML = """\\
+{embedded}
+"""
+
+
+def main() -> int:
+    cfg = load_config_dict(yaml.safe_load(PIPELINE_YAML))
+    out_path = run_config(cfg, log=lambda m: print(f"  {{m}}", flush=True))
+    print(f"\\nWrote {{out_path}}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+@app.post("/api/export_script")
+def export_script(req: ExportScriptRequest) -> dict:
+    try:
+        cfg = load_config_dict(req.config)
+    except Exception as e:
+        raise HTTPException(422, f"invalid config: {e}")
+    yaml_text = dump_config_yaml(cfg)
+    script = _render_export_script(req.name, yaml_text)
+    return {"ok": True, "script": script, "filename": f"{req.name}.py"}
 
 
 class PreviewRequest(BaseModel):
@@ -283,26 +339,29 @@ def list_files(subpath: str = "") -> dict:
     return {"current": current, "parent": parent, "entries": entries}
 
 
+_UPLOAD_DIR = Path(tempfile.gettempdir()) / "duck_soup_uploads"
+
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), relpath: str = Form("")) -> dict:
     try:
-        data_dir = ROOT / "data"
-        data_dir.mkdir(exist_ok=True)
+        upload_dir = _UPLOAD_DIR
+        upload_dir.mkdir(parents=True, exist_ok=True)
         # `relpath` lets a multi-file source (e.g. a File Geodatabase folder, uploaded as
         # many internal files by the frontend's directory-drop handler) land together under
-        # one subdirectory instead of flat in `data/`. It's client-supplied, so it's resolved
-        # and checked against `data_dir` rather than trusted outright — otherwise a
-        # crafted relpath like "../../../etc/passwd" could write outside the data directory.
+        # one subdirectory instead of flat in the upload dir. It's client-supplied, so it's
+        # resolved and checked against `upload_dir` rather than trusted outright — otherwise a
+        # crafted relpath like "../../../etc/passwd" could write outside the upload directory.
         rel = Path(relpath.strip() or file.filename)
         if rel.is_absolute() or ".." in rel.parts:
             return {"ok": False, "error": "invalid relative path"}
-        target_path = (data_dir / rel).resolve()
-        if not target_path.is_relative_to(data_dir.resolve()):
+        target_path = (upload_dir / rel).resolve()
+        if not target_path.is_relative_to(upload_dir.resolve()):
             return {"ok": False, "error": "invalid relative path"}
         target_path.parent.mkdir(parents=True, exist_ok=True)
         with target_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        return {"ok": True, "path": str(target_path.relative_to(ROOT)).replace("\\", "/")}
+        return {"ok": True, "path": str(target_path)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 class InspectFileRequest(BaseModel):
@@ -317,17 +376,47 @@ def inspect_file(req: InspectFileRequest) -> dict:
     if not uri:
         return {"ok": True, "layers": [], "default_crs": None}
 
-    # Resolve local paths
-    resolved_path = Path(uri)
-    if not resolved_path.is_absolute() and not (uri.startswith("http://") or uri.startswith("https://") or uri.upper().startswith("WFS:")):
+    # Resolve local paths (postgres sources carry a libpq DSN, not a filesystem path)
+    resolved_path = Path(uri) if fmt != "postgres" else None
+    if fmt != "postgres" and not resolved_path.is_absolute() and not (
+        uri.startswith("http://") or uri.startswith("https://") or uri.upper().startswith("WFS:")
+    ):
         resolved_path = (ROOT / uri).resolve()
 
     with DUCKDB_LOCK:
         con = duckdb.connect()
         try:
             con.execute("INSTALL spatial; LOAD spatial;")
+            con.execute("INSTALL postgres; LOAD postgres;")
             layers = []
             default_crs = None
+
+            if fmt == "postgres":
+                # List PostGIS-enabled tables (from geometry_columns) plus plain tables
+                # (usable as attribute-join lookup sources), each as "schema.table" unless
+                # schema is the default 'public'. Default CRS is the first spatial table's SRID.
+                alias = attach_postgres(con, uri, "inspect")
+                geom_rows = con.execute(
+                    f"SELECT f_table_schema, f_table_name, srid FROM {_sql_ident(alias)}.public.geometry_columns "
+                    "ORDER BY f_table_schema, f_table_name"
+                ).fetchall()
+                seen: set[str] = set()
+                for schema, table, srid in geom_rows:
+                    full = table if schema == "public" else f"{schema}.{table}"
+                    seen.add(full)
+                    layers.append(full)
+                    if default_crs is None and srid:
+                        default_crs = f"EPSG:{srid}"
+                table_rows = con.execute(
+                    f"SELECT table_schema, table_name FROM {_sql_ident(alias)}.information_schema.tables "
+                    "WHERE table_type = 'BASE TABLE' ORDER BY table_schema, table_name"
+                ).fetchall()
+                for schema, table in table_rows:
+                    full = table if schema == "public" else f"{schema}.{table}"
+                    if full not in seen:
+                        seen.add(full)
+                        layers.append(full)
+                return {"ok": True, "layers": layers, "default_crs": default_crs}
 
             fwd_path = str(resolved_path).replace("\\", "/")
             sql_uri = "'" + fwd_path.replace("'", "''") + "'"

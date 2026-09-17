@@ -59,7 +59,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 
 ### Frontend
 
-Single-page app (TypeScript + Vite + Leaflet + Lucide). Source/step/mapping card rendering and config serialisation are split across `cards/*.ts` (one file per card type, plus `collectPipelineDef`) and `config-io.ts` (`collectConfig`/`hydrate`), with shared helpers in `dom.ts`, `state.ts`, `combo.ts`, `schema.ts`, `toast.ts`, `table.ts`, `metadata.ts`, `file-explorer.ts`, `expr-drawer.ts`, and `step-gallery.ts`. `main.ts` orchestrates tabs, validation, preview, and run. `types.ts` mirrors the Python Pydantic schemas exactly — keep them in sync when adding fields. Built assets are committed to `duck_soup/web/static/` and served by FastAPI at `/static/`.
+Single-page app (TypeScript + Vite + MapLibre GL + Lucide). Source/step/mapping card rendering and config serialisation are split across `cards/*.ts` (one file per card type, plus `collectPipelineDef`) and `config-io.ts` (`collectConfig`/`hydrate`), with shared helpers in `dom.ts`, `state.ts`, `combo.ts`, `schema.ts`, `toast.ts`, `table.ts`, `metadata.ts`, `file-explorer.ts`, `expr-drawer.ts`, and `step-gallery.ts`. `main.ts` orchestrates tabs, validation, preview, and run. `types.ts` mirrors the Python Pydantic schemas exactly — keep them in sync when adding fields. Built assets are committed to `duck_soup/web/static/` and served by FastAPI at `/static/`.
 
 ### Pipeline YAML
 
@@ -68,7 +68,7 @@ name: my_pipeline
 working_crs: EPSG:25833      # all joins happen in this CRS
 sources:
   - id: places
-    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv
+    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv | postgres
     uri: data/places.geojson
     layer: places             # layer / typename / sheet name
     crs: EPSG:4326
@@ -106,3 +106,13 @@ outputs:
 ```
 
 `codelist` can also reference a CSV file: `{file: data/lookup.csv, key: code, value: label}`.
+
+A source's `uri` (and a `codelist`'s `file`) can be any absolute path on disk, not just a path
+under `data/` — `sources.py` passes it straight through to `ST_Read`/`read_parquet` with no
+normalization. `data/` is only a convenience location for the committed test fixtures; personal
+datasets don't need to be copied into the repo to be used in a pipeline.
+
+A `postgres` source's `uri` is a full libpq/DSN connection string (e.g.
+`postgresql://user:pass@host:5432/dbname`), read via DuckDB's `postgres` extension
+(`ATTACH ... TYPE postgres`) rather than GDAL/`ST_Read` — see `sources.py`'s module docstring.
+`layer` names the table, optionally schema-qualified (`schema.table`, defaulting to `public`).

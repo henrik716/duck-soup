@@ -47,7 +47,7 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
   }
   const KIND_OPTIONS: ComboOptionDef[] = ['from', 'const', 'expr', 'func', 'codelist'].map(k => ({
     value: k,
-    label: `<span style="font-family:var(--mono);font-weight:600;">${k}</span> <span style="float:right;font-size:10px;color:var(--muted);margin-left:12px;">${esc(KIND_DESCRIPTIONS[k] || '')}</span>`,
+    label: `<span style="font-family:var(--mono);font-weight:600;">${k}</span> <span data-tag style="font-size:10px;color:var(--muted);">${esc(KIND_DESCRIPTIONS[k] || '')}</span>`,
   }))
 
   row.innerHTML = `
@@ -112,7 +112,7 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
         const catTag = `<span style="color:${cat.color}; background:${cat.bg}; font-size:8.5px; font-weight:600; padding:1px 4px; border-radius:3px; margin-right:8px; font-family:var(--display);">${cat.name}</span>`
         return {
           value: f,
-          label: `${catTag}<span style="font-family:var(--mono);font-weight:600;">${f}</span> <span style="float:right;font-size:10px;color:var(--muted);margin-left:12px;">${FUNC_DESCRIPTIONS[f] || ''}</span>`
+          label: `<span>${catTag}<span style="font-family:var(--mono);font-weight:600;">${f}</span></span> <span data-tag style="font-size:10px;color:var(--muted);">${FUNC_DESCRIPTIONS[f] || ''}</span>`
         }
       })
       wrapperDiv.innerHTML = comboField('', META.funcs.includes(String(initVal)) ? String(initVal) : '', funcOptions, 'select function')
@@ -219,7 +219,7 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
         const available = card ? [...collectAvailableColumnsScoped(card)] : []
         const availableOptions: ComboOptionDef[] = available.map(col => ({
           value: col,
-          label: `<span style="font-family:var(--mono);">${esc(col)}</span> <span style="float:right;font-size:10px;color:var(--muted);">column</span>`
+          label: `<span style="font-family:var(--mono);">${esc(col)}</span> <span data-tag style="font-size:10px;color:var(--muted);">column</span>`
         }))
         wrapperDiv.innerHTML = comboField('', exprPreviewText(currentExprValue), availableOptions, 'SQL expression (e.g. col1 + col2)')
         const comboEl = wrapperDiv.firstElementChild as HTMLElement

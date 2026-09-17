@@ -15,7 +15,8 @@ Under the hood, everything runs inside DuckDB using the powerful **spatial** ext
 
 - **YAML-driven pipelines:** Describe inputs, join/geoprocessing steps, schema mapping, and output layers in one neat configuration file.
 - **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage with optional dataset-level metadata.
-- **Web Editor:** A visual, browser-based pipeline builder with live YAML preview, syntax validation, data previewing, and interactive execution logs.
+- **Web Editor:** A visual, browser-based pipeline builder with live YAML preview, syntax validation, data previewing, and interactive execution logs. Drag a File Geodatabase folder straight onto the sources panel and it's uploaded and wired up as a source automatically.
+- **Interactive map preview:** A MapLibre GL-powered map with a light/dark basemap toggle previews source and result geometry directly in the browser, with hover/click inspection of feature attributes.
 - **Powered by DuckDB Spatial:** Blistering speed using DuckDB's columnar execution engine and GDAL-backed `ST_Read`/`ST_Write` operations.
 - **Flexible Joins:** Spatial joins (intersects/contains/within, keeping the first match or fanning out to all), attribute joins, and nearest-neighbor (distance-constrained) searches.
 - **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union) — chainable like any join step, with `snapshot` to fork the chain into named branches.
@@ -58,9 +59,12 @@ and a Config file can run several pipelines, all appended into the same GeoPacka
 lon/lat/mgrs/wkb/area/length are always derived from the same working-CRS geometry
 used for the joins, so there's no extra reprojection.
 
-Almost every format goes through DuckDB's `ST_Read` (which uses GDAL), so adding a
-format is usually one branch in `sources.py`. **ArcGIS REST** is the exception: it's
-paged to a temporary GeoJSON file first, then read like any other file.
+Most formats go through DuckDB's `ST_Read` (which uses GDAL), so adding a format is
+usually one branch in `sources.py`. **ArcGIS REST** and **OGC API - Features (oapif)**
+are paged over HTTP into a temporary GeoJSON file first, then read like any other file;
+**WFS** is likewise fetched (GetFeature/GML) into a temporary `.gml` file first. **Parquet**
+and **Postgres** skip GDAL entirely, using DuckDB's native `read_parquet()` and `postgres`
+extension respectively. See "Source formats" below for the full picture.
 
 ## Prerequisites
 
@@ -188,8 +192,8 @@ pipelines:
 
     sources:
       - id: ducks                # unique handle
-        format: gpkg              # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|flatgeobuf|xlsx|csv
-        uri: data/Ducks.gpkg      # path, .gdb folder, or service URL
+        format: gpkg              # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|oapif|parquet|flatgeobuf|xlsx|csv|postgres
+        uri: data/Ducks.gpkg      # path, .gdb folder, service URL, or postgres connection string
         layer: Ducks              # layer / WFS typename / sheet name
         crs: EPSG:4326
       - id: ponds
@@ -243,6 +247,22 @@ A single-layer pipeline can write `layer:`/`crs:`/`filter:` directly instead of 
 single-pipeline file can skip the `pipelines:` wrapper entirely and write
 `sources`/`base`/`steps`/`mapping`/`output` directly at the top level. Both are
 legacy shorthands, auto-upgraded to the Config shape above on load.
+
+### Source formats
+
+| `format` | read path | notes |
+|----------|-----------|-------|
+| `gpkg`, `geojson`, `gml`, `shp`, `flatgeobuf` | `ST_Read` | curve geometry (CircularString, CompoundCurve, ...) needs the `curves` extra to linearize |
+| `fgdb` | `ST_Read` | points at a `.gdb` folder; its geometry column is detected via a `DESCRIBE` fallback since `ST_Read_Meta` is unreliable on File Geodatabases |
+| `wfs` | GetFeature (GML) → temp `.gml` → `ST_Read` | `SRSNAME` is pinned to the source `crs` to avoid silent geometry corruption |
+| `arcgis_rest` | paged JSON → temp GeoJSON → `ST_Read` | always EPSG:4326; `page_size` caps the page size, `where` pushes a filter server-side |
+| `oapif` (OGC API - Features) | paged `/collections/{layer}/items` → temp GeoJSON → `ST_Read` | always EPSG:4326; supports `bbox`, `max_features`, and `page_size` |
+| `parquet` | DuckDB's native `read_parquet()` | bypasses GDAL entirely — the bundled GDAL build has no Parquet/Arrow driver |
+| `postgres` | DuckDB's `postgres` extension (`ATTACH ... TYPE postgres`) | not GDAL's PG driver; geometry comes back as hex-EWKB, parsed via `ST_GeomFromHEXWKB` |
+| `xlsx`, `csv` | `ST_Read` (tabular) | optional geometry from `x_field`+`y_field` (→ `ST_Point`) or `geom_field` (WKT or hex-WKB, auto-detected); `header_row` controls header detection |
+
+Every source also accepts an optional `make_valid: true` to repair invalid geometry via
+`ST_MakeValid` before it flows into any joins.
 
 ### Step types
 

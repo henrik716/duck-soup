@@ -80,6 +80,22 @@ def test_flatgeobuf_source_accepted():
     assert src.has_geometry
 
 
+def test_postgres_source_accepted():
+    src = Source(
+        id="parcels",
+        format="postgres",
+        uri="postgresql://user:pass@host:5432/dbname",
+        layer="public.parcels",
+        crs="EPSG:25833",
+    )
+    assert src.has_geometry
+
+
+def test_postgres_source_schemaless_layer_accepted():
+    src = Source(id="parcels", format="postgres", uri="postgresql://user:pass@host:5432/dbname", layer="parcels")
+    assert src.has_geometry
+
+
 def test_oapif_non_default_crs_rejected():
     with pytest.raises(ValidationError, match="always fetched in the default CRS84"):
         Source(id="fylker", format="oapif", uri="https://host/ogcapi", layer="fylker", crs="EPSG:25833")
@@ -270,6 +286,11 @@ def test_csv_x_y_fields_imply_geometry():
     assert src.has_geometry
 
 
+def test_xlsx_x_y_fields_imply_geometry():
+    src = Source(id="a", format="xlsx", uri="data/test_xy.xlsx", crs="EPSG:4326", x_field="lon", y_field="lat")
+    assert src.has_geometry
+
+
 def test_csv_geom_field_implies_geometry():
     src = Source(id="a", format="csv", uri="data/test_wkt.csv", crs="EPSG:4326", geom_field="geom_col")
     assert src.has_geometry
@@ -279,9 +300,9 @@ def test_plain_csv_has_no_geometry_by_default():
     assert Source(id="a", format="csv", uri="data/test_noheader.csv").has_geometry is False
 
 
-def test_geometry_fields_rejected_on_non_csv_format():
-    with pytest.raises(ValidationError, match="only apply to csv sources"):
-        Source(id="a", format="xlsx", uri="data/places.xlsx", x_field="lon", y_field="lat")
+def test_geometry_fields_rejected_on_non_xlsx_csv_format():
+    with pytest.raises(ValidationError, match="only apply to xlsx/csv"):
+        Source(id="a", format="geojson", uri="data/test.geojson", x_field="lon", y_field="lat")
 
 
 def test_x_field_without_y_field_rejected():

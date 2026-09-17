@@ -7,6 +7,7 @@ build), so it has its own geometry-column-detection path worth testing directly.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import duckdb
@@ -75,18 +76,53 @@ def test_read_expr_csv_x_y_fields_build_point_geometry(spatial_con):
 
     cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
     assert "geom" in cols
-    # KEEP_GEOM_COLUMNS=NO drops the raw x/y columns once they're consumed into geom.
+    # x_field/y_field are consumed into geom, not duplicated as attributes (_apply_tabular_geometry).
     assert "lon" not in cols and "lat" not in cols
 
     rows = spatial_con.execute(f"SELECT name, ST_AsText(geom) FROM {read} ORDER BY name").fetchall()
     assert ("Operahuset", "POINT (10.7527 59.9075)") in rows
 
 
+def test_read_expr_xlsx_x_y_fields_build_point_geometry(spatial_con):
+    # Geometry-from-columns isn't a GDAL open option here (the XLSX driver has none at all) —
+    # _apply_tabular_geometry builds it in SQL, so it works identically for xlsx as for csv.
+    src = Source(id="pts", format="xlsx", uri="data/test_xy.xlsx", crs="EPSG:4326", x_field="lon", y_field="lat")
+    read = read_expr(src, REPO_ROOT, con=spatial_con)
+
+    cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
+    assert "geom" in cols
+    assert "lon" not in cols and "lat" not in cols
+
+    # xlsx round-trips coordinates through IEEE754 binary floats (unlike csv's plain text),
+    # so compare numerically rather than the exact WKT string.
+    rows = spatial_con.execute(
+        f"SELECT name, round(ST_X(geom), 4), round(ST_Y(geom), 4) FROM {read} ORDER BY name"
+    ).fetchall()
+    assert ("Operahuset", 10.7527, 59.9075) in rows
+
+
 def test_read_expr_csv_geom_field_builds_geometry_from_wkt(spatial_con):
-    # The matched column ends up named identically to the derived geometry field (confirmed
-    # against GDAL's CSV driver source), so without KEEP_GEOM_COLUMNS=NO this would fail with
-    # a "duplicate column name" binder error rather than quietly doing the wrong thing.
     src = Source(id="pts", format="csv", uri="data/test_wkt.csv", crs="EPSG:4326", geom_field="geom_col")
+    read = read_expr(src, REPO_ROOT, con=spatial_con)
+
+    cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
+    assert "geom" in cols
+    assert "geom_col" not in cols
+
+    rows = spatial_con.execute(f"SELECT name, ST_AsText(geom) FROM {read} ORDER BY name").fetchall()
+    assert ("Operahuset", "POINT (10.7527 59.9075)") in rows
+
+
+def test_read_expr_xlsx_geom_field_builds_geometry_from_wkt(spatial_con):
+    # data/test_wkt.xlsx has only string columns ("name", "geom_col"), which is exactly the
+    # case GDAL's own AUTO header heuristic gets wrong for xlsx (a header row of plain text
+    # looks structurally identical to a data row of plain text) — confirmed empirically: read
+    # without header_row=True, GDAL treats the header itself as the first data row instead.
+    # So this exercises header_row and geom_field together, the way a real file would need.
+    src = Source(
+        id="pts", format="xlsx", uri="data/test_wkt.xlsx", crs="EPSG:4326",
+        header_row=True, geom_field="geom_col",
+    )
     read = read_expr(src, REPO_ROOT, con=spatial_con)
 
     cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
@@ -105,11 +141,33 @@ def test_read_expr_csv_header_row_false_treats_first_row_as_data(spatial_con):
     assert rows == [(1, "1", "apple"), (2, "2", "banana"), (3, "3", "cherry")]
 
 
+def test_read_expr_xlsx_header_row_false_treats_first_row_as_data(spatial_con):
+    # data/test_xy.xlsx has a genuine header row ("name", "lon", "lat") that GDAL's AUTO
+    # heuristic correctly picks up on its own (see the "none" test below) — header_row=False
+    # forces it to be read as a literal data row instead, proving the override actually
+    # takes effect rather than just matching what AUTO would have done anyway.
+    src = Source(id="pts", format="xlsx", uri="data/test_xy.xlsx", header_row=False)
+    read = read_expr(src, REPO_ROOT, con=spatial_con)
+
+    rows = {r[0] for r in spatial_con.execute(f"SELECT Field1 FROM {read}").fetchall()}
+    # The real header row ("name", "lon", "lat") shows up as an ordinary data value now,
+    # alongside the two actual data rows — proving the override actually took effect rather
+    # than just matching what AUTO would have picked anyway.
+    assert rows == {"name", "Operahuset", "Akershus Festning"}
+
+
 def test_read_expr_csv_header_row_none_leaves_gdal_auto_detection(spatial_con):
     # Baseline: without an explicit override, GDAL's own AUTO heuristic decides — for this
     # file (a genuine header row followed by non-numeric-looking data) it picks up "name" as
     # a real header rather than a data value.
     src = Source(id="pts", format="csv", uri="data/test_xy.csv", crs="EPSG:4326")
+    read = read_expr(src, REPO_ROOT, con=spatial_con)
+    cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
+    assert "name" in cols
+
+
+def test_read_expr_xlsx_header_row_none_leaves_gdal_auto_detection(spatial_con):
+    src = Source(id="pts", format="xlsx", uri="data/test_xy.xlsx", crs="EPSG:4326")
     read = read_expr(src, REPO_ROOT, con=spatial_con)
     cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
     assert "name" in cols
@@ -162,6 +220,66 @@ def test_parquet_geometry_info_normalizes_ogc_crs84_to_epsg_4326(spatial_con):
     name, crs = sources_mod.parquet_geometry_info(spatial_con, "data/test_crs84.parquet")
     assert name == "geometry"
     assert crs == "EPSG:4326"
+
+
+def test_read_expr_postgres_without_connection_raises():
+    # Unlike parquet, postgres has no con=None fallback — ATTACHing a database and reading
+    # its catalog both require a live DuckDB connection, so this should fail clearly rather
+    # than produce a SQL string that can never actually be executed.
+    src = Source(id="parcels", format="postgres", uri="postgresql://user:pass@host/db", layer="parcels")
+    with pytest.raises(ValueError, match="live DuckDB connection"):
+        read_expr(src, REPO_ROOT)
+
+
+# The tests below need a real PostGIS database to ATTACH to — there's no local-fixture-file
+# equivalent for a running database. Point DUCK_SOUP_TEST_PG_DSN at a libpq connection string
+# for a PostGIS instance with a table `duck_soup_test_pts(name text, geom geometry(Point, 4326))`
+# containing a row named 'Operahuset' to exercise them; they're skipped otherwise.
+_PG_DSN = os.environ.get("DUCK_SOUP_TEST_PG_DSN")
+_pg_skip = pytest.mark.skipif(not _PG_DSN, reason="set DUCK_SOUP_TEST_PG_DSN to run postgres source tests")
+
+
+@pytest.fixture()
+def postgres_con():
+    con = duckdb.connect()
+    con.execute("INSTALL postgres; LOAD postgres;")
+    try:
+        yield con
+    finally:
+        con.close()
+
+
+@_pg_skip
+def test_read_expr_postgres_reads_expected_rows_and_geometry(postgres_con):
+    src = Source(id="pts", format="postgres", uri=_PG_DSN, layer="duck_soup_test_pts", crs="EPSG:4326")
+    read = read_expr(src, REPO_ROOT, con=postgres_con)
+
+    cols = [c[0] for c in postgres_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
+    assert "geom" in cols
+
+    rows = postgres_con.execute(f"SELECT name FROM {read} WHERE name = 'Operahuset'").fetchall()
+    assert len(rows) == 1
+
+
+@_pg_skip
+def test_postgres_geometry_info_reports_column_and_srid(postgres_con):
+    alias = sources_mod.attach_postgres(postgres_con, _PG_DSN, "pts")
+    name, crs = sources_mod.postgres_geometry_info(postgres_con, alias, "public", "duck_soup_test_pts")
+    assert name == "geom"
+    assert crs == "EPSG:4326"
+
+
+@_pg_skip
+def test_read_expr_postgres_schema_qualified_layer_matches_unqualified(postgres_con):
+    # "public.duck_soup_test_pts" should resolve the same table as bare "duck_soup_test_pts".
+    src_qualified = Source(id="pts", format="postgres", uri=_PG_DSN, layer="public.duck_soup_test_pts")
+    src_bare = Source(id="pts2", format="postgres", uri=_PG_DSN, layer="duck_soup_test_pts")
+    read_q = read_expr(src_qualified, REPO_ROOT, con=postgres_con)
+    read_b = read_expr(src_bare, REPO_ROOT, con=postgres_con)
+    assert (
+        postgres_con.execute(f"SELECT count(*) FROM {read_q}").fetchone()
+        == postgres_con.execute(f"SELECT count(*) FROM {read_b}").fetchone()
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -7,6 +7,9 @@ both are fetched with pagination to a temporary GeoJSON file, which is then read
 with ST_Read like anything else. Parquet is the other exception: the GDAL build
 bundled with DuckDB's spatial extension has no Parquet/Arrow driver, so it's read
 with DuckDB's own native read_parquet() instead (see read_expr's `parquet` branch).
+postgres is a third exception, for the same reason: it's read via DuckDB's own
+postgres extension (ATTACH ... TYPE postgres) rather than GDAL's PG driver, which
+isn't part of the bundled spatial-extension GDAL build either.
 """
 from __future__ import annotations
 
@@ -299,6 +302,53 @@ def parquet_geometry_info(con: duckdb.DuckDBPyConnection, uri: str) -> tuple[str
     return None, None
 
 
+def _split_pg_layer(layer: str | None) -> tuple[str, str]:
+    """(schema, table) from a Source.layer value, defaulting schema to 'public'."""
+    if not layer:
+        raise ValueError("postgres sources require 'layer' to name a table (optionally 'schema.table')")
+    if "." in layer:
+        schema, _, table = layer.partition(".")
+        return schema, table
+    return "public", layer
+
+
+def attach_postgres(con: duckdb.DuckDBPyConnection, dsn: str, source_id: str) -> str:
+    """ATTACH a postgres connection string under a stable per-source alias, idempotently.
+
+    Aliased by source id (not by dsn) so re-running a pipeline against the same source
+    twice on one connection doesn't try to ATTACH the same alias twice, while different
+    postgres sources in one pipeline still get distinct catalogs.
+    """
+    alias = "pg_" + re.sub(r"\W", "_", source_id)
+    attached = {row[0] for row in con.execute("SELECT database_name FROM duckdb_databases()").fetchall()}
+    if alias not in attached:
+        con.execute(f"ATTACH {_sql_str(dsn)} AS {_sql_ident(alias)} (TYPE postgres)")
+    return alias
+
+
+def postgres_geometry_info(
+    con: duckdb.DuckDBPyConnection, alias: str, schema: str, table: str
+) -> tuple[str | None, str | None]:
+    """(geometry_column_name, EPSG:<srid>) for a table in an attached postgres catalog.
+
+    PostGIS registers every spatial table's geometry column in the `geometry_columns`
+    view; queried the same way as any other view through the attached catalog. Returns
+    (None, None) if the table has no geometry column (or isn't PostGIS-enabled at all).
+    """
+    try:
+        rows = con.execute(
+            f"SELECT f_geometry_column, srid FROM {_sql_ident(alias)}.public.geometry_columns "
+            f"WHERE f_table_schema = {_sql_str(schema)} AND f_table_name = {_sql_str(table)}"
+        ).fetchall()
+    except Exception:
+        return None, None
+    if not rows:
+        return None, None
+    name, srid = rows[0]
+    crs = f"EPSG:{srid}" if srid else None
+    return name, crs
+
+
 def _layer_geometry_field(con: duckdb.DuckDBPyConnection, uri: str, layer: str | None) -> dict | None:
     """Look up a layer's native geometry field (name + type) via ST_Read_Meta, without reading features."""
     try:
@@ -420,22 +470,19 @@ def _read_expr_normalized(
     "Column geom in EXCLUDE list not found in FROM clause" for any such source.
 
     `extra` (e.g. an `open_options=[...]` clause) only ever affects field *types* here, not
-    whether a geometry field exists — ST_Read_Meta (which the geometry-field lookup below
-    goes through) has no way to receive it and always opens the file with GDAL's bare
-    defaults, but that's fine for every caller of this function, none of which use `extra`
-    to conjure a geometry field into existence. See `_read_csv_geometry` for the one case
-    (csv X_POSSIBLE_NAMES/GEOM_POSSIBLE_NAMES) where the open options themselves are what
-    create the geometry field, which needs a different detection path entirely.
+    whether a geometry field exists — none of this function's callers use it to conjure a
+    geometry field into existence (see `_apply_tabular_geometry` for xlsx/csv geometry-from-
+    columns, which is deliberately built in SQL afterwards instead, precisely to avoid that).
 
-    ST_Read_Meta also isn't reliable for every *format* GDAL itself opens fine — confirmed
+    ST_Read_Meta isn't reliable for every *format* GDAL itself opens fine, though — confirmed
     empirically for a File Geodatabase (an Esri "NVE" gdb export): `ST_Read_Meta(path)`
     returned zero rows outright, even though `ST_Read(path)` opened its layer and read rows
     without complaint. When that happens, `_layer_geometry_field` comes back empty and this
     used to silently skip the rename, so engine.py's hard-coded `EXCLUDE (geom)` blew up on
     the real column name (e.g. Esri's `SHAPE`) with a binder error. Falling back to the same
-    DESCRIBE-based detection `_read_csv_geometry`/`parquet_geometry_info` already use covers
-    this — it's slightly more work than the metadata lookup, but only for the formats where
-    the metadata lookup already came back empty-handed.
+    DESCRIBE-based detection `parquet_geometry_info` already needs for Parquet covers this —
+    it's slightly more work than the metadata lookup, but only for the formats where the
+    metadata lookup already came back empty-handed.
     """
     base = _st_read(uri, layer=layer, extra=extra)
     if con is None:
@@ -467,50 +514,39 @@ def _header_open_option(fmt: str, header_row: bool) -> str:
     return "HEADERS=YES" if header_row else "HEADERS=NO"
 
 
-def _csv_geometry_open_options(src: Source) -> list[str]:
-    """GDAL CSV driver open options that turn plain columns into a geometry field.
+def _apply_tabular_geometry(base: str, src: Source) -> str:
+    """Wrap a plain tabular read (xlsx/csv, no native geometry) with a computed `geom`
+    column, for a source naming x/y or WKT/WKB columns via Source.x_field/y_field/geom_field.
 
-    XLSX has no equivalent — its driver is purely tabular, with no geometry-related open
-    options at all — so this is csv-only (see config.Source._check_geometry_fields_format).
+    This is deliberately *not* done via GDAL open options (X_POSSIBLE_NAMES/Y_POSSIBLE_NAMES/
+    GEOM_POSSIBLE_NAMES): those only exist on the CSV driver — XLSX's driver has no
+    geometry support at all, open options or otherwise — and even for csv they came with
+    real sharp edges: ST_Read_Meta has no `open_options` parameter, so it's blind to a field
+    that only exists because of them (needing a separate DESCRIBE-based detection path), and
+    GDAL's KEEP_GEOM_COLUMNS default duplicates the matched column under the same name as
+    the geometry field it derives, which DuckDB then refuses to `SELECT *` at all
+    ("duplicate column name") — confirmed empirically. Building the geometry directly in SQL
+    sidesteps all of that and works identically for both formats.
     """
-    opts = []
     if src.x_field and src.y_field:
-        opts.append(f"X_POSSIBLE_NAMES={src.x_field}")
-        opts.append(f"Y_POSSIBLE_NAMES={src.y_field}")
-    if src.geom_field:
-        opts.append(f"GEOM_POSSIBLE_NAMES={src.geom_field}")
-    if opts:
-        # Without this (GDAL's KEEP_GEOM_COLUMNS default is YES), GEOM_POSSIBLE_NAMES keeps
-        # the matched column as a regular attribute field *with the same name* as the
-        # geometry field GDAL derives from it, and DuckDB refuses to `SELECT *` a layer with
-        # two identically-named columns ("duplicate column name") — confirmed empirically.
-        # Dropping the raw column is also the more sensible default for X_POSSIBLE_NAMES/
-        # Y_POSSIBLE_NAMES: the source columns are consumed into `geom`, not duplicated —
-        # lon/lat can always be recovered downstream via the `lon`/`lat` mapping funcs
-        # (engine.py), which derive from geometry anyway.
-        opts.append("KEEP_GEOM_COLUMNS=NO")
-    return opts
-
-
-def _read_csv_geometry(uri: str, con: duckdb.DuckDBPyConnection | None, extra: str) -> str:
-    """Like `_read_expr_normalized`, but for a csv whose geometry field only exists because
-    of `extra`'s open options (X_POSSIBLE_NAMES/Y_POSSIBLE_NAMES or GEOM_POSSIBLE_NAMES).
-
-    `_read_expr_normalized` finds the geometry field via ST_Read_Meta, but ST_Read_Meta has
-    no `open_options` parameter at all (verified against duckdb-spatial's source) — it always
-    opens the file with GDAL's bare defaults, so it can never see a field that only appears
-    because of these options. DESCRIBEing the actual ST_Read(...) call instead and looking for
-    the GEOMETRY-typed column is the only way to find out what GDAL really produced — the same
-    workaround `parquet_geometry_info` already needs for Parquet, which has the identical
-    blind spot.
-    """
-    base = _st_read(uri, extra=extra)
-    if con is None:
+        x, y = _sql_ident(src.x_field), _sql_ident(src.y_field)
+        geom = f"ST_Point(TRY_CAST({x} AS DOUBLE), TRY_CAST({y} AS DOUBLE))"
+        exclude = f"{x}, {y}"
+    elif src.geom_field:
+        g = _sql_ident(src.geom_field)
+        # A hex-WKB string (e.g. PostGIS's extended WKB) and WKT text look nothing alike, so
+        # branch on whether it's pure hex digits — mirrors what GDAL's own GEOM_POSSIBLE_NAMES
+        # auto-detection distinguishes between (minus its GeoJSON-text branch: a single "one
+        # geometry column" xlsx/csv export is WKT or WKB in practice, not GeoJSON).
+        geom = (
+            f"CASE WHEN {g} IS NULL OR trim({g}) = '' THEN NULL "
+            f"WHEN regexp_matches({g}, '^[0-9A-Fa-f]+$') THEN ST_GeomFromHEXWKB({g}) "
+            f"ELSE CAST({g} AS GEOMETRY) END"
+        )
+        exclude = g
+    else:
         return base
-    name = _geometry_column_via_describe(con, base)
-    if not name or name == "geom":
-        return base
-    return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
+    return f"(SELECT * EXCLUDE ({exclude}), {geom} AS geom FROM {base})"
 
 
 def read_expr(
@@ -558,19 +594,34 @@ def read_expr(
             return base
         return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
 
+    if fmt == "postgres":
+        # No GDAL involved at all here either — see module docstring.
+        if con is None:
+            raise ValueError(f"source '{src.id}': postgres sources require a live DuckDB connection")
+        schema, table = _split_pg_layer(src.layer)
+        alias = attach_postgres(con, src.uri, src.id)
+        base = f"{_sql_ident(alias)}.{_sql_ident(schema)}.{_sql_ident(table)}"
+        geom_col, _crs = postgres_geometry_info(con, alias, schema, table)
+        if not geom_col:
+            return base
+        g = _sql_ident(geom_col)
+        # The postgres extension doesn't recognize PostGIS's `geometry` type, so it comes
+        # through as VARCHAR hex-EWKB text (PostGIS's default text output for that column) —
+        # ST_GeomFromHEXWKB parses that directly, same as the xlsx/csv geom_field branch below.
+        geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE ST_GeomFromHEXWKB({g}) END"
+        return f"(SELECT * EXCLUDE ({g}), {geom} AS geom FROM {base})"
+
     if fmt in ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv"):
         # GDAL picks the driver from the path/extension; layer/sheet is optional.
         uri, layer = src.uri, src.layer
         if fmt in ("gpkg", "fgdb", "gml"):
             uri, layer = _maybe_linearize(uri, layer, workdir, src.id, con, log)
-        open_opts: list[str] = []
+        extra = ""
         if fmt in ("xlsx", "csv") and src.header_row is not None:
-            open_opts.append(_header_open_option(fmt, src.header_row))
-        csv_geom_opts = _csv_geometry_open_options(src) if fmt == "csv" else []
-        open_opts += csv_geom_opts
-        extra = _open_options_arg(open_opts)
-        if csv_geom_opts:
-            return _read_csv_geometry(uri, con, extra)
-        return _read_expr_normalized(uri, layer, con, extra=extra)
+            extra = _open_options_arg([_header_open_option(fmt, src.header_row)])
+        base = _read_expr_normalized(uri, layer, con, extra=extra)
+        if fmt in ("xlsx", "csv") and (src.x_field or src.geom_field):
+            base = _apply_tabular_geometry(base, src)
+        return base
 
     raise ValueError(f"unsupported source format: {fmt}")

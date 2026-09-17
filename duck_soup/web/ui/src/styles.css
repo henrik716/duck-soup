@@ -217,16 +217,25 @@ h2.block-title b { color: var(--ink); font-weight: 700; }
   width: 14px; height: 14px; color: var(--muted); pointer-events: none; transition: var(--transition);
 }
 .combo-list {
-  display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40;
+  /* Sized off its content (not the trigger input) so a narrow input — like the 95px
+     value-source column in the mapping table — doesn't force its two-part option labels
+     to wrap into a barely-readable vertical stack. min-width keeps it at least as wide as
+     the input; max-width stops a long description from stretching it across the panel. */
+  display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 40;
+  min-width: 100%; width: max-content; max-width: 300px;
   background: var(--panel2-solid); border: 1px solid var(--line); border-radius: var(--radius-sm);
   box-shadow: var(--shadow); max-height: 200px; overflow-y: auto; padding: 4px;
 }
 .combo-list.open { display: block; }
 .combo-option {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   padding: 7px 10px; font-family: var(--mono); font-size: 12.5px; color: var(--ink);
   border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition);
 }
 .combo-option:hover { background: var(--accent-soft); color: var(--accent-hover); }
+/* The tag/description half of a two-part option label (see cards/map-row.ts, schema.ts) —
+   flex, not float, so a wrapped tag stays inside the hoverable box instead of overflowing it. */
+.combo-option [data-tag] { flex: 1 1 auto; min-width: 0; text-align: right; }
 
 label.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted);
   font-family: var(--mono); letter-spacing: .04em; flex: 1 1 120px; }
@@ -604,9 +613,7 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
   width: 100%;
   height: 100%;
   z-index: 1;
-}
-.leaflet-container {
-  background: var(--void) !important;
+  background: var(--void);
 }
 
 /* ---- pipeline card ---- */
@@ -1003,112 +1010,115 @@ th.sortable.sorted-desc .sort-indicator {
 .log-line.bad { color: var(--warn); }
 .log-line.ok { color: var(--ok); }
 
-/* ---- Custom Leaflet Controls Styles ---- */
-.leaflet-control-layers {
+/* ---- Custom MapLibre Controls Styles ---- */
+.map-base-switcher {
+  display: flex !important;
   background: var(--panel) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
   border: 1px solid var(--line) !important;
   border-radius: var(--radius-md) !important;
-  color: var(--ink) !important;
-  font-family: var(--display) !important;
   box-shadow: var(--shadow) !important;
+  overflow: hidden;
 }
-.leaflet-control-layers-toggle {
-  background-color: rgba(21, 17, 46, 0.8) !important;
-  border-radius: var(--radius-sm) !important;
-  border: 1px solid var(--line) !important;
-  filter: invert(0.9) hue-rotate(180deg) !important; /* Make standard layer icon match the theme */
-}
-.leaflet-control-layers-toggle:hover {
-  background-color: var(--accent-soft) !important;
-  border-color: var(--accent) !important;
-}
-.leaflet-control-layers-expanded {
-  padding: 8px 12px !important;
-  background: var(--panel-solid) !important;
-}
-.leaflet-control-layers-selector {
-  accent-color: var(--accent) !important;
-  margin-right: 6px !important;
-  cursor: pointer;
-}
-.leaflet-control-layers-list label {
-  cursor: pointer;
-  display: block;
-  padding: 2px 0;
+.map-base-switcher button {
+  background: none;
+  border: none;
+  border-right: 1px solid var(--line);
   color: var(--muted);
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
   transition: var(--transition);
 }
-.leaflet-control-layers-list label:hover {
-  color: var(--ink);
+.map-base-switcher button:last-child {
+  border-right: none;
+}
+.map-base-switcher button:hover {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+.map-base-switcher button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 /* Custom Popup Styling */
-.leaflet-popup-pane {
-  /* #map-toolbar (index.html) floats over the map at z-index:1000, outside Leaflet's pane
-     stack (default popup pane is 700) — without this a popup opened near the top-left corner
-     renders underneath the toolbar instead of on top of it. */
-  z-index: 1001 !important;
+.maplibregl-popup {
+  /* #map-toolbar (index.html) floats over the map at z-index:1000 — without this a popup
+     opened near the top-left corner renders underneath the toolbar instead of on top of it. */
+  z-index: 1001;
 }
-.leaflet-popup-content-wrapper {
+.maplibregl-popup-content {
   background: var(--panel-solid) !important;
   border: 1px solid var(--line) !important;
   border-radius: var(--radius-md) !important;
   color: var(--ink) !important;
   font-family: var(--display) !important;
   box-shadow: var(--shadow) !important;
+  padding: 12px 16px !important;
 }
-.leaflet-popup-content {
-  margin: 12px 16px !important;
-  /* No fixed max-height here — map.ts sets Leaflet's own `maxHeight` popup option per popup,
-     sized to the map container's actual current height (which varies with panel/window size),
-     and toggles this overflow via its `.leaflet-popup-scrolled` class. A hardcoded cap here
-     would either clip content that still had room, or fail to cap it on a short map. */
-  overflow-y: auto;
+.preview-popup-body {
   font-size: 13px;
   line-height: 1.6;
   color: var(--ink);
 }
-.leaflet-popup-content strong {
+.maplibregl-popup-content strong {
   color: var(--accent);
   font-weight: 600;
 }
-.leaflet-popup-tip {
-  background: var(--panel-solid) !important;
-  box-shadow: none !important;
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--panel-solid) !important;
 }
-.leaflet-popup-close-button {
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--panel-solid) !important;
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--panel-solid) !important;
+}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--panel-solid) !important;
+}
+.maplibregl-popup-close-button {
   color: var(--muted) !important;
 }
-.leaflet-popup-close-button:hover {
+.maplibregl-popup-close-button:hover {
   color: var(--ink) !important;
+  background: none !important;
 }
 
 /* Custom Zoom Control Styling */
-.leaflet-control-zoom.leaflet-bar {
+.maplibregl-ctrl-group {
   border: 1px solid var(--line) !important;
   border-radius: var(--radius-sm) !important;
   overflow: hidden;
   box-shadow: var(--shadow) !important;
+  background: none !important;
 }
-.leaflet-control-zoom a {
+.maplibregl-ctrl-group button {
   background: var(--panel) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  color: var(--ink) !important;
   border-bottom: 1px solid var(--line) !important;
-  font-family: var(--display) !important;
-  font-weight: bold !important;
 }
-.leaflet-control-zoom a:hover {
+.maplibregl-ctrl-group button:hover {
   background: var(--accent-soft) !important;
-  color: var(--accent-hover) !important;
 }
-.leaflet-control-zoom a.leaflet-disabled {
+.maplibregl-ctrl-group button:last-child {
+  border-bottom: none !important;
+}
+.maplibregl-ctrl-group button:disabled {
   background: var(--panel) !important;
-  color: var(--muted) !important;
   opacity: 0.4;
+}
+.maplibregl-ctrl-icon {
+  filter: invert(0.9) hue-rotate(180deg) !important; /* Make standard MapLibre icons match the theme */
 }
 
 /* ---- Collapsible cards ---- */

@@ -162,12 +162,12 @@ export function updateDatalistsScoped(scope: Element): void {
     if (c.origin === 'base') {
       return {
         value: c.name,
-        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span style="float:right;font-size:10px;color:var(--muted);background:rgba(255,255,255,0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;margin-left:8px;">${esc(c.type || 'unknown')} [base]</span>`
+        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgba(255,255,255,0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')} [base]</span>`
       }
     }
     return {
       value: c.name,
-      label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span style="float:right;font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(139,108,255,0.2);padding:1px 4px;border-radius:3px;margin-left:8px;">${esc(c.origin)}</span>`
+      label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(139,108,255,0.2);padding:1px 4px;border-radius:3px;">${esc(c.origin)}</span>`
     }
   })
 
@@ -184,7 +184,7 @@ export function updateDatalistsScoped(scope: Element): void {
           <i data-lucide="plus" style="width: 11px; height: 11px; color: var(--muted); opacity: 0.7; transition: color 0.2s;"></i>
           <span style="font-family: var(--mono); color: var(--ink);">${esc(opt.value)}</span>
         </span>
-        ${opt.label ? opt.label.substring(opt.label.indexOf('<span style="float:right;')) : ''}
+        ${opt.label ? opt.label.substring(opt.label.indexOf('<span data-tag')) : ''}
       `
 
       fieldEl.addEventListener('mouseenter', () => {
@@ -250,7 +250,7 @@ export function updateDatalistsScoped(scope: Element): void {
 
       const stepColOptions: ComboOptionDef[] = cols.map(c => ({
         value: c.name,
-        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span style="float:right;font-size:10px;color:var(--muted);background:rgba(255,255,255,0.05);padding:1px 4px;border-radius:3px;margin-left:8px;">${esc(c.type || 'unknown')}</span>`
+        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgba(255,255,255,0.05);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')}</span>`
       }))
 
       setComboOptions(sel, stepColOptions, emptyText)
@@ -288,7 +288,7 @@ function badgedSourceOptions(scope: Element): ComboOptionDef[] {
     const b = SOURCE_KIND_BADGE[kind]!
     return {
       value: id,
-      label: `<span style="font-family:var(--mono);">${esc(id)}</span> <span style="float:right;font-size:10px;color:${b.color};background:${b.bg};border:1px solid ${b.border};padding:1px 4px;border-radius:3px;margin-left:8px;">${b.text}</span>`,
+      label: `<span style="font-family:var(--mono);">${esc(id)}</span> <span data-tag style="font-size:10px;color:${b.color};background:${b.bg};border:1px solid ${b.border};padding:1px 4px;border-radius:3px;">${b.text}</span>`,
     }
   })
 }

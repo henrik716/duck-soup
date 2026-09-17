@@ -27,10 +27,14 @@ SOURCE_FORMATS = [
     "fgdb",       # Esri File Geodatabase (.gdb folder)
     "shp",        # Shapefile
     "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
+    "postgres",   # PostgreSQL/PostGIS table, read via DuckDB's postgres extension
 ]
 
 # Formats that carry geometry by default.
-SPATIAL_FORMATS = {"gpkg", "geojson", "gml", "fgdb", "wfs", "arcgis_rest", "oapif", "parquet", "flatgeobuf", "shp"}
+SPATIAL_FORMATS = {
+    "gpkg", "geojson", "gml", "fgdb", "wfs", "arcgis_rest", "oapif", "parquet", "flatgeobuf", "shp",
+    "postgres",
+}
 
 JOIN_PREDICATES = ["intersects", "contains", "within"]
 
@@ -55,8 +59,11 @@ OptionalCRSStr = Annotated[Optional[str], AfterValidator(_check_crs_format)]
 class Source(BaseModel):
     id: str = Field(..., description="Unique handle used to reference this source")
     format: Literal[tuple(SOURCE_FORMATS)]  # type: ignore[valid-type]
-    uri: str = Field(..., description="File path, folder (.gdb), or service URL")
-    layer: Optional[str] = Field(None, description="Layer / typename / sheet / collection name / ArcGIS sublayer id")
+    uri: str = Field(..., description="File path, folder (.gdb), service URL, or postgres connection string")
+    layer: Optional[str] = Field(
+        None,
+        description="Layer / typename / sheet / collection name / ArcGIS sublayer id / postgres table (optionally schema.table)",
+    )
     crs: OptionalCRSStr = Field(None, description="CRS of the source, e.g. EPSG:4326")
     geometry: Optional[bool] = Field(
         None, description="Override whether this source has geometry"
@@ -71,10 +78,10 @@ class Source(BaseModel):
     header_row: Optional[bool] = Field(
         None, description="Treat the first row as column headers (xlsx/csv only); omit to auto-detect"
     )
-    # csv-only: build geometry out of otherwise-plain columns
-    x_field: Optional[str] = Field(None, description="Column holding X / longitude (csv only, builds point geometry)")
-    y_field: Optional[str] = Field(None, description="Column holding Y / latitude (csv only, builds point geometry)")
-    geom_field: Optional[str] = Field(None, description="Column holding WKT/WKB/GeoJSON geometry (csv only)")
+    # xlsx/csv-only: build geometry out of otherwise-plain columns
+    x_field: Optional[str] = Field(None, description="Column holding X / longitude (xlsx/csv only, builds point geometry)")
+    y_field: Optional[str] = Field(None, description="Column holding Y / latitude (xlsx/csv only, builds point geometry)")
+    geom_field: Optional[str] = Field(None, description="Column holding WKT/WKB geometry (xlsx/csv only)")
 
     @property
     def has_geometry(self) -> bool:
@@ -126,9 +133,9 @@ class Source(BaseModel):
 
     @model_validator(mode="after")
     def _check_geometry_fields_format(self):
-        if (self.x_field or self.y_field or self.geom_field) and self.format != "csv":
+        if (self.x_field or self.y_field or self.geom_field) and self.format not in ("xlsx", "csv"):
             raise ValueError(
-                f"source '{self.id}': 'x_field'/'y_field'/'geom_field' only apply to csv sources"
+                f"source '{self.id}': 'x_field'/'y_field'/'geom_field' only apply to xlsx/csv sources"
             )
         if (self.x_field is None) != (self.y_field is None):
             raise ValueError(
