@@ -20,14 +20,25 @@ No repo clone needed — pick one:
 # so pipelines/, data/, output/ etc. are read from and written to it
 docker run -p 8000:8000 -v "$PWD":/data ghcr.io/henrik716/duck-soup
 
-# or: pip / pipx (needs Python 3.11+)
-pipx install duck-soup-etl
+# or: pip (needs Python 3.11+)
+pip install duck-soup-etl
 duck-soup serve
 ```
 
 Then open http://localhost:8000. Internet access is needed on first run so DuckDB
 can download its `spatial` extension. See "Install" below for a from-source setup
 (needed if you want to modify the code or frontend).
+
+If `duck-soup serve` isn't found after a `pip install`, it's a PATH issue, not a
+broken install: `pip` installs the console script into a per-user (or venv)
+`Scripts`/`bin` directory that isn't always on `PATH` by default (Windows-per-user
+installs especially). Either add that directory to `PATH` (`pip` prints its
+location as a warning when this happens), or sidestep it entirely by running the
+module directly, which always works regardless of `PATH`:
+
+```bash
+python -m duck_soup.cli serve
+```
 
 ## Key Features
 
