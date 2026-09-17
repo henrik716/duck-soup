@@ -22,12 +22,12 @@ SOURCE_FORMATS = [
     "gml",        # GML / INSPIRE
     "flatgeobuf", # FlatGeobuf
     "parquet",    # (Geo)Parquet
+    "postgres",   # PostgreSQL/PostGIS table, read via DuckDB's postgres extension
     "csv",        # CSV (tabular, no geometry)
     "xlsx",       # Excel sheet (tabular, no geometry)
     "fgdb",       # Esri File Geodatabase (.gdb folder)
     "shp",        # Shapefile
     "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
-    "postgres",   # PostgreSQL/PostGIS table, read via DuckDB's postgres extension
 ]
 
 # Formats that carry geometry by default.

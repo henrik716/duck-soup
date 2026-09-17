@@ -197,6 +197,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
             <button type="button" class="template-btn" data-fmt="wfs"><i data-lucide="network"></i> WFS</button>
             <button type="button" class="template-btn" data-fmt="flatgeobuf"><i data-lucide="file-code"></i> FlatGeobuf</button>
             <button type="button" class="template-btn" data-fmt="parquet"><i data-lucide="server"></i> Parquet</button>
+            <button type="button" class="template-btn" data-fmt="postgres" title="PostgreSQL / PostGIS"><i data-lucide="database-zap"></i> Postgres</button>
             <button type="button" class="template-btn" data-fmt="csv"><i data-lucide="file-text"></i> CSV</button>
             <button type="button" class="template-btn" data-fmt="xlsx"><i data-lucide="file-spreadsheet"></i> Excel</button>
             <button type="button" class="template-btn" data-fmt="fgdb"><i data-lucide="database"></i> FileGDB</button>

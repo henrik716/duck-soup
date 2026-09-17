@@ -1,4 +1,4 @@
-import { createIcons, Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera } from 'lucide'
+import { createIcons, Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera, DatabaseZap } from 'lucide'
 import type { Config } from './types'
 import { esc } from './dom'
 
@@ -23,6 +23,8 @@ function getSourceIcon(format: string): { icon: string; color: string } {
       return { icon: 'database', color: '#9d85ff' }
     case 'parquet':
       return { icon: 'server', color: '#a07aff' }
+    case 'postgres':
+      return { icon: 'database-zap', color: '#4dabf7' }
     case 'geojson':
     case 'gml':
     case 'shp':
@@ -311,7 +313,7 @@ export function updateLineageDiagram(cfg: Config): void {
   // Attach hover interactivity to paths & nodes globally
   setupGlobalHoverEffects(outer)
 
-  createIcons({ icons: { Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera } })
+  createIcons({ icons: { Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera, DatabaseZap } })
 }
 
 function drawPaths(outer: HTMLElement, cfg: Config): void {
