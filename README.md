@@ -188,7 +188,7 @@ pipelines:
 
     sources:
       - id: ducks                # unique handle
-        format: gpkg              # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|xlsx|csv
+        format: gpkg              # gpkg|geojson|gml|fgdb|shp|wfs|arcgis_rest|parquet|flatgeobuf|xlsx|csv
         uri: data/Ducks.gpkg      # path, .gdb folder, or service URL
         layer: Ducks              # layer / WFS typename / sheet name
         crs: EPSG:4326

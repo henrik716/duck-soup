@@ -21,14 +21,16 @@ SOURCE_FORMATS = [
     "fgdb",       # Esri File Geodatabase (.gdb folder)
     "wfs",        # OGC WFS endpoint
     "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
+    "oapif",      # OGC API - Features endpoint
     "parquet",    # (Geo)Parquet
+    "flatgeobuf", # FlatGeobuf
     "shp",        # Shapefile
     "xlsx",       # Excel sheet (tabular, no geometry)
     "csv",        # CSV (tabular, no geometry)
 ]
 
 # Formats that carry geometry by default.
-SPATIAL_FORMATS = {"gpkg", "geojson", "gml", "fgdb", "wfs", "arcgis_rest", "parquet", "shp"}
+SPATIAL_FORMATS = {"gpkg", "geojson", "gml", "fgdb", "wfs", "arcgis_rest", "oapif", "parquet", "flatgeobuf", "shp"}
 
 JOIN_PREDICATES = ["intersects", "contains", "within"]
 
@@ -54,7 +56,7 @@ class Source(BaseModel):
     id: str = Field(..., description="Unique handle used to reference this source")
     format: Literal[tuple(SOURCE_FORMATS)]  # type: ignore[valid-type]
     uri: str = Field(..., description="File path, folder (.gdb), or service URL")
-    layer: Optional[str] = Field(None, description="Layer / typename / sheet name")
+    layer: Optional[str] = Field(None, description="Layer / typename / sheet / collection name / ArcGIS sublayer id")
     crs: OptionalCRSStr = Field(None, description="CRS of the source, e.g. EPSG:4326")
     geometry: Optional[bool] = Field(
         None, description="Override whether this source has geometry"
@@ -64,12 +66,22 @@ class Source(BaseModel):
     )
     # ArcGIS REST tuning
     where: str = Field("1=1", description="ArcGIS REST 'where' filter")
-    page_size: int = Field(2000, description="ArcGIS REST records per request")
+    page_size: int = Field(2000, description="Records per request (ArcGIS REST) or per page (OGC API - Features)")
+    # xlsx/csv tuning
+    header_row: Optional[bool] = Field(
+        None, description="Treat the first row as column headers (xlsx/csv only); omit to auto-detect"
+    )
+    # csv-only: build geometry out of otherwise-plain columns
+    x_field: Optional[str] = Field(None, description="Column holding X / longitude (csv only, builds point geometry)")
+    y_field: Optional[str] = Field(None, description="Column holding Y / latitude (csv only, builds point geometry)")
+    geom_field: Optional[str] = Field(None, description="Column holding WKT/WKB/GeoJSON geometry (csv only)")
 
     @property
     def has_geometry(self) -> bool:
         if self.geometry is not None:
             return self.geometry
+        if (self.x_field and self.y_field) or self.geom_field:
+            return True
         return self.format in SPATIAL_FORMATS
 
     @model_validator(mode="after")
@@ -78,6 +90,53 @@ class Source(BaseModel):
             raise ValueError(
                 f"source '{self.id}': arcgis_rest is always fetched as EPSG:4326; "
                 f"remove 'crs: {self.crs}' or set it to EPSG:4326"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_arcgis_rest_layer_uri(self):
+        if self.format == "arcgis_rest" and self.layer:
+            from urllib.parse import urlparse
+            last = urlparse(self.uri).path.rstrip("/").rsplit("/", 1)[-1]
+            if last.isdigit():
+                raise ValueError(
+                    f"source '{self.id}': uri already ends in a sublayer id "
+                    f"('.../{last}') and 'layer' is also set ('{self.layer}') — "
+                    "remove 'layer' (uri is the full layer endpoint) or strip "
+                    "the trailing id from uri (uri is the service root)"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _check_oapif_crs(self):
+        if self.format == "oapif" and self.crs not in (None, "EPSG:4326"):
+            raise ValueError(
+                f"source '{self.id}': oapif is always fetched in the default CRS84 "
+                f"(EPSG:4326) response; remove 'crs: {self.crs}' or set it to EPSG:4326"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_header_row_format(self):
+        if self.header_row is not None and self.format not in ("xlsx", "csv"):
+            raise ValueError(
+                f"source '{self.id}': 'header_row' only applies to xlsx/csv sources"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_geometry_fields_format(self):
+        if (self.x_field or self.y_field or self.geom_field) and self.format != "csv":
+            raise ValueError(
+                f"source '{self.id}': 'x_field'/'y_field'/'geom_field' only apply to csv sources"
+            )
+        if (self.x_field is None) != (self.y_field is None):
+            raise ValueError(
+                f"source '{self.id}': 'x_field' and 'y_field' must be set together"
+            )
+        if self.geom_field and (self.x_field or self.y_field):
+            raise ValueError(
+                f"source '{self.id}': set either 'geom_field' or 'x_field'/'y_field', not both"
             )
         return self
 
@@ -411,8 +470,29 @@ class Pipeline(BaseModel):
                 raise ValueError(f"step references unknown source '{st.source}'")
         return self
 
+    @model_validator(mode="after")
+    def _check_no_geom_mapping(self):
+        base_src = next((s for s in self.sources if s.id == self.base), None)
+        if base_src is None or not base_src.has_geometry:
+            return self
+        mappings = [self.mapping]
+        for out in self.outputs:
+            mappings.extend(layer.mapping for layer in out.layers if layer.mapping)
+        if any(m.to == "geom" for mapping in mappings for m in mapping):
+            raise ValueError(
+                "mapping target 'geom' is reserved for the output geometry "
+                "column (added automatically); rename this mapping entry"
+            )
+        return self
+
     def source(self, sid: str) -> Source:
-        return next(s for s in self.sources if s.id == sid)
+        src = next((s for s in self.sources if s.id == sid), None)
+        if src is None:
+            # `base` (and derived_source `from`) are allowed to be blank/stale while a
+            # pipeline is still being edited — see _check_refs's `self.base and` guard —
+            # so this is only caught here, once something actually tries to run with it.
+            raise ValueError(f"unknown source '{sid}'" if sid else "no base source selected")
+        return src
 
     @property
     def base_source(self) -> Source:
@@ -502,6 +582,19 @@ class PipelineDef(BaseModel):
             # Skip empty-string source — step is still being configured in the editor.
             if hasattr(st, 'source') and st.source and st.source not in ids:
                 raise ValueError(f"step references unknown source '{st.source}'")
+        return self
+
+    @model_validator(mode="after")
+    def _check_no_geom_mapping(self):
+        base_src = next((s for s in self.sources if s.id == self.base), None)
+        if base_src is None or not base_src.has_geometry:
+            return self
+        mappings = [self.mapping] + [layer.mapping for layer in self.layers if layer.mapping]
+        if any(m.to == "geom" for mapping in mappings for m in mapping):
+            raise ValueError(
+                "mapping target 'geom' is reserved for the output geometry "
+                "column (added automatically); rename this mapping entry"
+            )
         return self
 
     def to_pipeline(self, output_path: str) -> Pipeline:

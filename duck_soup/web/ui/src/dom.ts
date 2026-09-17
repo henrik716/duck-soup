@@ -7,7 +7,7 @@ import {
   UploadCloud, Filter as FilterIcon, Combine, GitBranch, Camera,
   Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
   FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
-  Columns2, Sparkles, Network, MapPinned, FileText, Edit3
+  Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star
 } from 'lucide'
 
 // Superset of icons used across form-card modules; refreshed wholesale after
@@ -20,7 +20,7 @@ export const appIcons = {
   UploadCloud, Filter: FilterIcon, Combine, GitBranch, Camera,
   Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
   FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
-  Columns2, Sparkles, Network, MapPinned, FileText, Edit3
+  Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star
 }
 
 export const qs = <T extends Element = Element>(sel: string, root: Document | Element = document): T | null =>

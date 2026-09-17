@@ -43,6 +43,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 **`sources.py`** — Translates a `Source` config into a SQL table expression. Most formats produce `ST_Read(...)` strings via `_st_read()`. Exceptions:
 - `arcgis_rest`: paged HTTP → temp GeoJSON → `ST_Read`
 - `wfs`: HTTP GetFeature (GML/3.2) → temp `.gml` → `ST_Read`
+- `parquet`: DuckDB's native `read_parquet()`, not `ST_Read` — the GDAL build bundled with the `spatial` extension has no Parquet/Arrow driver
 
 **`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. Spatial joins use `LATERAL … LIMIT 1` (first match). Attribute joins are 1:1 left joins. Nearest-neighbor joins use `LATERAL … ORDER BY ST_Distance(...) LIMIT 1`, optionally filtered by `ST_DWithin` when `max_distance` is set. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`.
 
@@ -52,7 +53,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 
 **`web/app.py`** — FastAPI backend. Key endpoints:
 - `POST /api/inspect` — `DESCRIBE SELECT * FROM <read_expr>` to get column schema
-- `POST /api/inspect_file` — WFS uses HTTP GetCapabilities + XML parse; everything else uses `ST_Read_Meta()`
+- `POST /api/inspect_file` — WFS uses HTTP GetCapabilities + XML parse, OGC API - Features (`oapif`) lists `/collections` as JSON; everything else uses `ST_Read_Meta()`
 - `POST /api/preview` — runs the pipeline up to the mapped view, returns 50 rows (no geometry)
 - `POST /api/run` — executes the full pipeline async via `asyncio.to_thread`
 
@@ -67,7 +68,7 @@ name: my_pipeline
 working_crs: EPSG:25833      # all joins happen in this CRS
 sources:
   - id: places
-    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | parquet | shp | xlsx | csv
+    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv
     uri: data/places.geojson
     layer: places             # layer / typename / sheet name
     crs: EPSG:4326

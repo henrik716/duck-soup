@@ -18,7 +18,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="schema-badge" style="margin-left:8px;"></span>
       <span class="spacer"></span>
-      <button type="button" class="mini ghost set-base-btn" data-set-base title="Set as base source" aria-label="Set as base source" aria-pressed="false"><i data-lucide="star" style="width:12px;height:12px"></i></button>
+      <button type="button" class="mini ghost set-base-btn" data-set-base title="Set as base source" aria-label="Set as base source" aria-pressed="false"><i data-lucide="star" style="width:12px;height:12px"></i> base</button>
       <button class="mini danger ghost" data-del aria-label="Remove this source"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
       <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;margin-left:8px;"></i>
     </div>
@@ -28,17 +28,17 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
         <span></span>
       </div>
       <div class="row">
-        <label class="field grow">id<input data-k="id" placeholder="ambassader"></label>
+        <label class="field grow">id<input data-k="id" placeholder="places"></label>
         <label class="field grow">format<span class="auto-chip" data-auto-format hidden>from extension</span>${comboField('data-k="format"', s.format ?? '', META.formats)}</label>
       </div>
       <label class="field" style="margin-top:8px">uri / path / url
         <div style="display:flex;gap:6px">
-          <input data-k="uri" placeholder="data/Ambassader.gpkg" style="flex:1">
+          <input data-k="uri" placeholder="data/places.gpkg" data-uri-placeholder style="flex:1">
           <button type="button" class="mini ghost data-browse-btn" title="Browse files" style="padding:10px;flex-shrink:0"><i data-lucide="folder"></i></button>
         </div>
       </label>
       <div class="row" style="margin-top:8px">
-        <label class="field grow">layer / typename / sheet
+        <label class="field grow">layer / typename / sheet / collection
           ${comboField('data-k="layer"', s.layer ?? '', [], '—')}
         </label>
         <label class="field grow">crs<span class="auto-chip" data-auto-crs hidden>detected</span><input data-k="crs" placeholder="EPSG:4326"></label>
@@ -46,7 +46,39 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           <span style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui;white-space:nowrap">
             <input type="checkbox" data-k="make_valid" checked style="width:auto;margin:0"> repair invalid geometry</span></label>
       </div>
-      <p class="hint" data-arcgis style="display:none">ArcGIS REST: uri = layer endpoint (…/FeatureServer/0). Geometry fetched as EPSG:4326.</p>
+      <div class="row" data-header-row style="display:none; margin-top:8px;">
+        <label class="field grow">header row
+          <select data-k="header_row">
+            <option value="">auto-detect</option>
+            <option value="true">first row is headers</option>
+            <option value="false">no header row</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" data-csv-geom style="display:none; margin-top:8px;">
+        <label class="field grow">geometry
+          <select data-geom-mode>
+            <option value="">none (tabular only)</option>
+            <option value="xy">point from X / Y columns</option>
+            <option value="wkt">WKT / WKB column</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" data-csv-geom-xy style="display:none; margin-top:8px;">
+        <label class="field grow">X / longitude column
+          ${comboField('data-k="x_field"', s.x_field ?? '', [], '—')}
+        </label>
+        <label class="field grow">Y / latitude column
+          ${comboField('data-k="y_field"', s.y_field ?? '', [], '—')}
+        </label>
+      </div>
+      <div class="row" data-csv-geom-wkt style="display:none; margin-top:8px;">
+        <label class="field grow">WKT / WKB column
+          ${comboField('data-k="geom_field"', s.geom_field ?? '', [], '—')}
+        </label>
+      </div>
+      <p class="hint" data-arcgis style="display:none">ArcGIS REST: uri = the service root (…/MapServer or …/FeatureServer, no trailing id). Pick the sublayer below. Geometry fetched as EPSG:4326.</p>
+      <p class="hint" data-oapif style="display:none">OGC API - Features: uri = the API root (e.g. https://host) — not an /items URL. Pick the collection below.</p>
       <div class="schema-list" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--line);padding-top:6px;"></div>
     </div>`
 
@@ -86,13 +118,79 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   })
 
   const fmt = c.querySelector<HTMLInputElement>('[data-k="format"]')!
+
+  const URI_PLACEHOLDERS: Record<string, string> = {
+    gpkg: 'data/places.gpkg',
+    geojson: 'data/places.geojson',
+    gml: 'data/places.gml',
+    fgdb: 'data/places.gdb',
+    wfs: 'https://example.com/geoserver/wfs',
+    arcgis_rest: 'https://example.com/arcgis/rest/services/Places/FeatureServer',
+    oapif: 'https://example.com',
+    parquet: 'data/places.parquet',
+    flatgeobuf: 'data/places.fgb',
+    shp: 'data/places.shp',
+    xlsx: 'data/places.xlsx',
+    csv: 'data/places.csv',
+  }
+  const uriPlaceholderInp = c.querySelector<HTMLInputElement>('[data-uri-placeholder]')!
+  const updateUriPlaceholder = () => {
+    uriPlaceholderInp.placeholder = URI_PLACEHOLDERS[fmt.value] ?? 'data/places.gpkg'
+  }
+  fmt.addEventListener('input', updateUriPlaceholder)
+  fmt.addEventListener('change', updateUriPlaceholder)
+
   const toggleArcgis = () => {
     const hint = c.querySelector<HTMLElement>('[data-arcgis]')!
     hint.style.display = fmt.value === 'arcgis_rest' ? 'block' : 'none'
   }
+  const toggleOapif = () => {
+    const hint = c.querySelector<HTMLElement>('[data-oapif]')!
+    hint.style.display = fmt.value === 'oapif' ? 'block' : 'none'
+  }
   fmt.addEventListener('input', toggleArcgis)
   fmt.addEventListener('change', toggleArcgis)
+  fmt.addEventListener('input', toggleOapif)
+  fmt.addEventListener('change', toggleOapif)
   toggleArcgis()
+  toggleOapif()
+  updateUriPlaceholder()
+
+  // Header-row override: xlsx/csv only (GDAL's HEADERS open option exists for both drivers).
+  const toggleHeaderRow = () => {
+    const row = c.querySelector<HTMLElement>('[data-header-row]')!
+    row.style.display = (fmt.value === 'xlsx' || fmt.value === 'csv') ? 'flex' : 'none'
+  }
+  // Geometry-from-columns: csv only — the XLSX driver has no geometry-related open options
+  // at all (confirmed against GDAL's docs/source), it's purely a tabular driver.
+  const geomModeSel = c.querySelector<HTMLSelectElement>('[data-geom-mode]')!
+  const toggleCsvGeom = () => {
+    const row = c.querySelector<HTMLElement>('[data-csv-geom]')!
+    row.style.display = fmt.value === 'csv' ? 'flex' : 'none'
+  }
+  const toggleCsvGeomSub = () => {
+    const xyRow = c.querySelector<HTMLElement>('[data-csv-geom-xy]')!
+    const wktRow = c.querySelector<HTMLElement>('[data-csv-geom-wkt]')!
+    const active = fmt.value === 'csv' ? geomModeSel.value : ''
+    xyRow.style.display = active === 'xy' ? 'flex' : 'none'
+    wktRow.style.display = active === 'wkt' ? 'flex' : 'none'
+  }
+  fmt.addEventListener('input', toggleHeaderRow)
+  fmt.addEventListener('change', toggleHeaderRow)
+  fmt.addEventListener('input', toggleCsvGeom)
+  fmt.addEventListener('change', toggleCsvGeom)
+  fmt.addEventListener('input', toggleCsvGeomSub)
+  fmt.addEventListener('change', toggleCsvGeomSub)
+  geomModeSel.addEventListener('input', toggleCsvGeomSub)
+  geomModeSel.addEventListener('change', toggleCsvGeomSub)
+  // geom_mode is derived UI state, not a saved field — pick its initial value from
+  // whichever real geometry field(s) were hydrated onto the card.
+  geomModeSel.value = s.x_field && s.y_field ? 'xy' : s.geom_field ? 'wkt' : ''
+  geomModeSel.addEventListener('input', syncFn)
+  geomModeSel.addEventListener('change', syncFn)
+  toggleHeaderRow()
+  toggleCsvGeom()
+  toggleCsvGeomSub()
 
   // A value the editor filled in on your behalf should say so — these used to overwrite a
   // deliberate choice with no visible trace.
@@ -134,7 +232,64 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       showChip('[data-auto-format]', true)
       fmt.dispatchEvent(new Event('change', { bubbles: true }))
       toggleArcgis()
+      toggleOapif()
     }
+  }
+
+  // Pasting/committing a full OGC API - Features /collections/{id}/items URL: trim the
+  // uri back to the API root and pull the collection id into the layer field, since the
+  // items endpoint itself isn't a readable data source on its own (it needs an Accept
+  // header and pagination, which is what fetch_oapif() on the backend handles). Bound to
+  // 'change' (fires on blur, and after a paste once the field commits) rather than every
+  // 'input' keystroke, since it rewrites the field's value and doing that mid-typing
+  // would yank the cursor out from under someone still typing a collection id.
+  const autoDetectOapifCollection = () => {
+    const uri = val(c, 'uri')
+    if (!uri) return
+    const bare = uri.split('?')[0].split('#')[0]
+    const collMatch = bare.match(/^(.*?)\/collections\/([^/?#]+)\/items\/?$/i)
+    if (!collMatch) return
+    const [, root, collection] = collMatch
+    fmt.value = 'oapif'
+    showChip('[data-auto-format]', true)
+    fmt.dispatchEvent(new Event('change', { bubbles: true }))
+    toggleArcgis()
+    toggleOapif()
+    const uriInp = c.querySelector<HTMLInputElement>('[data-k="uri"]')!
+    uriInp.value = root
+    const layerSel = c.querySelector<HTMLInputElement>('[data-k="layer"]')
+    if (layerSel) {
+      ensureComboOption(layerSel, collection)
+      layerSel.value = collection
+      layerSel.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    uriInp.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  // Pasting/committing a full ArcGIS REST sublayer URL (.../MapServer/0 or
+  // .../FeatureServer/3): trim the uri back to the service root and pull the
+  // sublayer id into the layer field, mirroring autoDetectOapifCollection above.
+  const autoDetectArcgisLayer = () => {
+    const uri = val(c, 'uri')
+    if (!uri) return
+    const bare = uri.split('?')[0].split('#')[0]
+    const m = bare.match(/^(.*\/(?:MapServer|FeatureServer))\/(\d+)\/?$/i)
+    if (!m) return
+    const [, root, layerId] = m
+    fmt.value = 'arcgis_rest'
+    showChip('[data-auto-format]', true)
+    fmt.dispatchEvent(new Event('change', { bubbles: true }))
+    toggleArcgis()
+    toggleOapif()
+    const uriInp = c.querySelector<HTMLInputElement>('[data-k="uri"]')!
+    uriInp.value = root
+    const layerSel = c.querySelector<HTMLInputElement>('[data-k="layer"]')
+    if (layerSel) {
+      ensureComboOption(layerSel, layerId)
+      layerSel.value = layerId
+      layerSel.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    uriInp.dispatchEvent(new Event('change', { bubbles: true }))
   }
 
   let inspectTimer = 0
@@ -148,18 +303,47 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
       const uri = val(c, 'uri')
       const layer = val(c, 'layer')
       const crs = val(c, 'crs')
+      const headerRow = val(c, 'header_row')
+      const xField = val(c, 'x_field')
+      const yField = val(c, 'y_field')
+      const geomField = val(c, 'geom_field')
       if (!id || !uri) { updateSourceBadge(c, null); return }
       if (format === 'wfs' && !layer) {
         updateSourceBadge(c, { ok: false, error: 'select a layer typename from the dropdown first' })
         return
       }
-      const srcObj = { id, format, uri, ...(layer ? { layer } : {}), ...(crs ? { crs } : {}) } as Source
+      if (format === 'oapif' && !layer) {
+        updateSourceBadge(c, { ok: false, error: 'select a collection from the dropdown first' })
+        return
+      }
+      if (format === 'arcgis_rest' && !layer) {
+        updateSourceBadge(c, { ok: false, error: 'select a sublayer from the dropdown first' })
+        return
+      }
+      const srcObj = {
+        id, format, uri,
+        ...(layer ? { layer } : {}),
+        ...(crs ? { crs } : {}),
+        ...(headerRow ? { header_row: headerRow === 'true' } : {}),
+        ...(xField ? { x_field: xField } : {}),
+        ...(yField ? { y_field: yField } : {}),
+        ...(geomField ? { geom_field: geomField } : {}),
+      } as Source
       updateSourceBadge(c, { loading: true })
       try {
         const d = await inspectSource(srcObj)
         if (d.ok && d.columns) {
           SOURCE_SCHEMAS[id] = d.columns
           updateSourceBadge(c, { ok: true, columns: d.columns })
+          // Offer the just-inspected columns as suggestions for the geometry-column
+          // pickers below — same idea as doInspectFile populating the `layer` combo.
+          if (format === 'csv') {
+            const colOptions = d.columns.map(col => col.name)
+            ;['x_field', 'y_field', 'geom_field'].forEach(k => {
+              const sel = c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)
+              if (sel) setComboOptions(sel, colOptions)
+            })
+          }
         } else {
           delete SOURCE_SCHEMAS[id]
           updateSourceBadge(c, { ok: false, error: d.error })
@@ -198,9 +382,10 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
           if (layerSel && d.layers && d.layers.length > 0) {
             const current = layerSel.value
             setComboOptions(layerSel, d.layers)
-            layerSel.value = d.layers.includes(current) ? current : ''
-            if (format !== 'wfs' && !d.layers.includes(current) && d.layers.length > 0) {
-              layerSel.value = d.layers[0]
+            const values = d.layers.map(l => typeof l === 'string' ? l : l.value)
+            layerSel.value = values.includes(current) ? current : ''
+            if (format !== 'wfs' && format !== 'arcgis_rest' && !values.includes(current) && d.layers.length > 0) {
+              layerSel.value = values[0]
               layerSel.dispatchEvent(new Event('change', { bubbles: true }))
             }
           }
@@ -220,13 +405,17 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
     }, 400)
   }
 
-  c.querySelectorAll('[data-k="uri"],[data-k="format"],[data-k="layer"],[data-k="crs"]').forEach(i => {
+  c.querySelectorAll('[data-k="uri"],[data-k="format"],[data-k="layer"],[data-k="crs"],[data-k="header_row"],[data-k="x_field"],[data-k="y_field"],[data-k="geom_field"]').forEach(i => {
     i.addEventListener('input', doInspect)
     i.addEventListener('change', doInspect)
   })
+  geomModeSel.addEventListener('input', doInspect)
+  geomModeSel.addEventListener('change', doInspect)
   const uriInp = c.querySelector<HTMLInputElement>('[data-k="uri"]')!
   uriInp.addEventListener('input', autoDetectFormat)
   uriInp.addEventListener('change', autoDetectFormat)
+  uriInp.addEventListener('change', autoDetectOapifCollection)
+  uriInp.addEventListener('change', autoDetectArcgisLayer)
   c.querySelectorAll('[data-k="uri"],[data-k="format"]').forEach(i => {
     i.addEventListener('input', doInspectFile)
     i.addEventListener('change', doInspectFile)

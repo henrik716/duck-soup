@@ -290,6 +290,7 @@ button.danger:hover { border-color: var(--warn); color: #ff8585; background: var
   padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid rgba(139, 108, 255, 0.15);
 }
 .item-head .spacer { flex: 1; }
+.set-base-btn { border-color: var(--line); color: var(--muted); }
 .set-base-btn.is-base {
   color: var(--accent); border-color: rgba(139, 108, 255, 0.35); background: var(--accent-soft);
 }

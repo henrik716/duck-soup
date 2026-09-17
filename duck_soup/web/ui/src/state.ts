@@ -9,6 +9,7 @@ export const EXT_FORMAT: Record<string, string> = {
   gml: 'gml', xml: 'gml',
   gdb: 'fgdb',
   parquet: 'parquet',
+  fgb: 'flatgeobuf',
   shp: 'shp',
   xlsx: 'xlsx', xls: 'xlsx',
   csv: 'csv',

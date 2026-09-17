@@ -101,9 +101,24 @@ class Engine:
         self.log = log or (lambda m: None)
 
     # -- source views -------------------------------------------------------
-    def _create_source_views(self, con: duckdb.DuckDBPyConnection, workdir: Path) -> None:
+    def _create_source_views(
+        self,
+        con: duckdb.DuckDBPyConnection,
+        workdir: Path,
+        bbox: tuple[float, float, float, float] | None = None,
+        max_features: int | None = None,
+    ) -> None:
         for s in self.p.sources:
-            read = src_readers.read_expr(s, workdir, con=con, log=self.log)
+            # The bbox is only ever applied (via _bbox_filter) to the base source's rows, so
+            # only push it down to the base source's own fetch — a join/nearest-neighbor
+            # partner just outside the viewport can still be a valid match and must still be
+            # fetched in full. Same reasoning for max_features: only the base source's row
+            # count is bounded by the preview limit, a join partner still needs its full data.
+            src_bbox = bbox if s.id == self.p.base else None
+            src_max_features = max_features if s.id == self.p.base else None
+            read = src_readers.read_expr(
+                s, workdir, con=con, log=self.log, bbox=src_bbox, max_features=src_max_features
+            )
             view = _ident(f"src_{s.id}")
             if s.has_geometry:
                 crs = "EPSG:4326" if s.format == "arcgis_rest" else (s.crs or self.working_crs)
@@ -664,7 +679,7 @@ class Engine:
 
             with tempfile.TemporaryDirectory() as tmp:
                 workdir = Path(tmp)
-                self._create_source_views(con, workdir)
+                self._create_source_views(con, workdir, bbox=bbox, max_features=limit)
                 self._create_derived_source_views(con)
 
                 # base — pre-filtered to the bbox (if given) before any steps run, not just

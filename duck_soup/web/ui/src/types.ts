@@ -1,6 +1,6 @@
 export type SourceFormat =
   | 'gpkg' | 'geojson' | 'gml' | 'fgdb' | 'wfs'
-  | 'arcgis_rest' | 'parquet' | 'shp' | 'xlsx' | 'csv'
+  | 'arcgis_rest' | 'oapif' | 'parquet' | 'flatgeobuf' | 'shp' | 'xlsx' | 'csv'
 
 export type JoinPredicate = 'intersects' | 'contains' | 'within'
 
@@ -16,6 +16,10 @@ export interface Source {
   make_valid?: boolean
   where?: string
   page_size?: number
+  header_row?: boolean
+  x_field?: string
+  y_field?: string
+  geom_field?: string
 }
 
 export interface DerivedSource {
@@ -202,7 +206,7 @@ export interface InspectResponse {
 
 export interface InspectFileResponse {
   ok: boolean
-  layers?: string[]
+  layers?: (string | { value: string; label?: string })[]
   default_crs?: string
   // Present whenever ok is false — /api/inspect_file never raises, it reports.
   error?: string

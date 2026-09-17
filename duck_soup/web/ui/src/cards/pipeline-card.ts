@@ -21,6 +21,54 @@ import type { DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } f
 // ---- pipeline card ----
 let _plCounter = 0
 
+// ESRI shapefile sidecar extensions that should be uploaded alongside a .shp
+// but not surface as their own source card.
+const SHAPEFILE_SIDECAR_EXTS = new Set([
+  'dbf', 'shx', 'prj', 'cpg', 'sbn', 'sbx', 'xml', 'qmd', 'ain', 'aih', 'atx', 'ixs', 'mxs', 'qix',
+])
+
+function splitExt(name: string): { base: string; ext: string } {
+  const dot = name.lastIndexOf('.')
+  if (dot <= 0) return { base: name, ext: '' }
+  return { base: name.substring(0, dot), ext: name.substring(dot + 1).toLowerCase() }
+}
+
+type ShpGroup = { shpFile: File; sidecars: File[] }
+
+// Groups a dropped/selected FileList so a .shp plus its same-basename
+// sidecars (dbf/shx/prj/...) become one unit; everything else passes
+// through unchanged, one file per unit. Windows/the browser hand over a
+// shapefile's sidecar files together on drag-select, and without this
+// grouping each one used to become its own source with the same id,
+// silently clobbering each other in engine.py's CREATE OR REPLACE VIEW.
+function groupUploadItems(files: FileList): (File | ShpGroup)[] {
+  const list = Array.from(files)
+  const byBase = new Map<string, File[]>()
+  for (const f of list) {
+    const lbase = splitExt(f.name).base.toLowerCase()
+    const arr = byBase.get(lbase) ?? []
+    arr.push(f)
+    byBase.set(lbase, arr)
+  }
+
+  const items: (File | ShpGroup)[] = []
+  for (const f of list) {
+    const { base, ext } = splitExt(f.name)
+    const lbase = base.toLowerCase()
+    if (ext === 'shp') {
+      const sidecars = (byBase.get(lbase) ?? []).filter(
+        g => g !== f && SHAPEFILE_SIDECAR_EXTS.has(splitExt(g.name).ext)
+      )
+      items.push({ shpFile: f, sidecars })
+    } else if (SHAPEFILE_SIDECAR_EXTS.has(ext) && (byBase.get(lbase) ?? []).some(g => splitExt(g.name).ext === 'shp')) {
+      continue // folded into its .shp's group above
+    } else {
+      items.push(f)
+    }
+  }
+  return items
+}
+
 export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void): HTMLElement {
   const plId = String(_plCounter++)
   const card = mkEl('div', { className: 'pipeline-card' })
@@ -77,20 +125,22 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
             <button class="addbtn pl-add-source" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
           </div>
           <input type="hidden" class="pl-base" value="${esc(pdef.base)}">
+          <p class="hint" style="margin-top:6px">Add sources below, then click <strong>★ base</strong> on the one the pipeline starts from — its features flow through every step to the output.</p>
           <div class="sources-dropzone" role="button" tabindex="0" aria-label="Add source files — drag and drop, or activate to browse your computer">
             <i data-lucide="upload-cloud" style="width:24px;height:24px;margin-bottom:4px"></i>
             <span class="title">Drag &amp; drop spatial files here</span>
             <span class="subtitle">Or click to browse from your computer</span>
           </div>
           <div class="templates-grid">
-            <button type="button" class="template-btn" data-fmt="gpkg"><i data-lucide="database"></i> GPKG</button>
+            <button type="button" class="template-btn" data-fmt="gpkg"><i data-lucide="package"></i> GPKG</button>
             <button type="button" class="template-btn" data-fmt="geojson"><i data-lucide="globe"></i> GeoJSON</button>
-            <button type="button" class="template-btn" data-fmt="fgdb"><i data-lucide="folder-archive"></i> FileGDB</button>
+            <button type="button" class="template-btn" data-fmt="fgdb"><i data-lucide="database"></i> FileGDB</button>
             <button type="button" class="template-btn" data-fmt="parquet"><i data-lucide="server"></i> Parquet</button>
+            <button type="button" class="template-btn" data-fmt="flatgeobuf"><i data-lucide="file-code"></i> FlatGeobuf</button>
             <button type="button" class="template-btn" data-fmt="shp"><i data-lucide="map"></i> Shapefile</button>
             <button type="button" class="template-btn" data-fmt="wfs"><i data-lucide="network"></i> WFS</button>
             <button type="button" class="template-btn" data-fmt="arcgis_rest"><i data-lucide="map-pinned"></i> ArcGIS REST</button>
-            <button type="button" class="template-btn" data-fmt="geojson" data-uri="https://example.com/api/collections/{collection}/items"><i data-lucide="link"></i> OGC API</button>
+            <button type="button" class="template-btn" data-fmt="oapif"><i data-lucide="link"></i> OGC API</button>
             <button type="button" class="template-btn" data-fmt="xlsx"><i data-lucide="file-spreadsheet"></i> Excel</button>
             <button type="button" class="template-btn" data-fmt="csv"><i data-lucide="file-text"></i> CSV</button>
           </div>
@@ -398,33 +448,74 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     }
     const titleEl = dropzone.querySelector('.title')
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      if (titleEl) titleEl.textContent = `Uploading ${file.name}...`
+    const items = groupUploadItems(files)
 
-      try {
-        const res = await uploadFile(file)
-        if (res.ok && res.path) {
-          const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-          const fmt = EXT_FORMAT[ext] || 'geojson'
-          const idBase = file.name.substring(0, file.name.lastIndexOf('.')) || file.name
-          const id = idBase.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    for (const item of items) {
+      if (item instanceof File) {
+        const file = item
+        if (titleEl) titleEl.textContent = `Uploading ${file.name}...`
 
-          const newSrc = { id, format: fmt as any, uri: res.path }
+        try {
+          const res = await uploadFile(file)
+          if (res.ok && res.path) {
+            const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+            const fmt = EXT_FORMAT[ext] || 'geojson'
+            const idBase = file.name.substring(0, file.name.lastIndexOf('.')) || file.name
+            const id = idBase.toLowerCase().replace(/[^a-z0-9_]/g, '_')
 
-          mutate('add uploaded source')
-          activateSection('sources')
-          const newCard = sourceCard(newSrc, fullSync)
-          newCard.classList.remove('collapsed')
-          sourcesEl.appendChild(newCard)
-          refreshIcons()
-          fullSync()
-          showToast(`Uploaded and added: ${file.name}`, 'ok')
-        } else {
-          showToast(`Upload failed: ${res.error || 'unknown error'}`, 'bad')
+            const newSrc = { id, format: fmt as any, uri: res.path }
+
+            mutate('add uploaded source')
+            activateSection('sources')
+            const newCard = sourceCard(newSrc, fullSync)
+            newCard.classList.remove('collapsed')
+            sourcesEl.appendChild(newCard)
+            refreshIcons()
+            fullSync()
+            showToast(`Uploaded and added: ${file.name}`, 'ok')
+          } else {
+            showToast(`Upload failed: ${res.error || 'unknown error'}`, 'bad')
+          }
+        } catch (err) {
+          showToast(`Upload failed: ${(err as Error).message}`, 'bad')
         }
+        continue
+      }
+
+      // Shapefile group: the .shp plus its same-basename sidecars all need to
+      // land on disk together (GDAL reads .dbf/.shx next to the .shp), but
+      // only the .shp becomes a source.
+      const { shpFile, sidecars } = item
+      try {
+        if (titleEl) titleEl.textContent = `Uploading ${shpFile.name}...`
+        const shpRes = await uploadFile(shpFile)
+        if (!shpRes.ok || !shpRes.path) {
+          showToast(`Upload failed: ${shpFile.name}: ${shpRes.error || 'unknown error'}`, 'bad')
+          continue
+        }
+
+        for (const sc of sidecars) {
+          if (titleEl) titleEl.textContent = `Uploading ${sc.name}...`
+          const scRes = await uploadFile(sc)
+          if (!scRes.ok || !scRes.path) {
+            showToast(`Upload failed: ${sc.name}: ${scRes.error || 'unknown error'}`, 'bad')
+          }
+        }
+
+        const idBase = shpFile.name.substring(0, shpFile.name.lastIndexOf('.')) || shpFile.name
+        const id = idBase.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+        const newSrc = { id, format: 'shp' as any, uri: shpRes.path }
+
+        mutate('add uploaded source')
+        activateSection('sources')
+        const newCard = sourceCard(newSrc, fullSync)
+        newCard.classList.remove('collapsed')
+        sourcesEl.appendChild(newCard)
+        refreshIcons()
+        fullSync()
+        showToast(`Uploaded and added: ${shpFile.name}`, 'ok')
       } catch (err) {
-        showToast(`Upload failed: ${(err as Error).message}`, 'bad')
+        showToast(`Upload failed: ${shpFile.name}: ${(err as Error).message}`, 'bad')
       }
     }
 
@@ -652,6 +743,11 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     const s: Partial<Source> = { id: val(c, 'id'), format: val(c, 'format') as Source['format'], uri: val(c, 'uri') }
     if (val(c, 'layer')) s.layer = val(c, 'layer')
     if (val(c, 'crs')) s.crs = val(c, 'crs')
+    const headerRow = val(c, 'header_row')
+    if (headerRow) s.header_row = headerRow === 'true'
+    if (val(c, 'x_field')) s.x_field = val(c, 'x_field')
+    if (val(c, 'y_field')) s.y_field = val(c, 'y_field')
+    if (val(c, 'geom_field')) s.geom_field = val(c, 'geom_field')
     const mv = c.querySelector<HTMLInputElement>('[data-k="make_valid"]')
     if (mv && !mv.checked) s.make_valid = false
     return s as Source

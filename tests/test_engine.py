@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from duck_soup.config import CodeCase, CodeList, load_config
+from duck_soup.config import CodeCase, CodeList, load_config, load_config_dict
 from duck_soup.engine import Engine, preview_config_pipeline, run_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +72,30 @@ def test_run_multi_pipeline_shared_output(tmp_path):
     assert set(layers) == {"places_out", "fylke_out"}
     assert layers["places_out"] == 5
     assert layers["fylke_out"] > 0
+
+
+def test_run_flatgeobuf_source_writes_expected_rows(tmp_path):
+    # End-to-end check that `flatgeobuf` sources flow through the full engine (not just
+    # read_expr in isolation — see test_sources.py's read_expr-level FlatGeobuf test): GDAL's
+    # FlatGeobuf driver is bundled with the spatial extension, so this is the ordinary
+    # ST_Read path every other GDAL format (gpkg, geojson, shp, ...) already goes through.
+    cfg = load_config_dict({
+        "name": "flatgeobuf_test",
+        "sources": [
+            {"id": "places", "format": "flatgeobuf", "uri": "data/test.fgb", "crs": "EPSG:4326"},
+        ],
+        "base": "places",
+        "mapping": [
+            {"to": "name", "from": "name"},
+            {"to": "category", "from": "category"},
+        ],
+        "output": {"path": str(tmp_path / "flatgeobuf.gpkg"), "layer": "output", "crs": "EPSG:25833"},
+    })
+
+    out_path = run_config(cfg)
+
+    layers = _gpkg_layers(Path(out_path))
+    assert layers == {"output": 5}
 
 
 def test_preview_pipeline_returns_rows_without_writing_output(tmp_path):

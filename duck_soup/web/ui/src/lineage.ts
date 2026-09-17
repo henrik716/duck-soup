@@ -26,6 +26,7 @@ function getSourceIcon(format: string): { icon: string; color: string } {
     case 'geojson':
     case 'gml':
     case 'shp':
+    case 'flatgeobuf':
       return { icon: 'map', color: '#20c997' }
     default:
       return { icon: 'database', color: 'var(--muted)' }

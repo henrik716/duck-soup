@@ -30,7 +30,7 @@ from ..config import (
     load_config_dict,
 )
 from ..engine import run_config, preview_config_pipeline
-from ..sources import read_expr
+from ..sources import read_expr, parquet_geometry_info
 from ..derive import DUCKDB_LOCK, register_udfs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -119,7 +119,7 @@ def inspect_source(req: InspectRequest) -> dict:
                 register_udfs(con)
                 with tempfile.TemporaryDirectory() as tmp:
                     workdir = Path(tmp)
-                    read = read_expr(src, workdir, con=con)
+                    read = read_expr(src, workdir, con=con, sample=True)
                     res = con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()
                     columns = [{"name": r[0], "type": str(r[1])} for r in res]
                     return {"ok": True, "columns": columns}
@@ -318,8 +318,15 @@ def inspect_file(req: InspectFileRequest) -> dict:
             layers = []
             default_crs = None
 
-            sql_uri = "'" + str(resolved_path).replace("\\", "/").replace("'", "''") + "'"
-            if fmt == "wfs" or uri.upper().startswith("WFS:"):
+            fwd_path = str(resolved_path).replace("\\", "/")
+            sql_uri = "'" + fwd_path.replace("'", "''") + "'"
+            if fmt == "parquet":
+                # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
+                # bundled GDAL build — see sources.py's module docstring). No layer concept
+                # for a single flat Parquet file, so just report the CRS if one is embedded.
+                _name, crs = parquet_geometry_info(con, fwd_path)
+                return {"ok": True, "layers": [], "default_crs": crs}
+            elif fmt == "wfs" or uri.upper().startswith("WFS:"):
                 # Fetch WFS layer list via GetCapabilities — more reliable than GDAL's WFS driver
                 import requests as _requests
                 from urllib.parse import urlparse, urlencode, parse_qsl
@@ -339,7 +346,13 @@ def inspect_file(req: InspectFileRequest) -> dict:
                         if name_el is not None and name_el.text:
                             layers.append(name_el.text.strip())
                         if not default_crs:
-                            crs_el = ft.find(f"{{{ns}}}DefaultCRS") or ft.find(f"{{{ns}}}DefaultSRS")
+                            # NB: `find(...) or find(...)` is wrong here — Element.__bool__ is
+                            # based on child-element count, not identity, so a real match on a
+                            # leaf element like <DefaultCRS>EPSG::4258</DefaultCRS> (no children)
+                            # is falsy and silently discarded in favor of the second find().
+                            crs_el = ft.find(f"{{{ns}}}DefaultCRS")
+                            if crs_el is None:
+                                crs_el = ft.find(f"{{{ns}}}DefaultSRS")
                             if crs_el is not None and crs_el.text:
                                 raw_crs = crs_el.text.strip()
                                 # Normalise urn:ogc:def:crs:EPSG::4258 → EPSG:4258
@@ -350,6 +363,38 @@ def inspect_file(req: InspectFileRequest) -> dict:
                     if layers:
                         break
                 return {"ok": True, "layers": layers, "default_crs": default_crs}
+            elif fmt == "oapif":
+                # List collections via the OGC API - Features JSON endpoint — the plain
+                # URL without an Accept header returns the server's HTML front-end, not data.
+                import requests as _requests
+                resp = _requests.get(
+                    f"{uri.rstrip('/')}/collections",
+                    headers={"Accept": "application/json"},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                layers = [c["id"] for c in data.get("collections", []) if c.get("id")]
+                # fetch_oapif() always requests the default CRS84 response.
+                return {"ok": True, "layers": layers, "default_crs": "EPSG:4326"}
+            elif fmt == "arcgis_rest":
+                # ArcGIS REST's service-info endpoint (?f=json) lists sublayers (and
+                # standalone tables) directly.
+                import requests as _requests
+                resp = _requests.get(f"{uri.rstrip('/')}?f=json", timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                if "error" in data:
+                    # ArcGIS REST returns HTTP 200 with {"error": {...}} for a bad url.
+                    raise RuntimeError(data["error"].get("message", "ArcGIS REST service error"))
+                for entry in (data.get("layers") or []) + (data.get("tables") or []):
+                    lid = entry.get("id")
+                    if lid is None:
+                        continue
+                    name = entry.get("name")
+                    layers.append({"value": str(lid), "label": f"{lid} - {name}" if name else str(lid)})
+                # fetch_arcgis_rest() always forces outSR=4326.
+                return {"ok": True, "layers": layers, "default_crs": "EPSG:4326"}
             elif uri.startswith("http://") or uri.startswith("https://"):
                 sql_uri = "'" + uri.replace("'", "''") + "'"
 

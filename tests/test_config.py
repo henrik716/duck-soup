@@ -70,6 +70,36 @@ def test_invalid_crs_format_rejected():
         Source(id="a", format="geojson", uri="x.geojson", crs="not-a-crs")
 
 
+def test_oapif_source_accepted():
+    src = Source(id="fylker", format="oapif", uri="https://host/ogcapi", layer="fylker")
+    assert src.has_geometry
+
+
+def test_flatgeobuf_source_accepted():
+    src = Source(id="pts", format="flatgeobuf", uri="data/test.fgb", crs="EPSG:4326")
+    assert src.has_geometry
+
+
+def test_oapif_non_default_crs_rejected():
+    with pytest.raises(ValidationError, match="always fetched in the default CRS84"):
+        Source(id="fylker", format="oapif", uri="https://host/ogcapi", layer="fylker", crs="EPSG:25833")
+
+
+def test_arcgis_rest_service_root_with_layer_accepted():
+    src = Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer", layer="0")
+    assert src.has_geometry
+
+
+def test_arcgis_rest_full_endpoint_without_layer_accepted():
+    src = Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer/0")
+    assert src.has_geometry
+
+
+def test_arcgis_rest_ambiguous_uri_and_layer_rejected():
+    with pytest.raises(ValidationError, match="ambiguous|already ends in a sublayer id"):
+        Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer/0", layer="0")
+
+
 def test_unknown_base_reference_rejected():
     bad = {
         "name": "bad",
@@ -101,6 +131,57 @@ def test_step_referencing_unknown_branch_rejected():
     }
     with pytest.raises(ValidationError, match="unknown branch"):
         load_config_dict(bad)
+
+
+def test_mapping_to_geom_rejected_when_base_has_geometry():
+    bad = {
+        "name": "bad",
+        "output": "output/bad.gpkg",
+        "pipelines": [{
+            "name": "p1",
+            "sources": [{"id": "a", "format": "geojson", "uri": "x.geojson"}],
+            "base": "a",
+            "mapping": [{"to": "geom", "from": "geom"}],
+            "layers": [{"layer": "out", "crs": "EPSG:25833"}],
+        }],
+    }
+    with pytest.raises(ValidationError, match="reserved"):
+        load_config_dict(bad)
+
+
+def test_mapping_to_geom_rejected_in_layer_override():
+    bad = {
+        "name": "bad",
+        "output": "output/bad.gpkg",
+        "pipelines": [{
+            "name": "p1",
+            "sources": [{"id": "a", "format": "geojson", "uri": "x.geojson"}],
+            "base": "a",
+            "mapping": [{"to": "name", "from": "name"}],
+            "layers": [{
+                "layer": "out",
+                "crs": "EPSG:25833",
+                "mapping": [{"to": "geom", "from": "geom"}],
+            }],
+        }],
+    }
+    with pytest.raises(ValidationError, match="reserved"):
+        load_config_dict(bad)
+
+
+def test_mapping_to_geom_allowed_when_base_has_no_geometry():
+    cfg = load_config_dict({
+        "name": "ok",
+        "output": "output/ok.gpkg",
+        "pipelines": [{
+            "name": "p1",
+            "sources": [{"id": "a", "format": "csv", "uri": "x.csv"}],
+            "base": "a",
+            "mapping": [{"to": "geom", "from": "geom"}],
+            "layers": [{"layer": "out", "crs": "EPSG:25833"}],
+        }],
+    })
+    assert cfg.pipelines[0].mapping[0].to == "geom"
 
 
 def test_codelist_requires_exactly_one_of_cases_or_file():
@@ -172,3 +253,42 @@ def test_codecase_rejects_is_blank_with_other_pattern():
 def test_codecase_rejects_no_pattern():
     with pytest.raises(ValidationError, match="exactly one of"):
         CodeCase(value="Unknown")
+
+
+def test_header_row_accepted_on_csv_and_xlsx():
+    assert Source(id="a", format="csv", uri="data/test_xy.csv", header_row=True).header_row is True
+    assert Source(id="a", format="xlsx", uri="data/places.xlsx", header_row=False).header_row is False
+
+
+def test_header_row_rejected_on_other_formats():
+    with pytest.raises(ValidationError, match="only applies to xlsx/csv"):
+        Source(id="a", format="geojson", uri="data/test.geojson", header_row=True)
+
+
+def test_csv_x_y_fields_imply_geometry():
+    src = Source(id="a", format="csv", uri="data/test_xy.csv", crs="EPSG:4326", x_field="lon", y_field="lat")
+    assert src.has_geometry
+
+
+def test_csv_geom_field_implies_geometry():
+    src = Source(id="a", format="csv", uri="data/test_wkt.csv", crs="EPSG:4326", geom_field="geom_col")
+    assert src.has_geometry
+
+
+def test_plain_csv_has_no_geometry_by_default():
+    assert Source(id="a", format="csv", uri="data/test_noheader.csv").has_geometry is False
+
+
+def test_geometry_fields_rejected_on_non_csv_format():
+    with pytest.raises(ValidationError, match="only apply to csv sources"):
+        Source(id="a", format="xlsx", uri="data/places.xlsx", x_field="lon", y_field="lat")
+
+
+def test_x_field_without_y_field_rejected():
+    with pytest.raises(ValidationError, match="must be set together"):
+        Source(id="a", format="csv", uri="data/test_xy.csv", x_field="lon")
+
+
+def test_geom_field_combined_with_x_y_fields_rejected():
+    with pytest.raises(ValidationError, match="not both"):
+        Source(id="a", format="csv", uri="data/test_xy.csv", x_field="lon", y_field="lat", geom_field="wkt")

@@ -301,7 +301,15 @@ export function refreshBaseOptionsScoped(scope: Element): void {
   if (!baseEl) return
   const cur = baseEl.value
   setComboOptions(baseEl, ids, 'No sources defined yet — add one above')
-  if (ids.includes(cur)) baseEl.value = cur
+  if (ids.includes(cur)) {
+    baseEl.value = cur
+  } else if (ids.length > 0) {
+    // Keep the invariant "any sources => one of them is base" instead of leaving base
+    // blank or pointing at an id that was renamed/removed — a pipeline with sources but
+    // no valid base fails to preview/run with a confusing error the moment anything
+    // downstream (working CRS, the engine's base view) tries to resolve it.
+    baseEl.value = ids[0]
+  }
 
   scope.querySelectorAll<HTMLInputElement>('.pl-steps [data-k="source"]').forEach(s => {
     const c = s.value
