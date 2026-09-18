@@ -157,50 +157,29 @@ python -m duck_soup.cli check pipelines/test.yaml   # validate
 python -m duck_soup.cli run   pipelines/test.yaml   # writes output/test.gpkg
 ```
 
-## Running the Application Locally
+## Editor (Web App)
 
-### CLI
-
-Run commands in your virtual environment:
-
-```bash
-python -m duck_soup.cli check pipelines/test.yaml   # validate only
-python -m duck_soup.cli run   pipelines/test.yaml   # build the GeoPackage
-```
-
-### Editor (Web App)
-
-The editor consists of a FastAPI backend and a TypeScript + Vite frontend.
-
-#### Option 1: Quick Start (Pre-built Frontend)
-
-If you just want to run the app using the pre-compiled static files, simply start the FastAPI backend:
+The editor is a FastAPI backend plus a TypeScript + Vite frontend. With the venv from
+"Install" above, the pre-built static files are already in place, so just run the
+backend:
 
 ```bash
 uvicorn duck_soup.web.app:app --reload
 ```
+
 Then open http://127.0.0.1:8000 in your browser.
 
-#### Option 2: Development Setup (Modifying Frontend)
+To modify the frontend itself, run the Vite dev server alongside the backend for hot
+reloading (it proxies `/api` to the backend on port 8000):
 
-If you want to modify or develop the editor's frontend, run both the backend and frontend dev server (with hot reloading):
+```bash
+cd duck_soup/web/ui
+npm install
+npm run dev
+```
 
-1. **Start the FastAPI backend** (runs on port 8000):
-   ```bash
-   uvicorn duck_soup.web.app:app --reload
-   ```
-
-2. **Start the Vite dev server** (runs on port 5173 and proxies `/api` to port 8000):
-   ```bash
-   cd duck_soup/web/ui
-   npm install
-   npm run dev
-   ```
-   Then open http://localhost:5173 in your browser.
-
-#### Option 3: Building the Frontend
-
-If you have made frontend changes in `duck_soup/web/ui` and want to compile them to static files served by FastAPI:
+Then open http://localhost:5173. Once you're happy with the changes, compile them to
+the static files FastAPI serves, and commit the output:
 
 ```bash
 cd duck_soup/web/ui
