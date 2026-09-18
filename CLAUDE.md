@@ -47,7 +47,9 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 
 **`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. Spatial joins use `LATERAL … LIMIT 1` (first match). Attribute joins are 1:1 left joins. Nearest-neighbor joins use `LATERAL … ORDER BY ST_Distance(...) LIMIT 1`, optionally filtered by `ST_DWithin` when `max_distance` is set. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`.
 
-**`derive.py`** — Registers Python UDFs into DuckDB (`to_mgrs`). Gracefully no-ops if the optional `mgrs` package is absent.
+**`derive.py`** — Registers Python UDFs into DuckDB (`to_mgrs`). Gracefully no-ops if the optional `mgrs` package is absent. Also owns connection bootstrap: `load_extensions()` (spatial + postgres) and `init_duckdb()` (extensions + UDFs) — every DuckDB connection in the codebase goes through one of these.
+
+**`sql_util.py`** — `quote_ident()` / `quote_literal()`, shared by `engine.py` and `sources.py` (imported there under their local `_ident`/`_lit` and `_sql_ident`/`_sql_str` names).
 
 **`cli.py`** — Thin argparse wrapper around `check` (print schema summary) and `run`.
 

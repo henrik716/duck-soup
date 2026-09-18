@@ -29,6 +29,7 @@ import duckdb
 import requests
 
 from .config import Source
+from .sql_util import quote_ident as _sql_ident, quote_literal as _sql_str
 
 # GDAL geometry-type labels that DuckDB's spatial extension cannot parse: the ISO
 # SQL/MM curve types (CircularString, CompoundCurve, CurvePolygon, MultiCurve,
@@ -58,16 +59,6 @@ _LINEARIZE_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_linearize_cache"
 _OAPIF_FETCH_CACHE: dict[tuple, tuple[float, list[dict], bool]] = {}
 _OAPIF_CACHE_LOCK = threading.Lock()
 _OAPIF_CACHE_TTL = 20.0  # seconds
-
-
-def _sql_str(value: str) -> str:
-    """Single-quote a value for inlining into SQL."""
-    return "'" + value.replace("'", "''") + "'"
-
-
-def _sql_ident(name: str) -> str:
-    """Double-quote a SQL identifier."""
-    return '"' + name.replace('"', '""') + '"'
 
 
 def _st_read(uri: str, layer: str | None = None, extra: str = "") -> str:
@@ -347,6 +338,143 @@ def postgres_geometry_info(
     name, srid = rows[0]
     crs = f"EPSG:{srid}" if srid else None
     return name, crs
+
+
+# ---------------------------------------------------------------------------
+# Layer discovery — "what can I pick for this source's `layer`?", per format.
+# Each returns the layer list (and the default CRS where the format exposes one).
+# ---------------------------------------------------------------------------
+
+def list_postgres_tables(
+    con: duckdb.DuckDBPyConnection, dsn: str
+) -> tuple[list[str], str | None]:
+    """PostGIS-enabled tables (from geometry_columns) plus plain tables.
+
+    Plain tables are included because they're usable as attribute-join lookup sources.
+    Each is "schema.table" unless schema is the default 'public'. Default CRS is the
+    first spatial table's SRID.
+    """
+    alias = attach_postgres(con, dsn, "inspect")
+    layers: list[str] = []
+    default_crs: str | None = None
+    geom_rows = con.execute(
+        f"SELECT f_table_schema, f_table_name, srid FROM {_sql_ident(alias)}.public.geometry_columns "
+        "ORDER BY f_table_schema, f_table_name"
+    ).fetchall()
+    seen: set[str] = set()
+    for schema, table, srid in geom_rows:
+        full = table if schema == "public" else f"{schema}.{table}"
+        seen.add(full)
+        layers.append(full)
+        if default_crs is None and srid:
+            default_crs = f"EPSG:{srid}"
+    table_rows = con.execute(
+        f"SELECT table_schema, table_name FROM {_sql_ident(alias)}.information_schema.tables "
+        "WHERE table_type = 'BASE TABLE' ORDER BY table_schema, table_name"
+    ).fetchall()
+    for schema, table in table_rows:
+        full = table if schema == "public" else f"{schema}.{table}"
+        if full not in seen:
+            seen.add(full)
+            layers.append(full)
+    return layers, default_crs
+
+
+def list_wfs_layers(uri: str) -> tuple[list[str], str | None]:
+    """WFS feature types via GetCapabilities — more reliable than GDAL's WFS driver."""
+    from urllib.parse import urlparse, urlencode, parse_qsl
+    from xml.etree import ElementTree
+
+    layers: list[str] = []
+    default_crs: str | None = None
+    raw = uri[4:] if uri.upper().startswith("WFS:") else uri
+    p = urlparse(raw)
+    qs_clean = [(k, v) for k, v in parse_qsl(p.query)
+                if k.lower() not in ("request", "service", "version")]
+    qs_caps = urlencode(qs_clean + [("SERVICE", "WFS"), ("REQUEST", "GetCapabilities")])
+    caps_url = p._replace(query=qs_caps).geturl()
+    resp = requests.get(caps_url, timeout=30)
+    resp.raise_for_status()
+    root = ElementTree.fromstring(resp.content)
+    for ns in ("http://www.opengis.net/wfs/2.0", "http://www.opengis.net/wfs"):
+        for ft in root.iter(f"{{{ns}}}FeatureType"):
+            name_el = ft.find(f"{{{ns}}}Name")
+            if name_el is not None and name_el.text:
+                layers.append(name_el.text.strip())
+            if not default_crs:
+                # NB: `find(...) or find(...)` is wrong here — Element.__bool__ is
+                # based on child-element count, not identity, so a real match on a
+                # leaf element like <DefaultCRS>EPSG::4258</DefaultCRS> (no children)
+                # is falsy and silently discarded in favor of the second find().
+                crs_el = ft.find(f"{{{ns}}}DefaultCRS")
+                if crs_el is None:
+                    crs_el = ft.find(f"{{{ns}}}DefaultSRS")
+                if crs_el is not None and crs_el.text:
+                    raw_crs = crs_el.text.strip()
+                    # Normalise urn:ogc:def:crs:EPSG::4258 → EPSG:4258
+                    m = re.search(r"EPSG[:_]+([\w]+)$", raw_crs, re.IGNORECASE)
+                    if m:
+                        default_crs = f"EPSG:{m.group(1)}"
+        if layers:
+            break
+    return layers, default_crs
+
+
+def list_oapif_collections(uri: str) -> list[str]:
+    """Collection ids from an OGC API - Features endpoint.
+
+    The plain URL without an Accept header returns the server's HTML front-end, not data.
+    """
+    resp = requests.get(
+        f"{uri.rstrip('/')}/collections",
+        headers={"Accept": "application/json"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return [c["id"] for c in data.get("collections", []) if c.get("id")]
+
+
+def list_arcgis_rest_layers(uri: str) -> list[dict]:
+    """Sublayers (and standalone tables) from ArcGIS REST's service-info endpoint."""
+    resp = requests.get(f"{uri.rstrip('/')}?f=json", timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if "error" in data:
+        # ArcGIS REST returns HTTP 200 with {"error": {...}} for a bad url.
+        raise RuntimeError(data["error"].get("message", "ArcGIS REST service error"))
+    layers = []
+    for entry in (data.get("layers") or []) + (data.get("tables") or []):
+        lid = entry.get("id")
+        if lid is None:
+            continue
+        name = entry.get("name")
+        layers.append({"value": str(lid), "label": f"{lid} - {name}" if name else str(lid)})
+    return layers
+
+
+def list_gdal_layers(
+    con: duckdb.DuckDBPyConnection, target: str
+) -> tuple[list[str], str | None]:
+    """Layer names + first layer's CRS for anything GDAL can open, via ST_Read_Meta."""
+    layers: list[str] = []
+    default_crs: str | None = None
+    res = con.execute(f"SELECT layers FROM ST_Read_Meta({_sql_str(target)})").fetchall()
+    if res and len(res) > 0 and res[0][0]:
+        for layer in res[0][0]:
+            layer_name = layer.get("name")
+            if layer_name:
+                layers.append(layer_name)
+
+            geom_fields = layer.get("geometry_fields")
+            if geom_fields and isinstance(geom_fields, list) and len(geom_fields) > 0:
+                crs_info = geom_fields[0].get("crs")
+                if crs_info and isinstance(crs_info, dict):
+                    auth_name = crs_info.get("auth_name")
+                    auth_code = crs_info.get("auth_code")
+                    if auth_name and auth_code and not default_crs:
+                        default_crs = f"{auth_name}:{auth_code}"
+    return layers, default_crs
 
 
 def _layer_geometry_field(con: duckdb.DuckDBPyConnection, uri: str, layer: str | None) -> dict | None:

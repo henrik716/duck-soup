@@ -205,6 +205,76 @@ def test_inspect_file_wfs_reads_default_crs_from_leaf_element(client, monkeypatc
     assert body["default_crs"] == "EPSG:4258"
 
 
+class _FakeJsonResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+def test_inspect_file_oapif_lists_collection_ids(client, monkeypatch):
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers")
+        return _FakeJsonResponse({"collections": [
+            {"id": "fylke"}, {"id": "kommune"}, {"title": "no id here"},
+        ]})
+
+    monkeypatch.setattr("requests.get", fake_get)
+
+    r = client.post("/api/inspect_file", json={"uri": "https://host/oapif/", "format": "oapif"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["layers"] == ["fylke", "kommune"]
+    assert body["default_crs"] == "EPSG:4326"
+    # The bare URL returns the server's HTML front-end, so the JSON Accept header matters.
+    assert captured["url"] == "https://host/oapif/collections"
+    assert captured["headers"] == {"Accept": "application/json"}
+
+
+def test_inspect_file_arcgis_rest_lists_layers_and_tables(client, monkeypatch):
+    monkeypatch.setattr("requests.get", lambda *a, **k: _FakeJsonResponse({
+        "layers": [{"id": 0, "name": "Roads"}, {"id": 1}],
+        "tables": [{"id": 7, "name": "Lookup"}, {"name": "no id — skipped"}],
+    }))
+
+    r = client.post("/api/inspect_file", json={
+        "uri": "https://host/FeatureServer", "format": "arcgis_rest",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["layers"] == [
+        {"value": "0", "label": "0 - Roads"},
+        {"value": "1", "label": "1"},
+        {"value": "7", "label": "7 - Lookup"},
+    ]
+    assert body["default_crs"] == "EPSG:4326"
+
+
+def test_inspect_file_arcgis_rest_surfaces_error_payload(client, monkeypatch):
+    # ArcGIS REST answers a bad url with HTTP 200 and an {"error": {...}} body, so
+    # raise_for_status() alone would report success with an empty layer list.
+    monkeypatch.setattr("requests.get", lambda *a, **k: _FakeJsonResponse({
+        "error": {"code": 400, "message": "Invalid URL"},
+    }))
+
+    r = client.post("/api/inspect_file", json={
+        "uri": "https://host/bogus", "format": "arcgis_rest",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "Invalid URL" in body["error"]
+
+
 def test_inspect_file_parquet_reads_embedded_crs_without_gdal(client):
     # Regression test: /api/inspect_file used to fall through to GDAL's ST_Read_Meta for
     # every format, which has no Parquet driver in the bundled GDAL build and always

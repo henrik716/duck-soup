@@ -58,13 +58,14 @@ const STEP_HINTS: Record<string, string> = {
   snapshot: 'Names this step\'s current state so a later step can join back against it — fork mid-pipeline (after some processing), not just from a raw source.',
 }
 
-export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () => void, sourceIds: string[] = []): HTMLElement {
-  const c = mkEl('div', { className: 'card collapsed' })
-  c.dataset['type'] = kind
+const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'merge']
+const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
+const KINDS_WITH_FIELDS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay']
 
-  const hasSrc = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'merge'].includes(kind)
-  const hasPredicate = ['spatial_join', 'clip', 'erase'].includes(kind)
-  const hasFields = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay'].includes(kind)
+function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: string[]): string {
+  const hasSrc = KINDS_WITH_SOURCE.includes(kind)
+  const hasPredicate = KINDS_WITH_PREDICATE.includes(kind)
+  const hasFields = KINDS_WITH_FIELDS.includes(kind)
 
   // Rendering these as the value rather than leaving the combo blank: collectPipelineDef
   // already falls back to exactly these (`val(c,'predicate') || 'intersects'`), so a blank
@@ -143,8 +144,11 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   bodyHtml += `<div class="row" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
     <label class="field grow">${branchLabel}${comboField('data-k="branch"', '', [], 'main chain')}</label>
   </div>`
+  return bodyHtml
+}
 
-  c.innerHTML = `
+function buildStepCardMarkup(kind: Step['type'], bodyHtml: string): string {
+  return `
     <div class="item-head" style="cursor:pointer; user-select:none;">
       <span class="drag-handle" tabindex="0" role="button" aria-label="Reorder this step — drag, or hold Alt and press the up or down arrow"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
       <span class="tag" title="${STEP_HINTS[kind]}"><i data-lucide="${STEP_ICONS[kind]}" style="width:12px;height:12px;margin-right:2px"></i>${STEP_LABELS[kind]}</span>
@@ -160,40 +164,105 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
       <p class="hint" style="margin-bottom:10px">${STEP_HINTS[kind]}</p>
       ${bodyHtml}
     </div>`
+}
+
+export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () => void, sourceIds: string[] = []): HTMLElement {
+  const c = mkEl('div', { className: 'card collapsed' })
+  c.dataset['type'] = kind
+  const hasFields = KINDS_WITH_FIELDS.includes(kind)
+
+  c.innerHTML = buildStepCardMarkup(kind, buildStepBodyHtml(kind, st, sourceIds))
 
   wireCombos(c)
 
-  // Builds a throwaway single-column preview Config scoped to the steps that run *before*
-  // this card, mirroring the pipeline state this field's SQL actually executes against —
-  // reused by both attribute_join.left and filter.where below. Only called from user
-  // interaction (not on hydrate), so loading a saved pipeline with many such steps doesn't
-  // fire a burst of /api/preview requests for fields nobody is currently looking at.
-  const buildStepFieldPreviewConfig = (fieldExpr: string, wrapBoolean: boolean): Config | null => {
-    const card = c.closest('.pipeline-card') as HTMLElement | null
-    if (!card) return null
-    const pdef = collectPipelineDef(card)
-    if (!pdef.base) return null
-    const idx = c.parentElement ? Array.from(c.parentElement.children).indexOf(c) : -1
-    const priorSteps = idx >= 0 ? pdef.steps.slice(0, idx) : pdef.steps
-    const expr = wrapBoolean ? `CASE WHEN (${fieldExpr}) THEN 1 ELSE 0 END` : fieldExpr
-    return {
-      name: 'field_preview',
-      output: 'preview.gpkg',
-      pipelines: [{
-        ...pdef,
-        steps: priorSteps,
-        mapping: [{ to: '_check', expr }],
-        layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
-      }],
+  wireFieldValidation(c, kind)
+
+  c.querySelector('.data-step-preview')!.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const parent = c.parentElement
+    if (parent) {
+      const siblings = Array.from(parent.querySelectorAll(':scope > .card'))
+      const stepIdx = siblings.indexOf(c) + 1
+      const plCard = c.closest('.pipeline-card')
+      const plCards = Array.from(document.querySelectorAll('.pipeline-card'))
+      const pipelineIdx = plCards.indexOf(plCard!)
+      c.dispatchEvent(new CustomEvent('preview-step', {
+        bubbles: true,
+        detail: { stepIdx, pipelineIdx }
+      }))
     }
+  })
+
+  c.querySelector('[data-del]')!.addEventListener('click', (e) => {
+    e.stopPropagation()
+    mutate('remove step', { undoToast: `Removed ${STEP_LABELS[kind]} step` })
+    c.classList.add('slide-out'); setTimeout(() => { c.remove(); syncFn() }, 250)
+  })
+
+  wireStepReorder(c, syncFn)
+
+  const { addField, updateFieldsEmpty } = wireFieldsList(c, syncFn)
+  const addByCol = wireDissolveByCols(c, syncFn)
+
+  // hydrate scalar fields
+  for (const [k, v] of Object.entries(st)) {
+    if (k === 'fields' || k === 'by' || k === 'type') continue
+    const inp = c.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)
+    if (inp && v != null) inp.value = String(v)
+  }
+  // hydrate pulled fields
+  if (hasFields) {
+    Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
+    updateFieldsEmpty()
+  }
+  // hydrate dissolve by-cols
+  if (kind === 'dissolve') {
+    ;((st as Partial<Dissolve>).by || []).forEach(col => addByCol(col))
   }
 
+  wireStepTitle(c, kind)
+
+  wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
+
+  c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
+  c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
+
+  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical } })
+  return c
+}
+
+// Builds a throwaway single-column preview Config scoped to the steps that run *before*
+// this card, mirroring the pipeline state this field's SQL actually executes against —
+// reused by both attribute_join.left and filter.where. Only called from user interaction
+// (not on hydrate), so loading a saved pipeline with many such steps doesn't fire a burst
+// of /api/preview requests for fields nobody is currently looking at.
+function buildStepFieldPreviewConfig(c: HTMLElement, fieldExpr: string, wrapBoolean: boolean): Config | null {
+  const card = c.closest('.pipeline-card') as HTMLElement | null
+  if (!card) return null
+  const pdef = collectPipelineDef(card)
+  if (!pdef.base) return null
+  const idx = c.parentElement ? Array.from(c.parentElement.children).indexOf(c) : -1
+  const priorSteps = idx >= 0 ? pdef.steps.slice(0, idx) : pdef.steps
+  const expr = wrapBoolean ? `CASE WHEN (${fieldExpr}) THEN 1 ELSE 0 END` : fieldExpr
+  return {
+    name: 'field_preview',
+    output: 'preview.gpkg',
+    pipelines: [{
+      ...pdef,
+      steps: priorSteps,
+      mapping: [{ to: '_check', expr }],
+      layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
+    }],
+  }
+}
+
+function wireFieldValidation(c: HTMLElement, kind: Step['type']): void {
   if (kind === 'attribute_join') {
     const leftInp = c.querySelector<HTMLInputElement>('[data-k="left"]')!
     const leftMsg = c.querySelector<HTMLElement>('[data-left-validation]')!
     const leftValidation = attachLiveValidation({
       getValue: () => leftInp.value,
-      buildPreviewConfig: draft => buildStepFieldPreviewConfig(draft, false),
+      buildPreviewConfig: draft => buildStepFieldPreviewConfig(c, draft, false),
       render: (state, message) => renderValidationMsg(leftMsg, state, message),
     })
     leftInp.addEventListener('input', () => leftValidation.schedule())
@@ -220,35 +289,15 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     const whereMsg = c.querySelector<HTMLElement>('[data-where-validation]')!
     const whereValidation = attachLiveValidation({
       getValue: () => whereInp.value,
-      buildPreviewConfig: draft => buildStepFieldPreviewConfig(draft, true),
+      buildPreviewConfig: draft => buildStepFieldPreviewConfig(c, draft, true),
       render: (state, message) => renderValidationMsg(whereMsg, state, message),
     })
     whereInp.addEventListener('input', () => whereValidation.schedule())
     whereInp.addEventListener('blur', () => whereValidation.runNow())
   }
+}
 
-  c.querySelector('.data-step-preview')!.addEventListener('click', (e) => {
-    e.stopPropagation()
-    const parent = c.parentElement
-    if (parent) {
-      const siblings = Array.from(parent.querySelectorAll(':scope > .card'))
-      const stepIdx = siblings.indexOf(c) + 1
-      const plCard = c.closest('.pipeline-card')
-      const plCards = Array.from(document.querySelectorAll('.pipeline-card'))
-      const pipelineIdx = plCards.indexOf(plCard!)
-      c.dispatchEvent(new CustomEvent('preview-step', {
-        bubbles: true,
-        detail: { stepIdx, pipelineIdx }
-      }))
-    }
-  })
-
-  c.querySelector('[data-del]')!.addEventListener('click', (e) => {
-    e.stopPropagation()
-    mutate('remove step', { undoToast: `Removed ${STEP_LABELS[kind]} step` })
-    c.classList.add('slide-out'); setTimeout(() => { c.remove(); syncFn() }, 250)
-  })
-
+function wireStepReorder(c: HTMLElement, syncFn: () => void): void {
   const upBtn = c.querySelector<HTMLButtonElement>('[data-up]')!
   const downBtn = c.querySelector<HTMLButtonElement>('[data-down]')!
 
@@ -280,7 +329,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
 
   // Drag-to-reorder, matching the pattern mapping rows already use — the actual reorder
   // mutation snapshot and insertion-point logic live in the .pl-steps container's
-  // dragover/drop handlers (pipeline-card.ts), same as .pl-mapping's. Alt+Arrow above stays
+  // dragover/drop handlers (pipeline-card.ts), same as .pl-mapping's. Alt+Arrow below stays
   // as the keyboard-only equivalent.
   const dragHandle = c.querySelector<HTMLElement>('.drag-handle')!
   dragHandle.addEventListener('mousedown', () => { c.draggable = true })
@@ -299,11 +348,16 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     else if (e.key === 'ArrowDown') { e.preventDefault(); move(1); downBtn.focus() }
   })
 
-  // fields rows (spatial_join, attribute_join, nearest_neighbor, intersect_overlay)
-  //
-  // The row reads left-to-right the way the data flows: pick the source column first (the
-  // side the UI can actually populate), and the output name is auto-filled from it. The
-  // reverse order meant naming an output before you could see what columns existed.
+  // The card is appended by the caller, so defer until it has a parent to observe.
+  setTimeout(() => { updateMoveButtons(); observeSiblings() }, 0)
+}
+
+// fields rows (spatial_join, attribute_join, nearest_neighbor, intersect_overlay)
+//
+// The row reads left-to-right the way the data flows: pick the source column first (the
+// side the UI can actually populate), and the output name is auto-filled from it. The
+// reverse order meant naming an output before you could see what columns existed.
+function wireFieldsList(c: HTMLElement, syncFn: () => void) {
   const fieldsBox = c.querySelector<HTMLElement>('[data-fields]')
   const fieldsEmpty = c.querySelector<HTMLElement>('[data-fields-empty]')
   const updateFieldsEmpty = () => {
@@ -352,14 +406,17 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   // Pulling 20 columns one row at a time was the main tedium here. The schema lives in
   // schema.ts, which transitively imports this module, so rather than close that import
   // cycle the card exposes _addField and asks the pipeline card (which already imports
-  // resolveSchemaScoped) to do the lookup — same shape as the preview-step event above.
+  // resolveSchemaScoped) to do the lookup — same shape as the preview-step event.
   ;(c as unknown as { _addField: typeof addField })._addField = addField
   c.querySelector('[data-addallfields]')?.addEventListener('click', (e) => {
     e.stopPropagation()
     c.dispatchEvent(new CustomEvent('pull-all-fields', { bubbles: true }))
   })
 
-  // dissolve by-col rows
+  return { addField, updateFieldsEmpty }
+}
+
+function wireDissolveByCols(c: HTMLElement, syncFn: () => void) {
   const byColsBox = c.querySelector<HTMLElement>('[data-by-cols]')
   const addByCol = (col = '') => {
     if (!byColsBox) return
@@ -380,23 +437,10 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     createIcons({ icons: { X, ChevronDown } })
   }
   c.querySelector('[data-addby]')?.addEventListener('click', (e) => { e.stopPropagation(); addByCol(); syncFn() })
+  return addByCol
+}
 
-  // hydrate scalar fields
-  for (const [k, v] of Object.entries(st)) {
-    if (k === 'fields' || k === 'by' || k === 'type') continue
-    const inp = c.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)
-    if (inp && v != null) inp.value = String(v)
-  }
-  // hydrate pulled fields
-  if (hasFields) {
-    Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
-    updateFieldsEmpty()
-  }
-  // hydrate dissolve by-cols
-  if (kind === 'dissolve') {
-    ;((st as Partial<Dissolve>).by || []).forEach(col => addByCol(col))
-  }
-
+function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   const titleEl = c.querySelector<HTMLElement>('.item-title')!
   const updateTitle = () => {
     const srcEl = c.querySelector<HTMLSelectElement | HTMLInputElement>('[data-k="source"]')
@@ -428,15 +472,4 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   c.querySelector('[data-k="branch"]')?.addEventListener('change', updateTitle)
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
   updateTitle()
-
-  wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
-
-  // The card is appended by the caller, so defer until it has a parent to observe.
-  setTimeout(() => { updateMoveButtons(); observeSiblings() }, 0)
-
-  c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
-  c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
-
-  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical } })
-  return c
 }

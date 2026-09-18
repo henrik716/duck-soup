@@ -518,6 +518,47 @@ async function exportScriptFile(): Promise<void> {
   }
 }
 
+// Escapes the raw log line, then marks up the parts worth picking out at a glance.
+function highlightLogLine(raw: string): string {
+  let html = raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  // Highlight timings [0.45s]
+  html = html.replace(/(\[\d+(?:\.\d+)?s\])/g, '<span class="log-time">$1</span>')
+
+  // Highlight steps (step 1: spatial_join)
+  html = html.replace(/(step \d+: \w+)/g, '<span class="log-keyword-step">$1</span>')
+
+  // Highlight sources (source 'ambassader')
+  html = html.replace(/(source '[^']+')/g, '<span class="log-keyword-src">$1</span>')
+
+  // Highlight output path writing
+  html = html.replace(/(writing \S+|→ wrote \S+)/g, '<span class="log-keyword-path">$1</span>')
+
+  return html
+}
+
+function appendLogLine(log: HTMLElement, text: string, cls = '', id = ''): void {
+  const d = mkEl('div', { className: `log-line ${cls}`, id })
+  d.innerHTML = highlightLogLine(text)
+  log.appendChild(d)
+  log.scrollTop = log.scrollHeight
+}
+
+// Swaps the run button for a live "running… Ns" counter; returns the stop function.
+function startRunButtonTicker(runBtn: HTMLButtonElement, startedAt: number): () => void {
+  const renderBtn = () => {
+    const secs = Math.floor((Date.now() - startedAt) / 1000)
+    runBtn.innerHTML = `<i data-lucide="loader" class="spin-animation" style="width:14px;height:14px"></i> <span>running… ${secs}s</span>`
+    createIcons({ icons: appIcons })
+  }
+  renderBtn()
+  const ticker = window.setInterval(renderBtn, 1000)
+  return () => clearInterval(ticker)
+}
+
 // ---- run ----
 async function run(): Promise<void> {
   const cfg = collectConfig()
@@ -534,37 +575,9 @@ async function run(): Promise<void> {
   runBtn.disabled = true
 
   const startedAt = Date.now()
-  const renderBtn = () => {
-    const secs = Math.floor((Date.now() - startedAt) / 1000)
-    runBtn.innerHTML = `<i data-lucide="loader" class="spin-animation" style="width:14px;height:14px"></i> <span>running… ${secs}s</span>`
-    createIcons({ icons: appIcons })
-  }
-  renderBtn()
-  const ticker = window.setInterval(renderBtn, 1000)
+  const stopTicker = startRunButtonTicker(runBtn, startedAt)
 
-  const add = (t: string, cls = '', id = '') => {
-    let html = t
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-
-    // Highlight timings [0.45s]
-    html = html.replace(/(\[\d+(?:\.\d+)?s\])/g, '<span class="log-time">$1</span>')
-
-    // Highlight steps (step 1: spatial_join)
-    html = html.replace(/(step \d+: \w+)/g, '<span class="log-keyword-step">$1</span>')
-
-    // Highlight sources (source 'ambassader')
-    html = html.replace(/(source '[^']+')/g, '<span class="log-keyword-src">$1</span>')
-
-    // Highlight output path writing
-    html = html.replace(/(writing \S+|→ wrote \S+)/g, '<span class="log-keyword-path">$1</span>')
-
-    const d = mkEl('div', { className: `log-line ${cls}`, id })
-    d.innerHTML = html
-    log.appendChild(d)
-    log.scrollTop = log.scrollHeight
-  }
+  const add = (t: string, cls = '', id = '') => appendLogLine(log, t, cls, id)
 
   // Append rather than clear, so two runs can be compared.
   if (log.textContent?.trim() && log.textContent.trim() !== 'no run yet') {
@@ -600,7 +613,7 @@ async function run(): Promise<void> {
     showToast('Network error during run', 'bad')
   } finally {
     document.getElementById('log-pulse-line')?.remove()
-    clearInterval(ticker)
+    stopTicker()
     runBtn.disabled = false
     runBtn.innerHTML = originalHtml
     setRunBusy(false)
@@ -731,9 +744,25 @@ async function init(): Promise<void> {
   wireGlobalShortcuts()
   wireLineageCollapse()
 
-  // Track which pipeline card the user is actually working in, so the output preview
-  // follows edits to pipeline 2+ instead of always showing pipeline 1's output. Left alone
-  // during an explicit source/step preview, whose pipelineIdx was chosen deliberately.
+  // Order matters below: META must already be populated, and loadInitialConfig() has to
+  // stay last because it hydrates the DOM everything above has just been wired against.
+  wireFocusTracking()
+  wireMapLayerSelect()
+  wirePreviewControls()
+  wireTabNav()
+  wireHeaderActions()
+  wireLoadSaveControls()
+  wirePreviewStepEvent()
+
+  await loadInitialConfig()
+
+  createIcons({ icons: appIcons })
+}
+
+// Track which pipeline card the user is actually working in, so the output preview
+// follows edits to pipeline 2+ instead of always showing pipeline 1's output. Left alone
+// during an explicit source/step preview, whose pipelineIdx was chosen deliberately.
+function wireFocusTracking(): void {
   document.addEventListener('focusin', e => {
     if (activePreview.type !== 'output') return
     const card = (e.target as HTMLElement).closest?.('.pipeline-card')
@@ -745,14 +774,18 @@ async function init(): Promise<void> {
       runPreview()
     }
   })
+}
 
+function wireMapLayerSelect(): void {
   document.getElementById('map-layer-select')?.addEventListener('change', e => {
     const id = (e.target as HTMLSelectElement).value
     setActivePreview(id
       ? { type: 'source', id, pipelineIdx: activePreview.pipelineIdx }
       : { type: 'output', pipelineIdx: activePreview.pipelineIdx })
   })
+}
 
+function wirePreviewControls(): void {
   const limitInput = qs<HTMLInputElement>('#previewLimit')
   limitInput?.addEventListener('change', () => {
     const n = Math.max(1, Math.min(20000, Math.round(Number(limitInput.value)) || 1000))
@@ -781,8 +814,10 @@ async function init(): Promise<void> {
     clearTimeout(bboxMoveTimer)
     bboxMoveTimer = window.setTimeout(runPreview, 300)
   })
+}
 
-  // tab buttons — click plus roving-tabindex arrow navigation
+// tab buttons — click plus roving-tabindex arrow navigation
+function wireTabNav(): void {
   const tabBtns = [...document.querySelectorAll<HTMLButtonElement>('.tab-btn')]
   tabBtns.forEach((btn, i) => {
     btn.addEventListener('click', () => {
@@ -804,7 +839,9 @@ async function init(): Promise<void> {
   })
 
   qs('#status')?.addEventListener('click', () => switchTab('problems-tab'))
+}
 
+function wireHeaderActions(): void {
   // mount metadata section
   const metaMount = qs<HTMLElement>('#cfg-metadata-mount')
   if (metaMount) metaMount.appendChild(buildMetadataSection({}, sync))
@@ -849,7 +886,9 @@ async function init(): Promise<void> {
   qs('#saveBtn')?.addEventListener('click', save)
   qs('#runBtn')?.addEventListener('click', run)
   qs('#exportScriptBtn')?.addEventListener('click', exportScriptFile)
+}
 
+function wireLoadSaveControls(): void {
   const loadSel = qs<HTMLSelectElement>('#loadSelect')
   loadSel?.addEventListener('change', e => {
     const name = (e.target as HTMLSelectElement).value
@@ -877,15 +916,19 @@ async function init(): Promise<void> {
     e.preventDefault()
     e.returnValue = ''
   })
+}
 
-  // Wire step-preview custom event listener
+function wirePreviewStepEvent(): void {
   document.addEventListener('preview-step', (e: Event) => {
     const ce = e as CustomEvent<{ stepIdx: number; pipelineIdx: number }>
     const sel = qs<HTMLSelectElement>('#map-layer-select')
     if (sel) sel.value = ''
     setActivePreview({ type: 'step', stepIdx: ce.detail.stepIdx, pipelineIdx: ce.detail.pipelineIdx })
   })
+}
 
+// Opens the config the user had last, falling back to the first saved one, else a blank.
+async function loadInitialConfig(): Promise<void> {
   await loadList()
   const names = [...qs<HTMLSelectElement>('#loadSelect')!.options].map(o => o.value).filter(Boolean)
   let remembered = ''
@@ -900,8 +943,6 @@ async function init(): Promise<void> {
     markSaved()
     showToast('No saved configs yet — add a source to get started.', 'info')
   }
-
-  createIcons({ icons: appIcons })
 }
 
 init()

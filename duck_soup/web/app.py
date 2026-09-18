@@ -31,8 +31,16 @@ from ..config import (
     load_config_dict,
 )
 from ..engine import run_config, preview_config_pipeline
-from ..sources import read_expr, parquet_geometry_info, attach_postgres, _sql_ident
-from ..derive import DUCKDB_LOCK, register_udfs
+from ..sources import (
+    list_arcgis_rest_layers,
+    list_gdal_layers,
+    list_oapif_collections,
+    list_postgres_tables,
+    list_wfs_layers,
+    parquet_geometry_info,
+    read_expr,
+)
+from ..derive import DUCKDB_LOCK, init_duckdb, load_extensions
 
 ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
 PIPELINE_DIR = ROOT / "pipelines"
@@ -119,9 +127,7 @@ def inspect_source(req: InspectRequest) -> dict:
         with DUCKDB_LOCK:
             con = duckdb.connect()
             try:
-                con.execute("INSTALL spatial; LOAD spatial;")
-                con.execute("INSTALL postgres; LOAD postgres;")
-                register_udfs(con)
+                init_duckdb(con)
                 with tempfile.TemporaryDirectory() as tmp:
                     workdir = Path(tmp)
                     read = read_expr(src, workdir, con=con, sample=True)
@@ -390,40 +396,13 @@ def inspect_file(req: InspectFileRequest) -> dict:
     with DUCKDB_LOCK:
         con = duckdb.connect()
         try:
-            con.execute("INSTALL spatial; LOAD spatial;")
-            con.execute("INSTALL postgres; LOAD postgres;")
-            layers = []
-            default_crs = None
+            load_extensions(con)
 
             if fmt == "postgres":
-                # List PostGIS-enabled tables (from geometry_columns) plus plain tables
-                # (usable as attribute-join lookup sources), each as "schema.table" unless
-                # schema is the default 'public'. Default CRS is the first spatial table's SRID.
-                alias = attach_postgres(con, uri, "inspect")
-                geom_rows = con.execute(
-                    f"SELECT f_table_schema, f_table_name, srid FROM {_sql_ident(alias)}.public.geometry_columns "
-                    "ORDER BY f_table_schema, f_table_name"
-                ).fetchall()
-                seen: set[str] = set()
-                for schema, table, srid in geom_rows:
-                    full = table if schema == "public" else f"{schema}.{table}"
-                    seen.add(full)
-                    layers.append(full)
-                    if default_crs is None and srid:
-                        default_crs = f"EPSG:{srid}"
-                table_rows = con.execute(
-                    f"SELECT table_schema, table_name FROM {_sql_ident(alias)}.information_schema.tables "
-                    "WHERE table_type = 'BASE TABLE' ORDER BY table_schema, table_name"
-                ).fetchall()
-                for schema, table in table_rows:
-                    full = table if schema == "public" else f"{schema}.{table}"
-                    if full not in seen:
-                        seen.add(full)
-                        layers.append(full)
+                layers, default_crs = list_postgres_tables(con, uri)
                 return {"ok": True, "layers": layers, "default_crs": default_crs}
 
             fwd_path = str(resolved_path).replace("\\", "/")
-            sql_uri = "'" + fwd_path.replace("'", "''") + "'"
             if fmt == "parquet":
                 # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
                 # bundled GDAL build — see sources.py's module docstring). No layer concept
@@ -431,96 +410,17 @@ def inspect_file(req: InspectFileRequest) -> dict:
                 _name, crs = parquet_geometry_info(con, fwd_path)
                 return {"ok": True, "layers": [], "default_crs": crs}
             elif fmt == "wfs" or uri.upper().startswith("WFS:"):
-                # Fetch WFS layer list via GetCapabilities — more reliable than GDAL's WFS driver
-                import requests as _requests
-                from urllib.parse import urlparse, urlencode, parse_qsl
-                from xml.etree import ElementTree
-                raw = uri[4:] if uri.upper().startswith("WFS:") else uri
-                p = urlparse(raw)
-                qs_clean = [(k, v) for k, v in parse_qsl(p.query)
-                            if k.lower() not in ("request", "service", "version")]
-                qs_caps = urlencode(qs_clean + [("SERVICE", "WFS"), ("REQUEST", "GetCapabilities")])
-                caps_url = p._replace(query=qs_caps).geturl()
-                resp = _requests.get(caps_url, timeout=30)
-                resp.raise_for_status()
-                root = ElementTree.fromstring(resp.content)
-                for ns in ("http://www.opengis.net/wfs/2.0", "http://www.opengis.net/wfs"):
-                    for ft in root.iter(f"{{{ns}}}FeatureType"):
-                        name_el = ft.find(f"{{{ns}}}Name")
-                        if name_el is not None and name_el.text:
-                            layers.append(name_el.text.strip())
-                        if not default_crs:
-                            # NB: `find(...) or find(...)` is wrong here — Element.__bool__ is
-                            # based on child-element count, not identity, so a real match on a
-                            # leaf element like <DefaultCRS>EPSG::4258</DefaultCRS> (no children)
-                            # is falsy and silently discarded in favor of the second find().
-                            crs_el = ft.find(f"{{{ns}}}DefaultCRS")
-                            if crs_el is None:
-                                crs_el = ft.find(f"{{{ns}}}DefaultSRS")
-                            if crs_el is not None and crs_el.text:
-                                raw_crs = crs_el.text.strip()
-                                # Normalise urn:ogc:def:crs:EPSG::4258 → EPSG:4258
-                                import re as _re
-                                m = _re.search(r"EPSG[:_]+([\w]+)$", raw_crs, _re.IGNORECASE)
-                                if m:
-                                    default_crs = f"EPSG:{m.group(1)}"
-                    if layers:
-                        break
+                layers, default_crs = list_wfs_layers(uri)
                 return {"ok": True, "layers": layers, "default_crs": default_crs}
             elif fmt == "oapif":
-                # List collections via the OGC API - Features JSON endpoint — the plain
-                # URL without an Accept header returns the server's HTML front-end, not data.
-                import requests as _requests
-                resp = _requests.get(
-                    f"{uri.rstrip('/')}/collections",
-                    headers={"Accept": "application/json"},
-                    timeout=30,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                layers = [c["id"] for c in data.get("collections", []) if c.get("id")]
                 # fetch_oapif() always requests the default CRS84 response.
-                return {"ok": True, "layers": layers, "default_crs": "EPSG:4326"}
+                return {"ok": True, "layers": list_oapif_collections(uri), "default_crs": "EPSG:4326"}
             elif fmt == "arcgis_rest":
-                # ArcGIS REST's service-info endpoint (?f=json) lists sublayers (and
-                # standalone tables) directly.
-                import requests as _requests
-                resp = _requests.get(f"{uri.rstrip('/')}?f=json", timeout=30)
-                resp.raise_for_status()
-                data = resp.json()
-                if "error" in data:
-                    # ArcGIS REST returns HTTP 200 with {"error": {...}} for a bad url.
-                    raise RuntimeError(data["error"].get("message", "ArcGIS REST service error"))
-                for entry in (data.get("layers") or []) + (data.get("tables") or []):
-                    lid = entry.get("id")
-                    if lid is None:
-                        continue
-                    name = entry.get("name")
-                    layers.append({"value": str(lid), "label": f"{lid} - {name}" if name else str(lid)})
                 # fetch_arcgis_rest() always forces outSR=4326.
-                return {"ok": True, "layers": layers, "default_crs": "EPSG:4326"}
-            elif uri.startswith("http://") or uri.startswith("https://"):
-                sql_uri = "'" + uri.replace("'", "''") + "'"
+                return {"ok": True, "layers": list_arcgis_rest_layers(uri), "default_crs": "EPSG:4326"}
 
-            res = con.execute(f"SELECT layers FROM ST_Read_Meta({sql_uri})").fetchall()
-            if res and len(res) > 0 and res[0][0]:
-                layers_list = res[0][0]
-                for layer in layers_list:
-                    layer_name = layer.get("name")
-                    if layer_name:
-                        layers.append(layer_name)
-
-                    # Extract CRS of first layer if available
-                    geom_fields = layer.get("geometry_fields")
-                    if geom_fields and isinstance(geom_fields, list) and len(geom_fields) > 0:
-                        crs_info = geom_fields[0].get("crs")
-                        if crs_info and isinstance(crs_info, dict):
-                            auth_name = crs_info.get("auth_name")
-                            auth_code = crs_info.get("auth_code")
-                            if auth_name and auth_code:
-                                crs_str = f"{auth_name}:{auth_code}"
-                                if not default_crs:
-                                    default_crs = crs_str
+            target = uri if uri.startswith(("http://", "https://")) else fwd_path
+            layers, default_crs = list_gdal_layers(con, target)
             return {"ok": True, "layers": layers, "default_crs": default_crs}
         except Exception as e:
             return {"ok": False, "error": str(e), "layers": [], "default_crs": None}

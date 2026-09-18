@@ -128,12 +128,8 @@ function groupUploadItems(files: FileList | File[]): (File | ShpGroup)[] {
   return items
 }
 
-export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void): HTMLElement {
-  const plId = String(_plCounter++)
-  const card = mkEl('div', { className: 'pipeline-card' })
-  card.setAttribute('data-pl-id', plId)
-
-  card.innerHTML = `
+function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): string {
+  return `
     <div class="pipeline-card-header">
       <i data-lucide="layers" style="width:14px;height:14px;color:var(--accent);flex-shrink:0"></i>
       <input class="pl-name" placeholder="pipeline name" value="${esc(pdef.name)}">
@@ -277,49 +273,17 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
         </div>
       </div>
     </div>`
+}
 
-  // Scoped sync: refresh base options + datalists, then call global sync
-  const scopedSync = () => {
-    refreshBaseOptionsScoped(card)
-    updateDatalistsScoped(card)
-    syncFn()
-  }
-  ;(card as any)._scopedSync = scopedSync
+export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void): HTMLElement {
+  const plId = String(_plCounter++)
+  const card = mkEl('div', { className: 'pipeline-card' })
+  card.setAttribute('data-pl-id', plId)
 
-  // Sections are an exclusive tab bar — one visible at a time. (An earlier version kept them
-  // as independently-collapsible blocks specifically so you could see e.g. a source and the
-  // step consuming it simultaneously; switched to tabs on request, trading that away for a
-  // shorter card per section.)
-  const activateSection = (secName: string) => {
-    card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn').forEach(btn => {
-      const active = btn.dataset['sec'] === secName
-      btn.classList.toggle('active', active)
-      btn.setAttribute('aria-selected', String(active))
-      btn.tabIndex = active ? 0 : -1
-    })
-    card.querySelectorAll<HTMLElement>('.pl-panel').forEach(p => {
-      p.classList.toggle('active', p.dataset['sec'] === secName)
-    })
-    persistActiveSection(secName)
-  }
+  card.innerHTML = buildPipelineCardMarkup(pdef, plId)
+
+  const { activateSection, restoreActiveSection } = createSectionControls(card)
   ;(card as any)._activateSection = activateSection
-
-  // Which section is showing is a working-layout preference, not config — remember it so it
-  // survives a reload and an undo (which rebuilds this DOM wholesale).
-  const blockStateKey = () => `ducksoup.blocks.${qs<HTMLInputElement>('#cfg_name')?.value.trim() || 'default'}`
-
-  const persistActiveSection = (sec: string) => {
-    try { localStorage.setItem(blockStateKey(), sec) } catch { /* private mode */ }
-  }
-
-  const KNOWN_SECTIONS = ['sources', 'derived_sources', 'steps', 'mapping', 'output']
-  const restoreActiveSection = (): string => {
-    // Older builds stored this key as a JSON array of open sections, not a single id — fall
-    // back to the default rather than "activating" that raw string and matching no tab.
-    let stored: string | null = null
-    try { stored = localStorage.getItem(blockStateKey()) } catch { /* private mode */ }
-    return stored && KNOWN_SECTIONS.includes(stored) ? stored : 'sources'
-  }
 
   const sourcesEl = card.querySelector<HTMLElement>('.pl-sources')!
   const derivedEl = card.querySelector<HTMLElement>('.pl-derived-sources')!
@@ -327,97 +291,12 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   const mappingEl = card.querySelector<HTMLElement>('.pl-mapping')!
   const layersEl = card.querySelector<HTMLElement>('.pl-output-layers')!
 
-  // ---- auto-map ----
-  // One click can append dozens of rows that would otherwise have to be deleted one at a
-  // time, so it snapshots first and offers a single-action undo.
-  const autoMapAll = () => {
-    const available = collectAvailableColumnsScoped(card)
-    const mapped = new Set([...mappingEl.querySelectorAll('.map-item')]
-      .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
-    const unmapped = [...available].filter(col => !mapped.has(col))
-    if (unmapped.length === 0) return
+  const { scopedSync, autoMapAll, updateSummaries, fullSync } = createSyncHelpers(
+    card, plId, syncFn, { sourcesEl, derivedEl, stepsEl, mappingEl, layersEl },
+  )
+  ;(card as any)._scopedSync = scopedSync
 
-    mutate('auto-map columns', {
-      undoToast: `Mapped ${unmapped.length} column${unmapped.length !== 1 ? 's' : ''}`,
-    })
-    unmapped.forEach(col => mappingEl.appendChild(mapRow({ to: col, from: col }, fullSync, plId)))
-    refreshIcons()
-    fullSync()
-  }
-
-  const updateAutoMapBanner = () => {
-    const bannerContainer = card.querySelector<HTMLElement>('.auto-map-banner-container')
-    if (!bannerContainer) return
-
-    const available = collectAvailableColumnsScoped(card)
-    const mapped = new Set([...mappingEl.querySelectorAll('.map-item')]
-      .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
-
-    const unmapped = [...available].filter(c => !mapped.has(c))
-    if (unmapped.length > 0) {
-      bannerContainer.innerHTML = `
-        <div class="auto-map-banner">
-          <span>💡 <strong>${unmapped.length} schema columns</strong> are not mapped yet.</span>
-          <button type="button" class="mini pl-banner-auto-map">Auto-map all</button>
-        </div>`
-
-      bannerContainer.querySelector('.pl-banner-auto-map')!.addEventListener('click', e => {
-        e.stopPropagation()
-        autoMapAll()
-      })
-    } else {
-      bannerContainer.innerHTML = ''
-    }
-  }
-
-  // ---- sub-section collapse ----
-  const updateSummaries = () => {
-    const srcCount = sourcesEl.querySelectorAll('.card').length
-    const derivedCount = derivedEl.querySelectorAll('.card').length
-    const stepCount = stepsEl.querySelectorAll('.card').length
-    const mapCount = mappingEl.querySelectorAll('.map-item').length
-    const baseVal = card.querySelector<HTMLInputElement>('.pl-base')!.value
-    const layerCards = [...layersEl.querySelectorAll<HTMLElement>('.card')]
-    const layerNames = layerCards.map(c => c.querySelector<HTMLInputElement>('[data-k="layer"]')?.value.trim()).filter(Boolean)
-
-    const setSummary = (sec: string, text: string) => {
-      const el = card.querySelector<HTMLElement>(`.pl-tab-btn[data-sec="${sec}"] .pl-tab-summary`)
-      if (el) el.textContent = text
-    }
-    const srcSummary = srcCount ? `${srcCount} source${srcCount !== 1 ? 's' : ''}` : ''
-    setSummary('sources', baseVal ? `${srcSummary} · base: ${baseVal}` : srcSummary)
-    setSummary('derived_sources', derivedCount ? `${derivedCount} derived` : '')
-    setSummary('steps', stepCount ? `${stepCount} step${stepCount !== 1 ? 's' : ''}` : 'none')
-    setSummary('mapping', mapCount ? `${mapCount} column${mapCount !== 1 ? 's' : ''}` : '')
-    setSummary('output', layerNames.length ? layerNames.join(', ') : '')
-
-    // Empty sections get a real empty state instead of a blank box.
-    const setEmpty = (name: string, empty: boolean) => {
-      const el = card.querySelector<HTMLElement>(`.section-empty-hint[data-empty="${name}"]`)
-      if (el) el.hidden = !empty
-    }
-    setEmpty('derived_sources', derivedCount === 0)
-    setEmpty('steps', stepCount === 0)
-    setEmpty('mapping', mapCount === 0)
-
-    updateAutoMapBanner()
-  }
-  const fullSync = () => { scopedSync(); updateSummaries() }
-
-  card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => activateSection(btn.dataset['sec'] ?? 'sources'))
-  })
-  // Roving tabindex: arrow keys move focus between tabs, matching the sidebar's own tab strip.
-  card.querySelector<HTMLElement>('.pl-tabs')!.addEventListener('keydown', e => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-    const tabs = [...card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn')]
-    const i = tabs.indexOf(document.activeElement as HTMLButtonElement)
-    if (i < 0) return
-    e.preventDefault()
-    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]
-    next.focus()
-    activateSection(next.dataset['sec'] ?? 'sources')
-  })
+  wireSectionTabs(card, activateSection)
 
   // Wire base source preview button
   card.querySelector('.pl-preview-base')!.addEventListener('click', e => {
@@ -483,7 +362,451 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
     })
   })
 
-  // Drag and Drop Zone
+  wireSourceUpload(card, sourcesEl, activateSection, fullSync)
+
+  // Step picker gallery modal
+  const addStepBtn = card.querySelector<HTMLButtonElement>('.pl-add-step')!
+  addStepBtn.addEventListener('click', e => {
+    e.stopPropagation()
+    openStepGalleryModal(k => {
+      mutate('add step')
+      activateSection('steps')
+      const newCard = stepCard(k, {}, fullSync, collectAllSourceIdsScoped(card))
+      newCard.classList.remove('collapsed')
+      stepsEl.appendChild(newCard)
+      refreshIcons()
+      fullSync()
+      // The new card lands at the bottom of a list that's often taller than the viewport, so
+      // adding one could look like nothing happened. Focus scrolls it into view for free.
+      // Deferred because the gallery modal restores focus to its trigger as it closes.
+      setTimeout(() => {
+        const first = newCard.querySelector<HTMLInputElement>('.card-content input')
+        if (first) first.focus()
+        else newCard.scrollIntoView({ block: 'nearest' })
+      }, 50)
+    })
+  })
+
+  // A step card can't resolve a source id to its schema without importing schema.ts, which
+  // would close an import cycle back through this module — so it asks here instead. Like
+  // autoMapAll, the whole batch is one snapshot so a single undo reverses it.
+  stepsEl.addEventListener('pull-all-fields', e => {
+    const stepEl = e.target as HTMLElement & { _addField?: (out?: string, col?: string) => void }
+    if (!stepEl._addField) return
+    const srcId = (stepEl.querySelector<HTMLInputElement>('[data-k="source"]')?.value ?? '').trim()
+    if (!srcId) { showToast('Pick a source for this step first', 'info'); return }
+
+    const cols = resolveSchemaScoped(card, srcId)
+    if (cols.length === 0) { showToast(`No inspected schema for "${srcId}"`, 'info'); return }
+
+    const pulled = new Set([...stepEl.querySelectorAll<HTMLInputElement>('[data-fields] .kv [data-fc]')]
+      .map(i => i.value.trim()).filter(Boolean))
+    const missing = cols.map(c => c.name).filter(name => !pulled.has(name))
+    if (missing.length === 0) { showToast('Every column is already pulled', 'info'); return }
+
+    mutate('pull all fields', {
+      undoToast: `Pulled ${missing.length} field${missing.length !== 1 ? 's' : ''}`,
+    })
+    missing.forEach(name => stepEl._addField!('', name))
+    refreshIcons()
+    fullSync()
+  })
+
+  card.querySelector('.pl-add-map')!.addEventListener('click', e => {
+    e.stopPropagation()
+    mutate('add mapping column')
+    activateSection('mapping')
+    const newRow = mapRow({}, scopedSync, plId)
+    mappingEl.appendChild(newRow)
+    refreshIcons()
+    scopedSync()
+    // Same reason as add-step: the row appends to the bottom, so without this, clicking add
+    // from the collapsed-section header looks like it did nothing.
+    setTimeout(() => newRow.querySelector<HTMLInputElement>('[data-to]')?.focus(), 50)
+  })
+  card.querySelector('.pl-auto-map')!.addEventListener('click', e => {
+    e.stopPropagation()
+    activateSection('mapping')
+    autoMapAll()
+  })
+
+  card.querySelector('.pl-add-layer')!.addEventListener('click', e => {
+    e.stopPropagation()
+    mutate('add output layer')
+    activateSection('output')
+    const newCard = outputLayerCard({}, fullSync)
+    newCard.classList.remove('collapsed')
+    layersEl.appendChild(newCard)
+    refreshIcons()
+    fullSync()
+  })
+
+  // ---- drag-reorder (steps and mapping rows) ----
+  wireDragReorder(stepsEl, '.card.dragging', '.card', 'reorder step', syncFn)
+  wireDragReorder(mappingEl, '.map-item.dragging', undefined, 'reorder mapping', syncFn)
+
+  wireRemovePipeline(card, { sourcesEl, stepsEl, mappingEl }, syncFn)
+
+  // ---- top-level collapse ----
+  wireCollapse(card, {
+    headerSel: '.pipeline-card-header',
+    chevronSel: '.pipeline-card-header .chevron',
+    bodySel: '.pipeline-card-body',
+  })
+
+  // ---- input changes ----
+  card.querySelector<HTMLInputElement>('.pl-name')!.addEventListener('input', syncFn)
+  card.querySelector<HTMLInputElement>('.pl-working-crs')!.addEventListener('input', syncFn)
+  attachCrsFormatCheck(card.querySelector<HTMLInputElement>('.pl-working-crs')!)
+  wireCombos(card)
+
+  // ---- hydrate (always stays collapsed — summaries show content at a glance) ----
+  ;(pdef.sources || []).forEach(s => sourcesEl.appendChild(sourceCard(s, fullSync)))
+  ;(pdef.derived_sources || []).forEach(ds => derivedEl.appendChild(derivedSourceCard(ds, fullSync, collectAllSourceIdsScoped(card))))
+  ;(pdef.steps || []).forEach(st => stepsEl.appendChild(stepCard(st.type, st, fullSync, collectAllSourceIdsScoped(card))))
+  ;(pdef.mapping || []).forEach(m => mappingEl.appendChild(mapRow(m, fullSync, plId)))
+  ;(pdef.layers && pdef.layers.length ? pdef.layers : [{ layer: '', crs: 'EPSG:25833' }]).forEach(ol => layersEl.appendChild(outputLayerCard(ol, fullSync)))
+
+  refreshBaseOptionsScoped(card)
+
+  // The header add buttons stay — they're reachable while the section is collapsed, and they
+  // keep the six section headers uniform. But a new row appends to the bottom of a list that
+  // can be several screens long, and that's exactly where you are when you want another one,
+  // so each list also gets an add button where the row actually lands. Both delegate to the
+  // single real handler rather than duplicating it.
+  card.querySelector('.pl-add-step-bottom')?.addEventListener('click', e => {
+    e.stopPropagation()
+    ;(card.querySelector('.pl-add-step') as HTMLButtonElement | null)?.click()
+  })
+  card.querySelector('.pl-add-map-bottom')?.addEventListener('click', e => {
+    e.stopPropagation()
+    ;(card.querySelector('.pl-add-map') as HTMLButtonElement | null)?.click()
+  })
+
+  activateSection(restoreActiveSection())
+  updateSummaries()
+  // createIcons is called by the caller after the card is in the DOM
+  return card
+}
+
+const KNOWN_SECTIONS = ['sources', 'derived_sources', 'steps', 'mapping', 'output']
+
+// Sections are an exclusive tab bar — one visible at a time. (An earlier version kept them
+// as independently-collapsible blocks specifically so you could see e.g. a source and the
+// step consuming it simultaneously; switched to tabs on request, trading that away for a
+// shorter card per section.)
+function createSectionControls(card: HTMLElement) {
+  // Which section is showing is a working-layout preference, not config — remember it so it
+  // survives a reload and an undo (which rebuilds this DOM wholesale).
+  const blockStateKey = () => `ducksoup.blocks.${qs<HTMLInputElement>('#cfg_name')?.value.trim() || 'default'}`
+
+  const persistActiveSection = (sec: string) => {
+    try { localStorage.setItem(blockStateKey(), sec) } catch { /* private mode */ }
+  }
+
+  const activateSection = (secName: string) => {
+    card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn').forEach(btn => {
+      const active = btn.dataset['sec'] === secName
+      btn.classList.toggle('active', active)
+      btn.setAttribute('aria-selected', String(active))
+      btn.tabIndex = active ? 0 : -1
+    })
+    card.querySelectorAll<HTMLElement>('.pl-panel').forEach(p => {
+      p.classList.toggle('active', p.dataset['sec'] === secName)
+    })
+    persistActiveSection(secName)
+  }
+
+  const restoreActiveSection = (): string => {
+    // Older builds stored this key as a JSON array of open sections, not a single id — fall
+    // back to the default rather than "activating" that raw string and matching no tab.
+    let stored: string | null = null
+    try { stored = localStorage.getItem(blockStateKey()) } catch { /* private mode */ }
+    return stored && KNOWN_SECTIONS.includes(stored) ? stored : 'sources'
+  }
+
+  return { activateSection, restoreActiveSection }
+}
+
+function wireSectionTabs(card: HTMLElement, activateSection: (sec: string) => void): void {
+  card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => activateSection(btn.dataset['sec'] ?? 'sources'))
+  })
+  // Roving tabindex: arrow keys move focus between tabs, matching the sidebar's own tab strip.
+  card.querySelector<HTMLElement>('.pl-tabs')!.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    const tabs = [...card.querySelectorAll<HTMLButtonElement>('.pl-tab-btn')]
+    const i = tabs.indexOf(document.activeElement as HTMLButtonElement)
+    if (i < 0) return
+    e.preventDefault()
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]
+    next.focus()
+    activateSection(next.dataset['sec'] ?? 'sources')
+  })
+}
+
+type PanelEls = {
+  sourcesEl: HTMLElement; derivedEl: HTMLElement; stepsEl: HTMLElement
+  mappingEl: HTMLElement; layersEl: HTMLElement
+}
+
+/** The mutually-recursive sync/summary/auto-map closures this card's handlers all call. */
+function createSyncHelpers(card: HTMLElement, plId: string, syncFn: () => void, els: PanelEls) {
+  const { sourcesEl, derivedEl, stepsEl, mappingEl, layersEl } = els
+
+  // Scoped sync: refresh base options + datalists, then call global sync
+  const scopedSync = () => {
+    refreshBaseOptionsScoped(card)
+    updateDatalistsScoped(card)
+    syncFn()
+  }
+
+  const mappedColumns = () => new Set([...mappingEl.querySelectorAll('.map-item')]
+    .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
+
+  // One click can append dozens of rows that would otherwise have to be deleted one at a
+  // time, so it snapshots first and offers a single-action undo.
+  const autoMapAll = () => {
+    const mapped = mappedColumns()
+    const unmapped = [...collectAvailableColumnsScoped(card)].filter(col => !mapped.has(col))
+    if (unmapped.length === 0) return
+
+    mutate('auto-map columns', {
+      undoToast: `Mapped ${unmapped.length} column${unmapped.length !== 1 ? 's' : ''}`,
+    })
+    unmapped.forEach(col => mappingEl.appendChild(mapRow({ to: col, from: col }, fullSync, plId)))
+    refreshIcons()
+    fullSync()
+  }
+
+  const updateAutoMapBanner = () => {
+    const bannerContainer = card.querySelector<HTMLElement>('.auto-map-banner-container')
+    if (!bannerContainer) return
+
+    const mapped = mappedColumns()
+    const unmapped = [...collectAvailableColumnsScoped(card)].filter(c => !mapped.has(c))
+    if (unmapped.length > 0) {
+      bannerContainer.innerHTML = `
+        <div class="auto-map-banner">
+          <span>💡 <strong>${unmapped.length} schema columns</strong> are not mapped yet.</span>
+          <button type="button" class="mini pl-banner-auto-map">Auto-map all</button>
+        </div>`
+
+      bannerContainer.querySelector('.pl-banner-auto-map')!.addEventListener('click', e => {
+        e.stopPropagation()
+        autoMapAll()
+      })
+    } else {
+      bannerContainer.innerHTML = ''
+    }
+  }
+
+  const updateSummaries = () => {
+    const srcCount = sourcesEl.querySelectorAll('.card').length
+    const derivedCount = derivedEl.querySelectorAll('.card').length
+    const stepCount = stepsEl.querySelectorAll('.card').length
+    const mapCount = mappingEl.querySelectorAll('.map-item').length
+    const baseVal = card.querySelector<HTMLInputElement>('.pl-base')!.value
+    const layerCards = [...layersEl.querySelectorAll<HTMLElement>('.card')]
+    const layerNames = layerCards.map(c => c.querySelector<HTMLInputElement>('[data-k="layer"]')?.value.trim()).filter(Boolean)
+
+    const setSummary = (sec: string, text: string) => {
+      const el = card.querySelector<HTMLElement>(`.pl-tab-btn[data-sec="${sec}"] .pl-tab-summary`)
+      if (el) el.textContent = text
+    }
+    const srcSummary = srcCount ? `${srcCount} source${srcCount !== 1 ? 's' : ''}` : ''
+    setSummary('sources', baseVal ? `${srcSummary} · base: ${baseVal}` : srcSummary)
+    setSummary('derived_sources', derivedCount ? `${derivedCount} derived` : '')
+    setSummary('steps', stepCount ? `${stepCount} step${stepCount !== 1 ? 's' : ''}` : 'none')
+    setSummary('mapping', mapCount ? `${mapCount} column${mapCount !== 1 ? 's' : ''}` : '')
+    setSummary('output', layerNames.length ? layerNames.join(', ') : '')
+
+    // Empty sections get a real empty state instead of a blank box.
+    const setEmpty = (name: string, empty: boolean) => {
+      const el = card.querySelector<HTMLElement>(`.section-empty-hint[data-empty="${name}"]`)
+      if (el) el.hidden = !empty
+    }
+    setEmpty('derived_sources', derivedCount === 0)
+    setEmpty('steps', stepCount === 0)
+    setEmpty('mapping', mapCount === 0)
+
+    updateAutoMapBanner()
+  }
+
+  const fullSync = () => { scopedSync(); updateSummaries() }
+
+  return { scopedSync, autoMapAll, updateSummaries, fullSync }
+}
+
+/**
+ * Drag-to-reorder for a list container. `draggingSel` matches the row being dragged;
+ * `afterSel` is passed through to getDragAfterElement (mapping rows use its default).
+ */
+function wireDragReorder(
+  container: HTMLElement,
+  draggingSel: string,
+  afterSel: string | undefined,
+  mutateLabel: string,
+  syncFn: () => void,
+): void {
+  let snapshotTaken = false
+  const clearMarkers = () => {
+    container.querySelectorAll('.drop-target-above, .drop-target-below')
+      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
+  }
+
+  container.addEventListener('dragover', e => {
+    e.preventDefault()
+    const dragging = container.querySelector<HTMLElement>(draggingSel)
+    if (!dragging) return
+    if (!snapshotTaken) { mutate(mutateLabel); snapshotTaken = true }
+
+    const after = afterSel
+      ? getDragAfterElement(container, e.clientY, afterSel)
+      : getDragAfterElement(container, e.clientY)
+    // A visible insertion line — previously the only feedback was the dragged row fading.
+    clearMarkers()
+    if (after) after.classList.add('drop-target-above')
+    else container.lastElementChild?.classList.add('drop-target-below')
+
+    if (after === null) container.appendChild(dragging)
+    else if (after !== dragging.nextElementSibling) container.insertBefore(dragging, after)
+  })
+  container.addEventListener('drop', () => {
+    snapshotTaken = false
+    clearMarkers()
+    syncFn()
+  })
+}
+
+// The only delete in the app that takes a whole subtree with it — sources, steps, mapping
+// and layers all go at once — so this one gets a confirm rather than an undo toast.
+function wireRemovePipeline(
+  card: HTMLElement,
+  els: Pick<PanelEls, 'sourcesEl' | 'stepsEl' | 'mappingEl'>,
+  syncFn: () => void,
+): void {
+  card.querySelector('.pl-remove')!.addEventListener('click', e => {
+    e.stopPropagation()
+    const name = card.querySelector<HTMLInputElement>('.pl-name')?.value.trim() || 'this pipeline'
+    const counts = [
+      `${els.sourcesEl.querySelectorAll('.card').length} source(s)`,
+      `${els.stepsEl.querySelectorAll('.card').length} step(s)`,
+      `${els.mappingEl.querySelectorAll('.map-item').length} mapped column(s)`,
+    ].join(', ')
+    if (!window.confirm(`Remove "${name}"?\n\nThis also removes its ${counts}.`)) return
+    mutate('remove pipeline', { undoToast: `Removed pipeline "${name}"` })
+    card.remove(); syncFn()
+  })
+}
+
+// ---- collect ----
+export function collectPipelineDef(card: HTMLElement): PipelineDef {
+  const name = card.querySelector<HTMLInputElement>('.pl-name')!.value.trim() || 'pipeline'
+  const sources = [...card.querySelectorAll('.pl-sources > .card')].map(c => {
+    const s: Partial<Source> = { id: val(c, 'id'), format: val(c, 'format') as Source['format'], uri: val(c, 'uri') }
+    if (val(c, 'layer')) s.layer = val(c, 'layer')
+    if (val(c, 'crs')) s.crs = val(c, 'crs')
+    const headerRow = val(c, 'header_row')
+    if (headerRow) s.header_row = headerRow === 'true'
+    if (val(c, 'x_field')) s.x_field = val(c, 'x_field')
+    if (val(c, 'y_field')) s.y_field = val(c, 'y_field')
+    if (val(c, 'geom_field')) s.geom_field = val(c, 'geom_field')
+    const mv = c.querySelector<HTMLInputElement>('[data-k="make_valid"]')
+    if (mv && !mv.checked) s.make_valid = false
+    return s as Source
+  }).filter(s => s.id && s.uri)
+
+  const derived_sources = [...card.querySelectorAll('.pl-derived-sources > .card')].map(c => {
+    const ds: Partial<DerivedSource> = { id: val(c, 'id'), from: val(c, 'from') }
+    const where = val(c, 'where'); if (where) ds.where = where
+    const buffer = val(c, 'buffer'); if (buffer) ds.buffer = parseFloat(buffer)
+    const mv = c.querySelector<HTMLInputElement>('[data-k="make_valid"]')
+    if (mv && !mv.checked) ds.make_valid = false
+    return ds as DerivedSource
+  }).filter(ds => ds.id && ds.from)
+
+  const base = card.querySelector<HTMLInputElement>('.pl-base')!.value
+
+  const steps = [...card.querySelectorAll<HTMLElement>('.pl-steps > .card')].map(c => {
+    const t = c.dataset['type'] as Step['type']
+    const st: Record<string, unknown> = { type: t }
+    const branchVal = val(c, 'branch')
+    if (branchVal) st['branch'] = branchVal
+    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'merge'].includes(t)) {
+      st['source'] = val(c, 'source')
+    }
+    if (['spatial_join', 'clip', 'erase'].includes(t)) {
+      st['predicate'] = val(c, 'predicate') || 'intersects'
+    }
+    if (t === 'spatial_join') {
+      st['match'] = val(c, 'match') || 'first'
+    }
+    if (t === 'filter') {
+      st['where'] = val(c, 'where')
+    }
+    if (t === 'snapshot') {
+      st['id'] = val(c, 'id')
+    }
+    if (t === 'attribute_join') {
+      st['left'] = val(c, 'left')
+      st['right'] = val(c, 'right')
+    }
+    if (t === 'nearest_neighbor') {
+      const maxDist = val(c, 'max_distance')
+      if (maxDist) st['max_distance'] = parseFloat(maxDist)
+      const distField = val(c, 'distance_field').trim()
+      if (distField) st['distance_field'] = distField
+    }
+    if (t === 'buffer') {
+      st['distance'] = parseFloat(val(c, 'distance')) || 0
+    }
+    if (t === 'dissolve') {
+      st['by'] = [...c.querySelectorAll<HTMLInputElement>('[data-by-col]')]
+        .map(i => i.value.trim()).filter(Boolean)
+    }
+    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay'].includes(t)) {
+      const f: Record<string, string> = {}
+      c.querySelectorAll('[data-fields] .kv').forEach(r => {
+        const o = r.querySelector<HTMLInputElement>('[data-fo]')!.value.trim()
+        const col = r.querySelector<HTMLInputElement>('[data-fc]')!.value.trim()
+        if (o && col) f[o] = col
+      })
+      st['fields'] = f
+    }
+    return st as unknown as Step
+  })
+
+  const mapping = [...card.querySelectorAll('.pl-mapping > .map-item')]
+    .map(w => (w as MapRowElement)._readMapping?.() ?? null)
+    .filter((x): x is MapItem => x !== null)
+
+  const layers = [...card.querySelectorAll<HTMLElement>('.pl-output-layers > .card')].map(c => {
+    const ol: OutputLayer = {
+      layer: (c.querySelector<HTMLInputElement>('[data-k="layer"]')?.value.trim() || 'output'),
+      crs: (c.querySelector<HTMLInputElement>('[data-k="crs"]')?.value.trim() || 'EPSG:25833'),
+    }
+    const filterVal = c.querySelector<HTMLInputElement>('[data-k="filter"]')?.value.trim()
+    if (filterVal) ol.filter = filterVal
+    return ol
+  })
+  const workingCrs = card.querySelector<HTMLInputElement>('.pl-working-crs')!.value.trim()
+
+  return {
+    name, sources, ...(derived_sources.length ? { derived_sources } : {}),
+    base, steps, mapping, layers, ...(workingCrs ? { working_crs: workingCrs } : {}),
+  }
+}
+
+// Dropzone + file/folder upload: turns dropped or browsed files into source cards.
+// A .gdb folder is uploaded file-by-file and becomes a single fgdb source; a .shp and its
+// sidecars upload together but yield one source.
+function wireSourceUpload(
+  card: HTMLElement,
+  sourcesEl: HTMLElement,
+  activateSection: (sec: string) => void,
+  fullSync: () => void,
+): void {
   const dropzone = card.querySelector<HTMLElement>('.sources-dropzone')!
   const fileInp = mkEl('input', { type: 'file', multiple: true }) as HTMLInputElement
   fileInp.style.display = 'none'
@@ -728,283 +1051,4 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
       uploadFiles(dt.files)
     }
   })
-  // Step picker gallery modal
-  const addStepBtn = card.querySelector<HTMLButtonElement>('.pl-add-step')!
-  addStepBtn.addEventListener('click', e => {
-    e.stopPropagation()
-    openStepGalleryModal(k => {
-      mutate('add step')
-      activateSection('steps')
-      const newCard = stepCard(k, {}, fullSync, collectAllSourceIdsScoped(card))
-      newCard.classList.remove('collapsed')
-      stepsEl.appendChild(newCard)
-      refreshIcons()
-      fullSync()
-      // The new card lands at the bottom of a list that's often taller than the viewport, so
-      // adding one could look like nothing happened. Focus scrolls it into view for free.
-      // Deferred because the gallery modal restores focus to its trigger as it closes.
-      setTimeout(() => {
-        const first = newCard.querySelector<HTMLInputElement>('.card-content input')
-        if (first) first.focus()
-        else newCard.scrollIntoView({ block: 'nearest' })
-      }, 50)
-    })
-  })
-  // A step card can't resolve a source id to its schema without importing schema.ts, which
-  // would close an import cycle back through this module — so it asks here instead. Like
-  // autoMapAll, the whole batch is one snapshot so a single undo reverses it.
-  stepsEl.addEventListener('pull-all-fields', e => {
-    const stepEl = e.target as HTMLElement & { _addField?: (out?: string, col?: string) => void }
-    if (!stepEl._addField) return
-    const srcId = (stepEl.querySelector<HTMLInputElement>('[data-k="source"]')?.value ?? '').trim()
-    if (!srcId) { showToast('Pick a source for this step first', 'info'); return }
-
-    const cols = resolveSchemaScoped(card, srcId)
-    if (cols.length === 0) { showToast(`No inspected schema for "${srcId}"`, 'info'); return }
-
-    const pulled = new Set([...stepEl.querySelectorAll<HTMLInputElement>('[data-fields] .kv [data-fc]')]
-      .map(i => i.value.trim()).filter(Boolean))
-    const missing = cols.map(c => c.name).filter(name => !pulled.has(name))
-    if (missing.length === 0) { showToast('Every column is already pulled', 'info'); return }
-
-    mutate('pull all fields', {
-      undoToast: `Pulled ${missing.length} field${missing.length !== 1 ? 's' : ''}`,
-    })
-    missing.forEach(name => stepEl._addField!('', name))
-    refreshIcons()
-    fullSync()
-  })
-
-  card.querySelector('.pl-add-map')!.addEventListener('click', e => {
-    e.stopPropagation()
-    mutate('add mapping column')
-    activateSection('mapping')
-    const newRow = mapRow({}, scopedSync, plId)
-    mappingEl.appendChild(newRow)
-    refreshIcons()
-    scopedSync()
-    // Same reason as add-step: the row appends to the bottom, so without this, clicking add
-    // from the collapsed-section header looks like it did nothing.
-    setTimeout(() => newRow.querySelector<HTMLInputElement>('[data-to]')?.focus(), 50)
-  })
-  card.querySelector('.pl-auto-map')!.addEventListener('click', e => {
-    e.stopPropagation()
-    activateSection('mapping')
-    autoMapAll()
-  })
-
-  card.querySelector('.pl-add-layer')!.addEventListener('click', e => {
-    e.stopPropagation()
-    mutate('add output layer')
-    activateSection('output')
-    const newCard = outputLayerCard({}, fullSync)
-    newCard.classList.remove('collapsed')
-    layersEl.appendChild(newCard)
-    refreshIcons()
-    fullSync()
-  })
-
-  // ---- step drag-reorder ----
-  let stepDragSnapshotTaken = false
-  stepsEl.addEventListener('dragover', e => {
-    e.preventDefault()
-    const dragging = stepsEl.querySelector<HTMLElement>('.card.dragging')
-    if (!dragging) return
-    if (!stepDragSnapshotTaken) { mutate('reorder step'); stepDragSnapshotTaken = true }
-
-    const after = getDragAfterElement(stepsEl, e.clientY, '.card')
-    stepsEl.querySelectorAll('.drop-target-above, .drop-target-below')
-      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
-    if (after) after.classList.add('drop-target-above')
-    else stepsEl.lastElementChild?.classList.add('drop-target-below')
-
-    if (after === null) stepsEl.appendChild(dragging)
-    else if (after !== dragging.nextElementSibling) stepsEl.insertBefore(dragging, after)
-  })
-  stepsEl.addEventListener('drop', () => {
-    stepDragSnapshotTaken = false
-    stepsEl.querySelectorAll('.drop-target-above, .drop-target-below')
-      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
-    syncFn()
-  })
-
-  // ---- mapping drag-reorder ----
-  let dragSnapshotTaken = false
-  mappingEl.addEventListener('dragover', e => {
-    e.preventDefault()
-    const dragging = mappingEl.querySelector<HTMLElement>('.map-item.dragging')
-    if (!dragging) return
-    if (!dragSnapshotTaken) { mutate('reorder mapping'); dragSnapshotTaken = true }
-
-    const after = getDragAfterElement(mappingEl, e.clientY)
-    // A visible insertion line — previously the only feedback was the dragged row fading.
-    mappingEl.querySelectorAll('.drop-target-above, .drop-target-below')
-      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
-    if (after) after.classList.add('drop-target-above')
-    else mappingEl.lastElementChild?.classList.add('drop-target-below')
-
-    if (after === null) mappingEl.appendChild(dragging)
-    else if (after !== dragging.nextElementSibling) mappingEl.insertBefore(dragging, after)
-  })
-  mappingEl.addEventListener('drop', () => {
-    dragSnapshotTaken = false
-    mappingEl.querySelectorAll('.drop-target-above, .drop-target-below')
-      .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
-    syncFn()
-  })
-
-  // ---- remove pipeline ----
-  // The only delete in the app that takes a whole subtree with it — sources, steps, mapping
-  // and layers all go at once — so this one gets a confirm rather than an undo toast.
-  card.querySelector('.pl-remove')!.addEventListener('click', e => {
-    e.stopPropagation()
-    const name = card.querySelector<HTMLInputElement>('.pl-name')?.value.trim() || 'this pipeline'
-    const counts = [
-      `${sourcesEl.querySelectorAll('.card').length} source(s)`,
-      `${stepsEl.querySelectorAll('.card').length} step(s)`,
-      `${mappingEl.querySelectorAll('.map-item').length} mapped column(s)`,
-    ].join(', ')
-    if (!window.confirm(`Remove "${name}"?\n\nThis also removes its ${counts}.`)) return
-    mutate('remove pipeline', { undoToast: `Removed pipeline "${name}"` })
-    card.remove(); syncFn()
-  })
-
-  // ---- top-level collapse ----
-  wireCollapse(card, {
-    headerSel: '.pipeline-card-header',
-    chevronSel: '.pipeline-card-header .chevron',
-    bodySel: '.pipeline-card-body',
-  })
-
-  // ---- input changes ----
-  card.querySelector<HTMLInputElement>('.pl-name')!.addEventListener('input', syncFn)
-  card.querySelector<HTMLInputElement>('.pl-working-crs')!.addEventListener('input', syncFn)
-  attachCrsFormatCheck(card.querySelector<HTMLInputElement>('.pl-working-crs')!)
-  wireCombos(card)
-
-  // ---- hydrate (always stays collapsed — summaries show content at a glance) ----
-  ;(pdef.sources || []).forEach(s => sourcesEl.appendChild(sourceCard(s, fullSync)))
-  ;(pdef.derived_sources || []).forEach(ds => derivedEl.appendChild(derivedSourceCard(ds, fullSync, collectAllSourceIdsScoped(card))))
-  ;(pdef.steps || []).forEach(st => stepsEl.appendChild(stepCard(st.type, st, fullSync, collectAllSourceIdsScoped(card))))
-  ;(pdef.mapping || []).forEach(m => mappingEl.appendChild(mapRow(m, fullSync, plId)))
-  ;(pdef.layers && pdef.layers.length ? pdef.layers : [{ layer: '', crs: 'EPSG:25833' }]).forEach(ol => layersEl.appendChild(outputLayerCard(ol, fullSync)))
-
-  refreshBaseOptionsScoped(card)
-
-  // The header add buttons stay — they're reachable while the section is collapsed, and they
-  // keep the six section headers uniform. But a new row appends to the bottom of a list that
-  // can be several screens long, and that's exactly where you are when you want another one,
-  // so each list also gets an add button where the row actually lands. Both delegate to the
-  // single real handler rather than duplicating it.
-  card.querySelector('.pl-add-step-bottom')?.addEventListener('click', e => {
-    e.stopPropagation()
-    ;(card.querySelector('.pl-add-step') as HTMLButtonElement | null)?.click()
-  })
-  card.querySelector('.pl-add-map-bottom')?.addEventListener('click', e => {
-    e.stopPropagation()
-    ;(card.querySelector('.pl-add-map') as HTMLButtonElement | null)?.click()
-  })
-
-  activateSection(restoreActiveSection())
-  updateSummaries()
-  // createIcons is called by the caller after the card is in the DOM
-  return card
-}
-
-// ---- collect ----
-export function collectPipelineDef(card: HTMLElement): PipelineDef {
-  const name = card.querySelector<HTMLInputElement>('.pl-name')!.value.trim() || 'pipeline'
-  const sources = [...card.querySelectorAll('.pl-sources > .card')].map(c => {
-    const s: Partial<Source> = { id: val(c, 'id'), format: val(c, 'format') as Source['format'], uri: val(c, 'uri') }
-    if (val(c, 'layer')) s.layer = val(c, 'layer')
-    if (val(c, 'crs')) s.crs = val(c, 'crs')
-    const headerRow = val(c, 'header_row')
-    if (headerRow) s.header_row = headerRow === 'true'
-    if (val(c, 'x_field')) s.x_field = val(c, 'x_field')
-    if (val(c, 'y_field')) s.y_field = val(c, 'y_field')
-    if (val(c, 'geom_field')) s.geom_field = val(c, 'geom_field')
-    const mv = c.querySelector<HTMLInputElement>('[data-k="make_valid"]')
-    if (mv && !mv.checked) s.make_valid = false
-    return s as Source
-  }).filter(s => s.id && s.uri)
-
-  const derived_sources = [...card.querySelectorAll('.pl-derived-sources > .card')].map(c => {
-    const ds: Partial<DerivedSource> = { id: val(c, 'id'), from: val(c, 'from') }
-    const where = val(c, 'where'); if (where) ds.where = where
-    const buffer = val(c, 'buffer'); if (buffer) ds.buffer = parseFloat(buffer)
-    const mv = c.querySelector<HTMLInputElement>('[data-k="make_valid"]')
-    if (mv && !mv.checked) ds.make_valid = false
-    return ds as DerivedSource
-  }).filter(ds => ds.id && ds.from)
-
-  const base = card.querySelector<HTMLInputElement>('.pl-base')!.value
-
-  const steps = [...card.querySelectorAll<HTMLElement>('.pl-steps > .card')].map(c => {
-    const t = c.dataset['type'] as Step['type']
-    const st: Record<string, unknown> = { type: t }
-    const branchVal = val(c, 'branch')
-    if (branchVal) st['branch'] = branchVal
-    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'merge'].includes(t)) {
-      st['source'] = val(c, 'source')
-    }
-    if (['spatial_join', 'clip', 'erase'].includes(t)) {
-      st['predicate'] = val(c, 'predicate') || 'intersects'
-    }
-    if (t === 'spatial_join') {
-      st['match'] = val(c, 'match') || 'first'
-    }
-    if (t === 'filter') {
-      st['where'] = val(c, 'where')
-    }
-    if (t === 'snapshot') {
-      st['id'] = val(c, 'id')
-    }
-    if (t === 'attribute_join') {
-      st['left'] = val(c, 'left')
-      st['right'] = val(c, 'right')
-    }
-    if (t === 'nearest_neighbor') {
-      const maxDist = val(c, 'max_distance')
-      if (maxDist) st['max_distance'] = parseFloat(maxDist)
-      const distField = val(c, 'distance_field').trim()
-      if (distField) st['distance_field'] = distField
-    }
-    if (t === 'buffer') {
-      st['distance'] = parseFloat(val(c, 'distance')) || 0
-    }
-    if (t === 'dissolve') {
-      st['by'] = [...c.querySelectorAll<HTMLInputElement>('[data-by-col]')]
-        .map(i => i.value.trim()).filter(Boolean)
-    }
-    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay'].includes(t)) {
-      const f: Record<string, string> = {}
-      c.querySelectorAll('[data-fields] .kv').forEach(r => {
-        const o = r.querySelector<HTMLInputElement>('[data-fo]')!.value.trim()
-        const col = r.querySelector<HTMLInputElement>('[data-fc]')!.value.trim()
-        if (o && col) f[o] = col
-      })
-      st['fields'] = f
-    }
-    return st as unknown as Step
-  })
-
-  const mapping = [...card.querySelectorAll('.pl-mapping > .map-item')]
-    .map(w => (w as MapRowElement)._readMapping?.() ?? null)
-    .filter((x): x is MapItem => x !== null)
-
-  const layers = [...card.querySelectorAll<HTMLElement>('.pl-output-layers > .card')].map(c => {
-    const ol: OutputLayer = {
-      layer: (c.querySelector<HTMLInputElement>('[data-k="layer"]')?.value.trim() || 'output'),
-      crs: (c.querySelector<HTMLInputElement>('[data-k="crs"]')?.value.trim() || 'EPSG:25833'),
-    }
-    const filterVal = c.querySelector<HTMLInputElement>('[data-k="filter"]')?.value.trim()
-    if (filterVal) ol.filter = filterVal
-    return ol
-  })
-  const workingCrs = card.querySelector<HTMLInputElement>('.pl-working-crs')!.value.trim()
-
-  return {
-    name, sources, ...(derived_sources.length ? { derived_sources } : {}),
-    base, steps, mapping, layers, ...(workingCrs ? { working_crs: workingCrs } : {}),
-  }
 }

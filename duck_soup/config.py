@@ -394,6 +394,84 @@ class OutputLayer(BaseModel):
     filter: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Validator bodies shared by Output / Pipeline / PipelineDef
+# ---------------------------------------------------------------------------
+
+def _normalise_layer_shorthand(
+    data: dict, extra_keys: tuple[str, ...], overwrite: bool
+) -> dict:
+    """Fold the legacy singular `layer:` shorthand into a one-entry `layers:` list.
+
+    `extra_keys` and `overwrite` differ per model and are deliberately not unified:
+    `Output` also absorbs a sibling `mapping:` key (it has no pipeline-level mapping of
+    its own, so there `mapping:` can only mean the layer's override) and clobbers any
+    existing `layers:`, while `PipelineDef` leaves an explicit `layers:` list winning.
+    """
+    if "layer" not in data:
+        return data
+    layer_data: dict = {"layer": data.pop("layer")}
+    for key in extra_keys:
+        if key in data:
+            layer_data[key] = data.pop(key)
+    if overwrite:
+        data["layers"] = [layer_data]
+    else:
+        data.setdefault("layers", [layer_data])
+    return data
+
+
+def _require_layers(layers: list) -> None:
+    if not layers:
+        raise ValueError("at least one layer must be defined under 'layers'")
+
+
+def _validate_refs(
+    sources: list[Source],
+    derived_sources: list[DerivedSource],
+    base: str,
+    steps: list,
+) -> None:
+    """Check that base/derived_source/step references all resolve."""
+    ids = {s.id for s in sources}
+    if base and base not in ids:
+        raise ValueError(f"base '{base}' is not among sources {sorted(ids)}")
+    for ds in derived_sources:
+        if ds.from_ not in ids:
+            raise ValueError(f"derived_source '{ds.id}' references unknown source '{ds.from_}'")
+        ids.add(ds.id)
+    # Snapshots only become referenceable by steps *after* them (as a
+    # source: or a branch:), so branches grows as we walk the list in order.
+    branches: set[str] = set()
+    for st in steps:
+        if isinstance(st, Snapshot):
+            if st.id in ids:
+                raise ValueError(f"snapshot id '{st.id}' collides with an existing source/derived_source/snapshot id")
+            if st.branch and st.branch not in branches:
+                raise ValueError(f"snapshot '{st.id}' references unknown branch '{st.branch}'")
+            ids.add(st.id)
+            branches.add(st.id)
+            continue
+        if st.branch and st.branch not in branches:
+            raise ValueError(f"step references unknown branch '{st.branch}'")
+        # Skip empty-string source — step is still being configured in the editor.
+        if hasattr(st, 'source') and st.source and st.source not in ids:
+            raise ValueError(f"step references unknown source '{st.source}'")
+
+
+def _validate_no_geom_mapping(
+    sources: list[Source], base: str, mappings: list[list[MapItem]]
+) -> None:
+    base_src = next((s for s in sources if s.id == base), None)
+    if base_src is None or not base_src.has_geometry:
+        return
+    if any(m.to == "geom" for mapping in mappings for m in mapping):
+        raise ValueError(
+            "mapping target 'geom' is reserved for the output geometry "
+            "column (added automatically); rename this mapping entry"
+        )
+
+
 class Output(BaseModel):
     path: str
     overwrite: bool = True
@@ -404,21 +482,11 @@ class Output(BaseModel):
     def _normalise_layers(cls, data: object) -> object:
         if not isinstance(data, dict):
             return data
-        if "layer" in data:
-            layer_data: dict = {"layer": data.pop("layer")}
-            if "crs" in data:
-                layer_data["crs"] = data.pop("crs")
-            if "mapping" in data:
-                layer_data["mapping"] = data.pop("mapping")
-            if "filter" in data:
-                layer_data["filter"] = data.pop("filter")
-            data["layers"] = [layer_data]
-        return data
+        return _normalise_layer_shorthand(data, ("crs", "mapping", "filter"), overwrite=True)
 
     @model_validator(mode="after")
     def _check_layers(self):
-        if not self.layers:
-            raise ValueError("at least one layer must be defined under 'layers'")
+        _require_layers(self.layers)
         return self
 
 
@@ -451,45 +519,15 @@ class Pipeline(BaseModel):
 
     @model_validator(mode="after")
     def _check_refs(self):
-        ids = {s.id for s in self.sources}
-        if self.base and self.base not in ids:
-            raise ValueError(f"base '{self.base}' is not among sources {sorted(ids)}")
-        for ds in self.derived_sources:
-            if ds.from_ not in ids:
-                raise ValueError(f"derived_source '{ds.id}' references unknown source '{ds.from_}'")
-            ids.add(ds.id)
-        # Snapshots only become referenceable by steps *after* them (as a
-        # source: or a branch:), so branches grows as we walk the list in order.
-        branches: set[str] = set()
-        for st in self.steps:
-            if isinstance(st, Snapshot):
-                if st.id in ids:
-                    raise ValueError(f"snapshot id '{st.id}' collides with an existing source/derived_source/snapshot id")
-                if st.branch and st.branch not in branches:
-                    raise ValueError(f"snapshot '{st.id}' references unknown branch '{st.branch}'")
-                ids.add(st.id)
-                branches.add(st.id)
-                continue
-            if st.branch and st.branch not in branches:
-                raise ValueError(f"step references unknown branch '{st.branch}'")
-            # Skip empty-string source — step is still being configured in the editor.
-            if hasattr(st, 'source') and st.source and st.source not in ids:
-                raise ValueError(f"step references unknown source '{st.source}'")
+        _validate_refs(self.sources, self.derived_sources, self.base, self.steps)
         return self
 
     @model_validator(mode="after")
     def _check_no_geom_mapping(self):
-        base_src = next((s for s in self.sources if s.id == self.base), None)
-        if base_src is None or not base_src.has_geometry:
-            return self
         mappings = [self.mapping]
         for out in self.outputs:
             mappings.extend(layer.mapping for layer in out.layers if layer.mapping)
-        if any(m.to == "geom" for mapping in mappings for m in mapping):
-            raise ValueError(
-                "mapping target 'geom' is reserved for the output geometry "
-                "column (added automatically); rename this mapping entry"
-            )
+        _validate_no_geom_mapping(self.sources, self.base, mappings)
         return self
 
     def source(self, sid: str) -> Source:
@@ -548,60 +586,22 @@ class PipelineDef(BaseModel):
         # one layer) alongside the new plural `layers:` list.
         if not isinstance(data, dict):
             return data
-        if "layer" in data:
-            layer_data: dict = {"layer": data.pop("layer")}
-            if "crs" in data:
-                layer_data["crs"] = data.pop("crs")
-            if "filter" in data:
-                layer_data["filter"] = data.pop("filter")
-            data.setdefault("layers", [layer_data])
-        return data
+        return _normalise_layer_shorthand(data, ("crs", "filter"), overwrite=False)
 
     @model_validator(mode="after")
     def _check_layers(self):
-        if not self.layers:
-            raise ValueError("at least one layer must be defined under 'layers'")
+        _require_layers(self.layers)
         return self
 
     @model_validator(mode="after")
     def _check_refs(self):
-        ids = {s.id for s in self.sources}
-        if self.base and self.base not in ids:
-            raise ValueError(f"base '{self.base}' is not among sources {sorted(ids)}")
-        for ds in self.derived_sources:
-            if ds.from_ not in ids:
-                raise ValueError(f"derived_source '{ds.id}' references unknown source '{ds.from_}'")
-            ids.add(ds.id)
-        # Snapshots only become referenceable by steps *after* them (as a
-        # source: or a branch:), so branches grows as we walk the list in order.
-        branches: set[str] = set()
-        for st in self.steps:
-            if isinstance(st, Snapshot):
-                if st.id in ids:
-                    raise ValueError(f"snapshot id '{st.id}' collides with an existing source/derived_source/snapshot id")
-                if st.branch and st.branch not in branches:
-                    raise ValueError(f"snapshot '{st.id}' references unknown branch '{st.branch}'")
-                ids.add(st.id)
-                branches.add(st.id)
-                continue
-            if st.branch and st.branch not in branches:
-                raise ValueError(f"step references unknown branch '{st.branch}'")
-            # Skip empty-string source — step is still being configured in the editor.
-            if hasattr(st, 'source') and st.source and st.source not in ids:
-                raise ValueError(f"step references unknown source '{st.source}'")
+        _validate_refs(self.sources, self.derived_sources, self.base, self.steps)
         return self
 
     @model_validator(mode="after")
     def _check_no_geom_mapping(self):
-        base_src = next((s for s in self.sources if s.id == self.base), None)
-        if base_src is None or not base_src.has_geometry:
-            return self
         mappings = [self.mapping] + [layer.mapping for layer in self.layers if layer.mapping]
-        if any(m.to == "geom" for mapping in mappings for m in mapping):
-            raise ValueError(
-                "mapping target 'geom' is reserved for the output geometry "
-                "column (added automatically); rename this mapping entry"
-            )
+        _validate_no_geom_mapping(self.sources, self.base, mappings)
         return self
 
     def to_pipeline(self, output_path: str) -> Pipeline:

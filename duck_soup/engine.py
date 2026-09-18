@@ -27,22 +27,14 @@ from .config import (
     Dissolve, Erase, Filter, IntersectOverlay, MapItem, Merge, NearestNeighbor,
     OutputLayer, Pipeline, Snapshot, SpatialJoin,
 )
-from .derive import DUCKDB_LOCK, register_udfs
+from .derive import DUCKDB_LOCK, init_duckdb
+from .sql_util import quote_ident as _ident, quote_literal as _lit
 
 _PREDICATE_SQL = {
     "intersects": "ST_Intersects",
     "contains": "ST_Contains",
     "within": "ST_Within",
 }
-
-
-def _ident(name: str) -> str:
-    """Quote a SQL identifier."""
-    return '"' + name.replace('"', '""') + '"'
-
-
-def _lit(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
 
 
 def _transform(col: str, from_crs: str, to_crs: str) -> str:
@@ -591,29 +583,41 @@ class Engine:
         """
 
     # -- run ----------------------------------------------------------------
+    def _prepare(
+        self,
+        con,
+        workdir: Path,
+        bbox: tuple[float, float, float, float] | None = None,
+        max_features: int | None = None,
+        limit_steps: int | None = None,
+    ) -> str:
+        """Build the source → step_0 → step_N view chain; returns the final view name.
+
+        When `bbox` is given the base view is pre-filtered to it before any steps run,
+        not just at the very end. Steps (spatial joins especially) otherwise run over the
+        entire base table only to have everything but the visible viewport thrown away
+        afterwards — for a big base table with real join steps that's the difference
+        between an instant "in view" preview and a very slow one. Callers that filter by
+        bbox must still re-apply it to the final SELECT, since a geometry-mutating step
+        (buffer, dissolve, ...) can move a feature relative to it.
+        """
+        self._create_source_views(con, workdir, bbox=bbox, max_features=max_features)
+        self._create_derived_source_views(con)
+        con.execute(
+            f"CREATE OR REPLACE TEMP VIEW {_ident('step_0')} AS "
+            f"SELECT * FROM {_ident('src_' + self.p.base)} "
+            f"{self._bbox_filter(bbox, self.working_crs) if self.p.base_source.has_geometry else ''}"
+        )
+        return self._build_step_views(con, "step_0", limit_steps=limit_steps)
+
     def run(self) -> str:
         with DUCKDB_LOCK:
             con = duckdb.connect()
-            # `INSTALL spatial` fetches the extension build matching this connection's
-            # DuckDB core version, so the spatial extension version is pinned indirectly
-            # via the `duckdb` dependency pin in pyproject.toml (see the tested version
-            # noted there and in README.md) — bump both together when upgrading.
-            con.execute("INSTALL spatial; LOAD spatial;")
-            con.execute("INSTALL postgres; LOAD postgres;")
-            register_udfs(con)
+            init_duckdb(con)
 
             with tempfile.TemporaryDirectory() as tmp:
                 workdir = Path(tmp)
-                self._create_source_views(con, workdir)
-                self._create_derived_source_views(con)
-
-                # base
-                con.execute(
-                    f"CREATE OR REPLACE TEMP VIEW {_ident('step_0')} AS "
-                    f"SELECT * FROM {_ident('src_' + self.p.base)}"
-                )
-                prev = "step_0"
-                prev = self._build_step_views(con, prev)
+                prev = self._prepare(con, workdir)
 
                 deleted_paths: set[Path] = set()
                 out_paths: list[str] = []
@@ -663,6 +667,23 @@ class Engine:
             envelope = f"ST_Transform({envelope}, 'EPSG:4326', {_lit(crs)}, always_xy := true)"
         return f"WHERE ST_Intersects(geom, {envelope}) "
 
+    def _preview_rows_sql(
+        self,
+        source_expr: str,
+        crs: str,
+        has_geom: bool,
+        bbox: tuple[float, float, float, float] | None,
+        limit: int,
+    ) -> str:
+        """Row-preview SELECT over `source_expr` (a view name or a parenthesised subquery)."""
+        if not has_geom:
+            return f"SELECT * FROM {source_expr} LIMIT {limit}"
+        return (
+            f"SELECT * EXCLUDE (geom), "
+            f"ST_AsGeoJSON(ST_Transform(geom, {_lit(crs)}, 'EPSG:4326', always_xy := true)) AS __geojson "
+            f"FROM {source_expr} {self._bbox_filter(bbox, crs)}LIMIT {limit}"
+        )
+
     def preview(
         self,
         limit: int = 50,
@@ -671,33 +692,14 @@ class Engine:
     ) -> list[dict]:
         with DUCKDB_LOCK:
             con = duckdb.connect()
-            # `INSTALL spatial` fetches the extension build matching this connection's
-            # DuckDB core version, so the spatial extension version is pinned indirectly
-            # via the `duckdb` dependency pin in pyproject.toml (see the tested version
-            # noted there and in README.md) — bump both together when upgrading.
-            con.execute("INSTALL spatial; LOAD spatial;")
-            con.execute("INSTALL postgres; LOAD postgres;")
-            register_udfs(con)
+            init_duckdb(con)
 
             with tempfile.TemporaryDirectory() as tmp:
                 workdir = Path(tmp)
-                self._create_source_views(con, workdir, bbox=bbox, max_features=limit)
-                self._create_derived_source_views(con)
-
-                # base — pre-filtered to the bbox (if given) before any steps run, not just
-                # at the very end. Steps (spatial joins especially) otherwise run over the
-                # entire base table only to have everything but the visible viewport thrown
-                # away afterwards — for a big base table with real join steps that's the
-                # difference between an instant "in view" preview and a very slow one. The
-                # final SELECT below still re-applies the bbox filter, since a geometry-
-                # mutating step (buffer, dissolve, ...) can move a feature relative to it.
-                con.execute(
-                    f"CREATE OR REPLACE TEMP VIEW {_ident('step_0')} AS "
-                    f"SELECT * FROM {_ident('src_' + self.p.base)} "
-                    f"{self._bbox_filter(bbox, self.working_crs) if self.p.base_source.has_geometry else ''}"
+                prev = self._prepare(
+                    con, workdir, bbox=bbox, max_features=limit,
+                    limit_steps=preview_until_step,
                 )
-                prev = "step_0"
-                prev = self._build_step_views(con, prev, limit_steps=preview_until_step)
 
                 if preview_until_step is not None:
                     try:
@@ -706,27 +708,16 @@ class Engine:
                         has_geom = any(col[0] == "geom" for col in cols_desc)
                     except Exception:
                         has_geom = False
-
-                    if has_geom:
-                        preview_sql = (
-                            f"SELECT * EXCLUDE (geom), "
-                            f"ST_AsGeoJSON(ST_Transform(geom, {_lit(self.working_crs)}, 'EPSG:4326', always_xy := true)) AS __geojson "
-                            f"FROM {_ident(prev)} {self._bbox_filter(bbox, self.working_crs)}LIMIT {limit}"
-                        )
-                    else:
-                        preview_sql = f"SELECT * FROM {_ident(prev)} LIMIT {limit}"
+                    preview_sql = self._preview_rows_sql(
+                        _ident(prev), self.working_crs, has_geom, bbox, limit
+                    )
                 else:
                     layer = self.p.outputs[0].layers[0]
                     final_sql = self._final_select(prev, layer)
-                    has_geom = self.p.base_source.has_geometry
-                    if has_geom:
-                        preview_sql = (
-                            f"SELECT * EXCLUDE (geom), "
-                            f"ST_AsGeoJSON(ST_Transform(geom, {_lit(layer.crs)}, 'EPSG:4326', always_xy := true)) AS __geojson "
-                            f"FROM ({final_sql}) {self._bbox_filter(bbox, layer.crs)}LIMIT {limit}"
-                        )
-                    else:
-                        preview_sql = f"SELECT * FROM ({final_sql}) LIMIT {limit}"
+                    preview_sql = self._preview_rows_sql(
+                        f"({final_sql})", layer.crs,
+                        self.p.base_source.has_geometry, bbox, limit,
+                    )
 
                 res = con.execute(preview_sql)
                 cols = [desc[0] for desc in res.description]

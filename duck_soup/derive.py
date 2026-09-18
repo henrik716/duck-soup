@@ -53,3 +53,21 @@ def register_udfs(con) -> None:
         )
     except (duckdb.CatalogException, duckdb.NotImplementedException):
         pass  # already registered on this connection
+
+
+def load_extensions(con) -> None:
+    """Load the DuckDB extensions duck_soup reads through.
+
+    `INSTALL spatial` fetches the extension build matching this connection's DuckDB
+    core version, so the spatial extension version is pinned indirectly via the
+    `duckdb` dependency pin in pyproject.toml (see the tested version noted there and
+    in README.md) — bump both together when upgrading.
+    """
+    con.execute("INSTALL spatial; LOAD spatial;")
+    con.execute("INSTALL postgres; LOAD postgres;")
+
+
+def init_duckdb(con) -> None:
+    """Full setup for a connection that will evaluate mapping expressions."""
+    load_extensions(con)
+    register_udfs(con)
