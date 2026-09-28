@@ -29,6 +29,9 @@ Then open http://localhost:8000. Internet access is needed on first run so DuckD
 can download its `spatial` extension. See "Install" below for a from-source setup
 (needed if you want to modify the code or frontend).
 
+To upgrade an existing install: `pipx upgrade duck-soup-etl`, or re-pull the Docker
+image (`docker pull ghcr.io/henrik716/duck-soup`).
+
 [pipx](https://pipx.pypa.io/) installs Python command-line apps (as opposed to
 `pip`, which installs Python *libraries*, typically into a project's virtual
 environment). It keeps each app in its own isolated environment and puts its
