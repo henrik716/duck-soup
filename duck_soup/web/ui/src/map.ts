@@ -63,6 +63,15 @@ function popupMaxHeight(): number {
   return Math.max(120, Math.min(available, 400))
 }
 
+// Same reasoning as popupMaxHeight, but for width: the default `maxWidth: 'none'` lets long
+// attribute values (URLs, file paths) push the popup wider than the map panel, which on a
+// narrow/small screen means part of it renders past the clipped container edge and is
+// unreadable. Cap it to the panel's own width minus a small margin.
+function popupMaxWidth(): string {
+  const available = (map?.getContainer().clientWidth ?? 300) - 24
+  return `${Math.max(180, available)}px`
+}
+
 // A small custom base-layer switcher — MapLibre has no built-in equivalent of Leaflet's
 // L.control.layers.
 class BaseLayerControl implements maplibregl.IControl {
@@ -186,7 +195,7 @@ function wireInteractions(): void {
         .map(([k, v]) => `<strong>${esc(k)}:</strong> ${v !== null && v !== undefined ? esc(v) : 'NULL'}`)
         .join('<br>')
       if (!html) return
-      new maplibregl.Popup({ maxWidth: 'none' })
+      new maplibregl.Popup({ maxWidth: popupMaxWidth() })
         .setLngLat(e.lngLat)
         .setHTML(`<div class="preview-popup-body" style="max-height:${popupMaxHeight()}px;overflow-y:auto">${html}</div>`)
         .addTo(map!)

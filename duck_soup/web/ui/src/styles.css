@@ -1064,6 +1064,13 @@ th.sortable.sorted-desc .sort-indicator {
   font-size: 13px;
   line-height: 1.6;
   color: var(--ink);
+  /* Attribute values (file paths, URLs) have no natural break points — without this they
+     force the popup wider than its maxWidth clamp instead of wrapping inside it. */
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .maplibregl-popup-content { padding: 8px 12px !important; }
+  .preview-popup-body { font-size: 12px; }
 }
 .maplibregl-popup-content strong {
   color: var(--accent);
