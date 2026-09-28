@@ -137,19 +137,15 @@ python -m venv .venv
 # Activate on macOS/Linux:
 source .venv/bin/activate
 
-pip install -e .           # installs duck_soup + all required deps
-# optional: pip install -e ".[mgrs]"     adds MGRS grid conversion support
-# optional: pip install -e ".[curves]"   adds automatic linearization of curve geometry
+pip install -e .           # installs duck_soup + all deps, including mgrs and pyogrio
+# optional: pip install -e ".[test]"     adds pytest + httpx for running the test suite
 ```
 
 DuckDB downloads its **spatial** extension on first run (needs internet once, or
-pre-install it offline). The `mgrs` package is optional — without it, `func: mgrs`
-yields NULL instead of failing. The `pyogrio` package (`curves` extra) is also
-optional — without it, sources whose geometry is stored as an ISO curve type
-(CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface — DuckDB's
-spatial extension can't parse these, only plain OGC linear geometry) fail with a
-clear error telling you to install it; with it, such sources are automatically
-read and re-linearized into ordinary line/polygon geometry on the fly.
+pre-install it offline). `func: mgrs` and automatic linearization of curve-geometry
+sources (CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface —
+DuckDB's spatial extension can't parse these, only plain OGC linear geometry) both
+work out of the box; no optional extras needed.
 
 ## Quickstart
 
@@ -276,7 +272,7 @@ legacy shorthands, auto-upgraded to the Config shape above on load.
 
 | `format` | read path | notes |
 |----------|-----------|-------|
-| `gpkg`, `geojson`, `gml`, `shp`, `flatgeobuf` | `ST_Read` | curve geometry (CircularString, CompoundCurve, ...) needs the `curves` extra to linearize |
+| `gpkg`, `geojson`, `gml`, `shp`, `flatgeobuf` | `ST_Read` | curve geometry (CircularString, CompoundCurve, ...) is automatically linearized via `pyogrio` |
 | `fgdb` | `ST_Read` | points at a `.gdb` folder; its geometry column is detected via a `DESCRIBE` fallback since `ST_Read_Meta` is unreliable on File Geodatabases |
 | `wfs` | GetFeature (GML) → temp `.gml` → `ST_Read` | `SRSNAME` is pinned to the source `crs` to avoid silent geometry corruption |
 | `arcgis_rest` | paged JSON → temp GeoJSON → `ST_Read` | always EPSG:4326; `page_size` caps the page size, `where` pushes a filter server-side |

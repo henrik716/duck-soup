@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "duck-soup-etl"
-version = "0.1.4"
+version = "0.1.5"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 dependencies = [
@@ -22,11 +22,11 @@ dependencies = [
     "numpy>=1.26.0",
     "pytz>=2024.1",
     "python-multipart>=0.0.9",
+    "mgrs>=1.4",
+    "pyogrio>=0.10",
 ]
 
 [project.optional-dependencies]
-mgrs = ["mgrs>=1.4"]
-curves = ["pyogrio>=0.10"]
 test = ["pytest>=8.0", "httpx>=0.27"]
 
 [tool.setuptools.packages.find]

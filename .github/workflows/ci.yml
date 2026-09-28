@@ -18,7 +18,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install duck_soup with test extras
-        run: pip install -e ".[mgrs,test]"
+        run: pip install -e ".[test]"
 
       # DuckDB downloads the spatial extension binary on first LOAD; cache it
       # so repeat CI runs don't refetch it from extensions.duckdb.org.
