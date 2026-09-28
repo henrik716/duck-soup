@@ -44,7 +44,8 @@ def register_udfs(con) -> None:
     if not _HAVE_MGRS:
         warnings.warn(
             "python 'mgrs' package not installed; func:mgrs will yield NULL. "
-            "Install with: pip install mgrs"
+            "Install with: pipx inject duck-soup-etl mgrs (pipx install) or "
+            "pip install mgrs (plain pip / editable checkout)"
         )
     try:
         con.create_function(

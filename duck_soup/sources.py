@@ -528,8 +528,9 @@ def _linearize_curves(
     except ImportError as e:
         raise RuntimeError(
             f"source '{source_id}' has curve geometry (circular arcs / compound curves) "
-            "that DuckDB's spatial engine can't read directly. Install the optional "
-            '"curves" extra to enable automatic linearization: pip install -e ".[curves]"'
+            "that DuckDB's spatial engine can't read directly. Install pyogrio to enable "
+            "automatic linearization: pipx inject duck-soup-etl pyogrio (pipx install) or "
+            'pip install -e ".[curves]" (editable checkout)'
         ) from e
 
     with warnings.catch_warnings(record=True) as caught:

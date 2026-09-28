@@ -217,7 +217,7 @@ def _render_export_script(name: str, yaml_text: str) -> str:
 """{name} — Duck Soup pipeline, exported as a standalone script.
 
 Run with:
-    pip install duck_soup   # or: pip install -e . from a duck_soup checkout
+    pip install duck-soup-etl   # or: pip install -e . from a duck_soup checkout
     python {name}.py
 
 Relative source/output paths in the pipeline are resolved against the current working
