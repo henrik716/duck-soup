@@ -201,6 +201,10 @@ export interface InspectColumn {
 export interface InspectResponse {
   ok: boolean
   columns?: InspectColumn[]
+  // A sanity-check hint when the declared crs looks inconsistent with the sampled
+  // coordinate magnitudes (e.g. EPSG:4326 but values are clearly meters) — see
+  // crs_extent_warning in sources.py. null/absent means nothing looked off.
+  crs_warning?: string | null
   error?: string
 }
 

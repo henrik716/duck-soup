@@ -32,6 +32,7 @@ from ..config import (
 )
 from ..engine import run_config, preview_config_pipeline
 from ..sources import (
+    crs_extent_warning,
     list_arcgis_rest_layers,
     list_gdal_layers,
     list_oapif_collections,
@@ -133,7 +134,29 @@ def inspect_source(req: InspectRequest) -> dict:
                     read = read_expr(src, workdir, con=con, sample=True)
                     res = con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()
                     columns = [{"name": r[0], "type": str(r[1])} for r in res]
-                    return {"ok": True, "columns": columns}
+                    crs_warning = None
+                    has_geom = any(
+                        c["name"] == "geom" and c["type"].upper().startswith("GEOMETRY")
+                        for c in columns
+                    )
+                    if src.crs and has_geom:
+                        # Bounded by LIMIT so this sanity check stays cheap even against a
+                        # huge source — a few hundred features are plenty to tell "this is
+                        # clearly in meters, not degrees" from actual data, no need to scan
+                        # the whole file. Best-effort: a source this query can't handle (e.g.
+                        # an odd geometry type ST_XMin/ST_XMax choke on) just skips the hint
+                        # rather than failing the whole inspect.
+                        try:
+                            ext = con.execute(
+                                f"SELECT MIN(ST_XMin(geom)), MAX(ST_XMax(geom)), "
+                                f"MIN(ST_YMin(geom)), MAX(ST_YMax(geom)) "
+                                f"FROM (SELECT geom FROM {read} WHERE geom IS NOT NULL LIMIT 500) t"
+                            ).fetchone()
+                            if ext:
+                                crs_warning = crs_extent_warning(src.crs, *ext)
+                        except Exception:
+                            pass
+                    return {"ok": True, "columns": columns, "crs_warning": crs_warning}
             finally:
                 con.close()
     except Exception as e:

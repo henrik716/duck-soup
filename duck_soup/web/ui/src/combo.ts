@@ -7,6 +7,10 @@ export interface ComboOptionDef {
   // dynamic text inside it are responsible for escaping that text themselves; plain
   // `value`-only options (the `string` case below) are escaped here since they're just data.
   label?: string
+  // Extra plain text the filter also matches against, on top of `value` — e.g. a CRS
+  // option's human name ("UTM zone 33N") so it's findable by typing something other than
+  // the raw EPSG code. Never shown itself; `label` still controls what's displayed.
+  search?: string
 }
 
 // An empty option list used to open as a blank box, which reads as broken rather than as
@@ -22,7 +26,8 @@ function comboOptionsHtml(options: (string | ComboOptionDef)[], emptyText = ''):
       return `<div class="combo-option" role="option" data-value="${esc(o)}">${esc(o)}</div>`
     } else {
       const displayLabel = o.label || esc(o.value)
-      return `<div class="combo-option" role="option" data-value="${esc(o.value)}">${displayLabel}</div>`
+      const searchAttr = o.search ? ` data-search="${esc(o.search)}"` : ''
+      return `<div class="combo-option" role="option" data-value="${esc(o.value)}"${searchAttr}>${displayLabel}</div>`
     }
   }).join('')
 }
@@ -124,9 +129,13 @@ export function wireCombos(root: HTMLElement): void {
       list.querySelectorAll<HTMLElement>('.combo-option').forEach(o => { o.style.display = '' })
     }
     const filter = () => {
-      const q = input.value.trim().toLowerCase()
+      // Split into words and require each independently, rather than one exact substring —
+      // "utm 33" should find "ETRS89 / UTM zone 33N", where "utm" and "33" are separated by
+      // "zone " in the actual text. A single-substring match would miss that entirely.
+      const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
       list.querySelectorAll<HTMLElement>('.combo-option').forEach(o => {
-        o.style.display = !q || (o.dataset['value'] ?? '').toLowerCase().includes(q) ? '' : 'none'
+        const haystack = `${o.dataset['value'] ?? ''} ${o.dataset['search'] ?? ''}`.toLowerCase()
+        o.style.display = terms.length === 0 || terms.every(t => haystack.includes(t)) ? '' : 'none'
       })
       // The previously active option may have just been filtered out.
       const active = list.querySelector<HTMLElement>('.combo-option.active')

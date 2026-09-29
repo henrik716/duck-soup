@@ -925,9 +925,9 @@ function wireSourceUpload(
   }
 
   // Uploads every internal file of a dropped .gdb folder (a File Geodatabase is a directory
-  // of many small files — a00000001.gdbtable, timestamps, gdb, ...), preserving their paths
-  // under data/<name> so GDAL's OpenFileGDB driver can open the reconstructed folder
-  // afterwards, then wires up exactly one fgdb source pointing at it.
+  // of many small files — a00000001.gdbtable, timestamps, gdb, ...), preserving their relative
+  // paths under the server's upload dir so GDAL's OpenFileGDB driver can open the reconstructed
+  // folder afterwards, then wires up exactly one fgdb source pointing at it.
   const uploadGdbFolder = async (name: string, entries: GdbFileEntry[]) => {
     const loaderIcon = dropzone.querySelector('i')
     const titleEl = dropzone.querySelector('.title')
@@ -943,6 +943,10 @@ function wireSourceUpload(
       showToast(`"${name}" is empty — nothing to upload`, 'bad')
     } else {
       let ok = true
+      // Derived from the first upload response, by walking back up out of its relPath —
+      // the server decides the real upload dir (a temp dir, not `data/`), so the source's
+      // uri has to come from what it reports rather than being guessed on the client.
+      let gdbRootPath: string | null = null
       for (let i = 0; i < entries.length; i++) {
         const { file, relPath } = entries[i]
         if (titleEl) titleEl.textContent = `Uploading ${name} (${i + 1}/${entries.length})...`
@@ -953,6 +957,11 @@ function wireSourceUpload(
             ok = false
             break
           }
+          if (res.path && !gdbRootPath) {
+            const sep = res.path.includes('\\') ? '\\' : '/'
+            const segs = res.path.split(sep)
+            gdbRootPath = segs.slice(0, segs.length - relPath.split('/').length).join(sep)
+          }
         } catch (err) {
           showToast(`Upload failed: ${name}/${relPath}: ${(err as Error).message}`, 'bad')
           ok = false
@@ -960,10 +969,10 @@ function wireSourceUpload(
         }
       }
 
-      if (ok) {
+      if (ok && gdbRootPath) {
         const idBase = name.slice(0, name.toLowerCase().lastIndexOf('.gdb')) || name
         const id = idBase.toLowerCase().replace(/[^a-z0-9_]/g, '_')
-        const newSrc = { id, format: 'fgdb' as const, uri: `data/${name}` }
+        const newSrc = { id, format: 'fgdb' as const, uri: gdbRootPath }
 
         mutate('add uploaded source')
         activateSection('sources')

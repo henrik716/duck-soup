@@ -4,6 +4,7 @@ import { mkEl, val, wireCollapse } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS, EXT_FORMAT } from '../state'
 import { comboField, wireCombos, setComboOptions, ensureComboOption } from '../combo'
+import { CRS_COMBO_OPTIONS } from '../crs-list'
 import { updateSourceBadge } from '../schema'
 import { openFileExplorer } from '../file-explorer'
 import { attachCrsFormatCheck } from '../validation'
@@ -70,10 +71,14 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
         <label class="field grow">layer / typename / sheet / collection
           ${comboField('data-k="layer"', s.layer ?? '', [], '—')}
         </label>
-        <label class="field grow">crs<span class="auto-chip" data-auto-crs hidden>detected</span><input data-k="crs" placeholder="EPSG:4326"></label>
+        <label class="field grow">crs<span class="auto-chip" data-auto-crs hidden>detected</span>${comboField('data-k="crs"', s.crs ?? '', CRS_COMBO_OPTIONS, 'EPSG:4326')}</label>
         <label class="field" style="flex:0 0 auto"><span>&nbsp;</span>
           <span style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui;white-space:nowrap">
             <input type="checkbox" data-k="make_valid" checked style="width:auto;margin:0"> repair invalid geometry</span></label>
+      </div>
+      <div class="card-warning" data-crs-warning hidden>
+        <i data-lucide="alert-triangle" style="width:12px;height:12px;flex-shrink:0"></i>
+        <span></span>
       </div>
       <div class="row" data-header-row style="display:none; margin-top:8px;">
         <label class="field grow">header row
@@ -308,21 +313,25 @@ function createInspectors(
       const xField = val(c, 'x_field')
       const yField = val(c, 'y_field')
       const geomField = val(c, 'geom_field')
-      if (!id || !uri) { updateSourceBadge(c, null); return }
+      if (!id || !uri) { updateSourceBadge(c, null); updateCrsWarning(c, null); return }
       if (format === 'wfs' && !layer) {
         updateSourceBadge(c, { ok: false, error: 'select a layer typename from the dropdown first' })
+        updateCrsWarning(c, null)
         return
       }
       if (format === 'oapif' && !layer) {
         updateSourceBadge(c, { ok: false, error: 'select a collection from the dropdown first' })
+        updateCrsWarning(c, null)
         return
       }
       if (format === 'arcgis_rest' && !layer) {
         updateSourceBadge(c, { ok: false, error: 'select a sublayer from the dropdown first' })
+        updateCrsWarning(c, null)
         return
       }
       if (format === 'postgres' && !layer) {
         updateSourceBadge(c, { ok: false, error: 'select a table from the dropdown first' })
+        updateCrsWarning(c, null)
         return
       }
       const srcObj = {
@@ -340,6 +349,7 @@ function createInspectors(
         if (d.ok && d.columns) {
           SOURCE_SCHEMAS[id] = d.columns
           updateSourceBadge(c, { ok: true, columns: d.columns })
+          updateCrsWarning(c, d.crs_warning)
           // Offer the just-inspected columns as suggestions for the geometry-column
           // pickers below — same idea as doInspectFile populating the `layer` combo.
           if (TABULAR_GEOM_FORMATS.includes(format)) {
@@ -385,10 +395,12 @@ function createInspectors(
         } else {
           delete SOURCE_SCHEMAS[id]
           updateSourceBadge(c, { ok: false, error: d.error })
+          updateCrsWarning(c, null)
         }
       } catch {
         delete SOURCE_SCHEMAS[id]
         updateSourceBadge(c, { ok: false, error: 'connection failed' })
+        updateCrsWarning(c, null)
       }
       syncFn()
     }, 500)
@@ -451,6 +463,16 @@ function createInspectors(
 function showChip(c: HTMLElement, sel: string, on: boolean): void {
   const chip = c.querySelector<HTMLElement>(sel)
   if (chip) chip.hidden = !on
+}
+
+// Shows/hides the "this crs looks wrong for the sampled coordinates" hint from
+// /api/inspect's crs_warning — see crs_extent_warning in sources.py.
+function updateCrsWarning(c: HTMLElement, warning: string | null | undefined): void {
+  const box = c.querySelector<HTMLElement>('[data-crs-warning]')
+  if (!box) return
+  box.hidden = !warning
+  const msg = box.querySelector('span')
+  if (msg) msg.textContent = warning ?? ''
 }
 
 const URI_PLACEHOLDERS: Record<string, string> = {
