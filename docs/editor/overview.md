@@ -7,7 +7,8 @@ editor.
 
 Start it with `duck-soup serve` (or the Docker image) and open <http://localhost:8000>.
 
-![The editor: builder on the left, map and preview tabs on the right](../assets/screenshots/editor-overview.png){ .screenshot loading=lazy }
+![The editor: builder on the left, map and preview tabs on the right](../assets/screenshots/editor-overview-light.png#only-light){ .screenshot loading=lazy }
+![The editor: builder on the left, map and preview tabs on the right](../assets/screenshots/editor-overview-dark.png#only-dark){ .screenshot loading=lazy }
 
 The left side is where you **build**. The right side is where you **see** the result.
 
@@ -32,7 +33,8 @@ into the base, steps run left to right, and layers converge on the shared output
 redraws as you edit. Click any node to jump to its card, and drag to pan when the diagram is
 wider than the screen. Click the header to collapse it.
 
-![Lineage diagram for a multi-pipeline config](../assets/screenshots/lineage.png){ .screenshot loading=lazy }
+![Lineage diagram for a multi-pipeline config](../assets/screenshots/lineage-light.png#only-light){ .screenshot loading=lazy }
+![Lineage diagram for a multi-pipeline config](../assets/screenshots/lineage-dark.png#only-dark){ .screenshot loading=lazy }
 
 ## Config card and metadata
 

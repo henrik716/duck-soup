@@ -35,7 +35,8 @@ There are three ways to add one:
 
 ## The source card
 
-![The sources tab with an expanded source card](../assets/screenshots/sources-tab.png){ .screenshot loading=lazy }
+![The sources tab with an expanded source card](../assets/screenshots/sources-tab-light.png#only-light){ .screenshot loading=lazy }
+![The sources tab with an expanded source card](../assets/screenshots/sources-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
 | Field | Notes |
 |---|---|

@@ -90,7 +90,8 @@ In the editor, the same pipeline is a handful of cards (sources, steps, a mappin
 output layers) next to a live map and table of the result. Here it is with a larger example
 loaded:
 
-![The duck soup editor](assets/screenshots/editor-overview.png){ .screenshot loading=lazy }
+![The duck soup editor](assets/screenshots/editor-overview-light.png#only-light){ .screenshot loading=lazy }
+![The duck soup editor](assets/screenshots/editor-overview-dark.png#only-dark){ .screenshot loading=lazy }
 
 ## How the guide is organised
 

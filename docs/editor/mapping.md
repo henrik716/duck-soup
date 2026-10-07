@@ -10,7 +10,8 @@ how each is filled. The YAML side is covered in the
 
 ## Layout
 
-![The mapping tab: field pool on the left, mapping grid on the right](../assets/screenshots/mapping-tab.png){ .screenshot loading=lazy }
+![The mapping tab: field pool on the left, mapping grid on the right](../assets/screenshots/mapping-tab-light.png#only-light){ .screenshot loading=lazy }
+![The mapping tab: field pool on the left, mapping grid on the right](../assets/screenshots/mapping-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
 On the left is the **Available Source Fields** pool: every column available after the last
 step (base columns plus fields pulled by join steps). On the right is the mapping grid, one row
@@ -57,7 +58,8 @@ Choosing `expr` and clicking the edit icon opens the expression builder, a side 
 - a **live check** that runs the expression against real sample rows from your pipeline and
   shows either sample results or the SQL error.
 
-![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer.png){ .screenshot loading=lazy }
+![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-light.png#only-light){ .screenshot loading=lazy }
+![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-dark.png#only-dark){ .screenshot loading=lazy }
 
 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> applies the expression and <kbd>Esc</kbd> cancels.
 Multi-line expressions keep their formatting in the saved YAML.
@@ -81,7 +83,8 @@ then pick a mode:
     Point at a CSV file and name its **key column** (matched against the source column) and
     **value column** (the output). Use this for code tables with hundreds of entries.
 
-![The codelist panel in rules mode](../assets/screenshots/codelist-drawer.png){ .screenshot loading=lazy }
+![The codelist panel in rules mode](../assets/screenshots/codelist-drawer-light.png#only-light){ .screenshot loading=lazy }
+![The codelist panel in rules mode](../assets/screenshots/codelist-drawer-dark.png#only-dark){ .screenshot loading=lazy }
 
 Click **Apply Rules** to save. The mapping row's button then summarises what's configured
 (for example `3 rules · default Other` or `lookup: species.csv`).

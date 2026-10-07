@@ -61,3 +61,10 @@
   max-width: 560px;
   width: 100%;
 }
+
+/* Light/dark screenshot pairs: Material hides #only-light / #only-dark images per scheme, but
+   the display:block above outranks its rule, so restate it with higher specificity. */
+[data-md-color-scheme="slate"] .md-typeset img.screenshot[src$="#only-light"],
+[data-md-color-scheme="default"] .md-typeset img.screenshot[src$="#only-dark"] {
+  display: none;
+}

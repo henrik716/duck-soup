@@ -8,7 +8,8 @@ covers how to work with steps in the editor.
 
 Click **add step** (at the top or bottom of the list) to open the step gallery:
 
-![The step gallery](../assets/screenshots/step-gallery.png){ .screenshot .narrow loading=lazy }
+![The step gallery](../assets/screenshots/step-gallery-light.png#only-light){ .screenshot .narrow loading=lazy }
+![The step gallery](../assets/screenshots/step-gallery-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 | Gallery card | Step type | In one line |
 |---|---|---|
@@ -27,7 +28,8 @@ Click **add step** (at the top or bottom of the list) to open the step gallery:
 
 ## The step card
 
-![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab.png){ .screenshot loading=lazy }
+![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-light.png#only-light){ .screenshot loading=lazy }
+![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
 The header shows the step's type and a short summary, such as `→ fylke` for a join source,
 `(500m)` for a buffer, or `@zones` when the step runs on a branch. Hover the type to see what the step does. The header buttons are:
@@ -66,7 +68,8 @@ The body depends on the step type:
 
 ## Working step by step
 
-![Previewing the rows after step 1](../assets/screenshots/step-preview.png){ .screenshot .narrow loading=lazy }
+![Previewing the rows after step 1](../assets/screenshots/step-preview-light.png#only-light){ .screenshot .narrow loading=lazy }
+![Previewing the rows after step 1](../assets/screenshots/step-preview-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 The step preview is the main tool for debugging a pipeline. A typical loop:
 
