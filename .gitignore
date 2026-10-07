@@ -34,3 +34,6 @@ pipelines/*.yaml
 .DS_Store
 .claude/
 
+
+# MkDocs build output
+site/

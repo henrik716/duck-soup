@@ -1,0 +1,93 @@
+site_name: duck soup
+site_description: Config-driven geodata ETL on DuckDB — YAML pipelines and a visual editor that write GeoPackage.
+site_url: https://henrik716.github.io/duck-soup/
+repo_url: https://github.com/henrik716/duck-soup
+repo_name: henrik716/duck-soup
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/favicon.png
+  favicon: assets/favicon.png
+  font:
+    text: Space Grotesk
+    code: IBM Plex Mono
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - content.action.edit
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.keys
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Install: getting-started/install.md
+      - Quickstart: getting-started/quickstart.md
+      - Core concepts: concepts.md
+  - Web editor:
+      - Tour of the editor: editor/overview.md
+      - Sources: editor/sources.md
+      - Steps: editor/steps.md
+      - Mapping: editor/mapping.md
+      - Preview, validate & run: editor/preview-and-run.md
+  - Reference:
+      - Pipeline YAML: reference/yaml.md
+      - Source formats: reference/sources.md
+      - Step types: reference/steps.md
+      - Mapping & codelists: reference/mapping.md
+      - Command line: reference/cli.md
+  - Troubleshooting: troubleshooting.md
+  - Development: development.md
+
+validation:
+  links:
+    anchors: warn

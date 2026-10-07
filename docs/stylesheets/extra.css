@@ -1,0 +1,49 @@
+/* Echo the editor's palette (duck_soup/web/ui/src/styles.css): violet accent, teal "spatial". */
+:root {
+  --ds-accent: #9d85ff;
+  --ds-spatial: #00ebd7;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0d0a1f;
+  --md-primary-fg-color: #1b1640;
+  --md-accent-fg-color: var(--ds-spatial);
+  --md-typeset-a-color: var(--ds-accent);
+  --md-code-bg-color: #15112e;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #5b3fd6;
+  --md-typeset-a-color: #5b3fd6;
+}
+
+.md-header__title,
+.md-typeset h1,
+.md-typeset h2 {
+  letter-spacing: -0.01em;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+}
+
+.md-header__button.md-logo img {
+  border-radius: 6px;
+}
+
+/* Hero block on the home page */
+.ds-hero {
+  text-align: center;
+  padding: 1rem 0 0.5rem;
+}
+
+.ds-hero img {
+  width: 96px;
+  border-radius: 16px;
+  box-shadow: 0 0 24px rgba(157, 133, 255, 0.35);
+}
+
+.ds-hero p.tagline {
+  font-size: 1.15rem;
+  opacity: 0.85;
+}

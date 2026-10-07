@@ -21,6 +21,16 @@ npm run build      # compile TypeScript → ../static/ (commit the output)
 npm run build:fast # skip tsc type-check
 ```
 
+**Docs** (GitHub Pages, MkDocs Material; source: `docs/`, config: `mkdocs.yml`)
+```bash
+pip install -e ".[docs]"
+mkdocs serve           # live preview
+mkdocs build --strict  # what the Docs workflow runs; fails on broken links
+```
+`.github/workflows/docs.yml` deploys to https://henrik716.github.io/duck-soup/ on pushes to `main`
+touching `docs/` or `mkdocs.yml`. When a `config.py` option changes, update the matching
+`docs/reference/*.md` page (and `docs/editor/*.md` if the editor UI changes).
+
 **Tests**
 ```bash
 pip install -e ".[test]"                            # install with pytest + httpx

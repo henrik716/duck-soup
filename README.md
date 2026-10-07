@@ -2,6 +2,9 @@
 
 [![DuckDB](https://img.shields.io/badge/Powered%20by-DuckDB-orange.svg)](https://duckdb.org/)
 [![GeoPackage](https://img.shields.io/badge/Output-GeoPackage-blue.svg)](https://www.geopackage.org/)
+[![Docs](https://img.shields.io/badge/docs-user%20guide-9d85ff.svg)](https://henrik716.github.io/duck-soup/)
+
+📖 **Full user guide: https://henrik716.github.io/duck-soup/**
 
 **duck soup** makes config-driven geodata ETL on **DuckDB** as easy as... well, duck soup!
 
