@@ -20,7 +20,7 @@ hide:
 one-off Python scripts. You describe a pipeline — where the data comes from, how it should
 be joined and reshaped, which columns come out the other end — either as a short YAML file
 or visually in a browser-based editor. duck soup runs it inside **DuckDB** with the
-**spatial** extension and writes the result to a **GeoPackage**.
+**spatial** extension and writes the result to a **GeoPackage** or **GeoParquet**.
 
 ## What you can do with it
 

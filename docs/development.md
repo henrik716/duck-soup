@@ -19,7 +19,7 @@ pytest -v
 duck_soup/
   config.py      Pydantic schema for the YAML (the source of truth for every option)
   sources.py     one reader per format → a SQL table expression (mostly ST_Read)
-  engine.py      builds the src_<id> → step_N → mapped view chain and writes the GeoPackage
+  engine.py      builds the src_<id> → step_N → mapped view chain and writes the output
   derive.py      DuckDB bootstrap (extensions) + Python UDFs (to_mgrs)
   sql_util.py    identifier / literal quoting
   cli.py         check / run / serve
@@ -41,7 +41,8 @@ docs/            this site (MkDocs Material)
    as an R-tree `SPATIAL_JOIN`, then aggregate per base row. Avoid `LATERAL` subqueries for
    spatial predicates: they compare every pair.
 3. The mapping compiles to a final `SELECT`, written with
-   `COPY … (FORMAT GDAL, DRIVER 'GPKG')`.
+   `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or `COPY … (FORMAT PARQUET)` for a `.parquet`
+   output (GeoParquet, with the geometry cast to `GEOMETRY('<crs>')` so the CRS is embedded).
 
 ## Frontend
 

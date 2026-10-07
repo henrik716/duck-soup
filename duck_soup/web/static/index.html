@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/static/assets/index-CXHi1D3F.js"></script>
+  <script type="module" crossorigin src="/static/assets/index-YPRbIJlr.js"></script>
   <link rel="stylesheet" crossorigin href="/static/assets/index-loTpIxdU.css">
 </head>
 <body>
@@ -32,7 +32,7 @@
   <div style="display:flex; align-items:center; gap:12px">
     <img src="/static/favicon.png" alt="duck soup logo" style="width:40px;height:40px;border-radius:8px;border:1px solid rgba(139,108,255,0.4);box-shadow:0 0 8px rgba(139,108,255,0.25);" />
     <span class="brand">duck soup<span class="dot">.</span></span>
-    <span class="tagline">duckdb geodata pipelines <i data-lucide="arrow-right" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px"></i> geopackage</span>
+    <span class="tagline">duckdb geodata pipelines <i data-lucide="arrow-right" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px"></i> geopackage / geoparquet</span>
   </div>
   <div class="top-right">
     <label class="inline-field">
@@ -75,10 +75,10 @@
       <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;">config</div>
       <div class="row">
         <label class="field grow">config name<input id="cfg_name" placeholder="my_config"></label>
-        <label class="field grow">output geopackage
+        <label class="field grow" title="A .gpkg path writes a GeoPackage. A .parquet path writes GeoParquet: one file for a single layer, or a folder with one file per layer.">output file (.gpkg or .parquet)
           <div style="display:flex;gap:6px">
             <input id="cfg_output" placeholder="output/data.gpkg" style="flex:1">
-            <button type="button" id="cfg_output_browse" class="mini ghost" title="Browse files" aria-label="Browse for the output GeoPackage path" style="padding:10px;flex-shrink:0"><i data-lucide="folder" style="width:14px;height:14px"></i></button>
+            <button type="button" id="cfg_output_browse" class="mini ghost" title="Browse files" aria-label="Browse for the output file path" style="padding:10px;flex-shrink:0"><i data-lucide="folder" style="width:14px;height:14px"></i></button>
           </div>
         </label>
       </div>
@@ -184,6 +184,6 @@
     </div>
   </aside>
 </div>
-
+
 </body>
 </html>

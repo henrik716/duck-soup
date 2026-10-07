@@ -1,4 +1,4 @@
-"""flow — config-driven geodata ETL on DuckDB, output to GeoPackage."""
+"""flow — config-driven geodata ETL on DuckDB, output to GeoPackage or GeoParquet."""
 import os as _os
 
 

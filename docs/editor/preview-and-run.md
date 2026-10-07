@@ -3,9 +3,10 @@
 ## Output layers
 
 The **output layers** tab of each pipeline lists the layers it writes into the shared
-GeoPackage. Each layer card has:
+output. Each layer card has:
 
-- **layer name**: the table name inside the GeoPackage.
+- **layer name**: the table name inside the GeoPackage (for a multi-layer GeoParquet output,
+  the file name).
 - **CRS**: the CRS geometry is reprojected to on write.
 - **filter**: an optional SQL condition. Rows where it's false are left out of *this* layer
   only. A live check under the field tells you whether it parses.
@@ -92,7 +93,7 @@ later from the **load** dropdown.
 ## Running
 
 **run** (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) runs every pipeline in the config and writes the
-GeoPackage. While it runs, the button shows elapsed seconds. When it finishes, the
+output. While it runs, the button shows elapsed seconds. When it finishes, the
 **Run Logs** tab shows:
 
 - each source being read and each step being built, with timings,

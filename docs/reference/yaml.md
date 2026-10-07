@@ -10,7 +10,7 @@ Pydantic models in
 ```yaml
 name: ducks
 description: "Ranking every duck in the neighbourhood pond by sass level"
-output: output/Ducks.gpkg       # one shared GeoPackage for every pipeline below
+output: output/Ducks.gpkg       # one shared GeoPackage for every pipeline below (.parquet → GeoParquet)
 overwrite: true
 metadata:
   abstract: "Duck sightings enriched with pond gossip and species drama"
@@ -60,7 +60,7 @@ pipelines:
 |---|---|---|---|
 | `name` | string | **required** | Config name. |
 | `description` | string | `""` | Free text. |
-| `output` | path | **required** | The GeoPackage every pipeline writes into. Folders are created as needed. |
+| `output` | path | **required** | The file every pipeline writes into. `.gpkg` writes a GeoPackage; `.parquet` or `.geoparquet` writes GeoParquet (see [GeoParquet output](#geoparquet-output)). Folders are created as needed. |
 | `overwrite` | bool | `true` | Delete the output file before writing. With `false`, layers are appended to an existing file. |
 | `metadata` | object | — | Optional dataset metadata, see below. |
 | `pipelines` | list | **required** | One or more pipelines, see below. |
@@ -102,10 +102,35 @@ A CRS is always written as `AUTHORITY:CODE`, e.g. `EPSG:25833`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `layer` | string | **required** | Table name in the GeoPackage. |
+| `layer` | string | **required** | Table name in the GeoPackage, or file name for a multi-layer GeoParquet output. |
 | `crs` | CRS | `EPSG:25833` | Output CRS. |
 | `filter` | SQL | — | Only rows where this is true go into this layer. Uses pre-mapping column names. |
 | `mapping` | list | — | Replaces the pipeline `mapping` for this layer only. |
+
+## GeoParquet output
+
+An `output` path ending in `.parquet` or `.geoparquet` is written as
+[GeoParquet](https://geoparquet.org/) instead of a GeoPackage:
+
+```yaml
+output: output/transport.parquet
+```
+
+A GeoParquet file holds exactly one table, so the layout depends on how many layers the
+config has **in total**, across all pipelines:
+
+| Layers | Written to |
+|---|---|
+| 1 | `output/transport.parquet` |
+| 2 or more | `output/transport/<layer>.parquet`, one file per layer |
+
+- Each layer's `crs` is embedded in the file's GeoParquet metadata, so GIS tools read the
+  coordinates in the right CRS.
+- Layer names become file names, so they must be unique (ignoring case) and can't contain
+  `< > : " / \ | ? *`.
+- `overwrite: true` deletes the file, or the `*.parquet` files in the folder, before writing.
+  Other files in the folder are left alone.
+- Writing uses DuckDB's own Parquet writer (ZSTD-compressed), not GDAL.
 
 ## Validation rules
 
@@ -117,6 +142,7 @@ Besides types, `check` enforces:
 - Every mapping item has exactly one of `from` / `const` / `expr` / `func` / `codelist`.
 - `geom` is reserved for the output geometry and can't be a mapping target.
 - `arcgis_rest` and `oapif` sources must be EPSG:4326 (or leave `crs` out).
+- For a GeoParquet `output`, layer names must be unique, valid file names.
 - At runtime: buffer, nearest-neighbour distances and `area`/`length` require a projected
   working CRS.
 

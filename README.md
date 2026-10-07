@@ -1,7 +1,7 @@
 # <img src="duck_soup/web/static/favicon.png" width="32" height="32" align="absmiddle"> duck soup
 
 [![DuckDB](https://img.shields.io/badge/Powered%20by-DuckDB-orange.svg)](https://duckdb.org/)
-[![GeoPackage](https://img.shields.io/badge/Output-GeoPackage-blue.svg)](https://www.geopackage.org/)
+[![Output](https://img.shields.io/badge/Output-GeoPackage%20%7C%20GeoParquet-blue.svg)](https://www.geopackage.org/)
 [![Docs](https://img.shields.io/badge/docs-user%20guide-9d85ff.svg)](https://henrik716.github.io/duck-soup/)
 
 📖 **Full user guide: https://henrik716.github.io/duck-soup/**
@@ -10,7 +10,7 @@
 
 It's a lightweight, lightning-fast replacement for building heavy workspaces in tools like FME (Safe Software Feature Manipulation Engine), or writing custom, error-prone Python scripts. Describe your pipeline as a simple YAML file — sources, a base, join/geoprocessing steps, attribute mapping, one or more output layers — or build it visually in the interactive web editor.
 
-Under the hood, everything runs inside DuckDB using the powerful **spatial** extension: joins, geoprocessing (buffers, clips, overlays, dissolves, ...), and field mappings all compile down to a chain of SQL views, written straight to an output **GeoPackage**. A single YAML file can define several independent pipelines, each fanning out to multiple layers, all written into one shared GeoPackage.
+Under the hood, everything runs inside DuckDB using the powerful **spatial** extension: joins, geoprocessing (buffers, clips, overlays, dissolves, ...), and field mappings all compile down to a chain of SQL views, written straight to an output **GeoPackage** or **GeoParquet**. A single YAML file can define several independent pipelines, each fanning out to multiple layers, all written into one shared output.
 
 ---
 
@@ -62,7 +62,7 @@ python -m duck_soup.cli serve
 ## Key Features
 
 - **YAML-driven pipelines:** Describe inputs, join/geoprocessing steps, schema mapping, and output layers in one neat configuration file.
-- **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage with optional dataset-level metadata.
+- **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage (or, for GeoParquet, one file per layer) with optional dataset-level metadata.
 - **Web Editor:** A visual, browser-based pipeline builder with live YAML preview, syntax validation, data previewing, and interactive execution logs. Drag a File Geodatabase folder straight onto the sources panel and it's uploaded and wired up as a source automatically.
 - **Interactive map preview:** A MapLibre GL-powered map with a light/dark basemap toggle previews source and result geometry directly in the browser, with hover/click inspection of feature attributes.
 - **Powered by DuckDB Spatial:** Blistering speed using DuckDB's columnar execution engine and GDAL-backed `ST_Read`/`ST_Write` operations.
@@ -78,7 +78,7 @@ duck_soup/           # Python package directory
   config.py          # YAML schema (pydantic) + load/save
   sources.py         # one reader per format (mostly DuckDB ST_Read / GDAL)
   derive.py          # python UDFs (MGRS) registered into DuckDB
-  engine.py          # builds a chain of SQL views, writes GeoPackage
+  engine.py          # builds a chain of SQL views, writes GeoPackage/GeoParquet
   cli.py             # python -m duck_soup.cli run pipelines/test.yaml
   web/
     app.py           # FastAPI backend
@@ -104,6 +104,10 @@ Once the chain is built, each output layer applies its own attribute `mapping` (
 optional `filter`) and is written straight to GeoPackage via
 `COPY … (FORMAT GDAL, DRIVER 'GPKG')`. A pipeline can write several layers this way,
 and a Config file can run several pipelines, all appended into the same GeoPackage.
+An `output` ending in `.parquet` (or `.geoparquet`) is written as GeoParquet instead,
+via DuckDB's native `COPY … (FORMAT PARQUET)` with the layer CRS embedded in the `geo`
+metadata. GeoParquet has no layers, so a single layer is written to that file and
+several go to a folder of `<layer>.parquet` files named after it.
 lon/lat/mgrs/wkb/area/length are always derived from the same working-CRS geometry
 used for the joins, so there's no extra reprojection.
 
@@ -195,17 +199,17 @@ and run log.
 
 ## Pipeline YAML
 
-A pipeline file is a **Config**: one shared output GeoPackage, optional dataset
-metadata, and a list of independent `pipelines`. Each pipeline has its own
-sources/base/steps/mapping, and can fan out to one or more output `layers` that all
-get appended into that same GeoPackage:
+A pipeline file is a **Config**: one shared output (GeoPackage, or GeoParquet for a
+`.parquet` path), optional dataset metadata, and a list of independent `pipelines`.
+Each pipeline has its own sources/base/steps/mapping, and can fan out to one or more
+output `layers` that all get appended into that same output:
 
 ```yaml
 name: ducks
 description: "Ranking every duck in the neighbourhood pond by sass level"
-output: output/Ducks.gpkg       # one shared GeoPackage for every pipeline below
+output: output/Ducks.gpkg       # one shared GeoPackage for every pipeline below (.parquet → GeoParquet)
 overwrite: true
-metadata:                       # optional GeoPackage-level dataset metadata
+metadata:                       # optional dataset-level metadata
   abstract: "Duck sightings enriched with pond gossip and species drama"
   gdpr: "No personal data (ducks were not available for consent)"
 

@@ -90,7 +90,7 @@ degrees. See [Core concepts](../concepts.md#the-working-crs).
 6. Open the **mapping** tab and click the ✨ (auto-map) button to map every available
    column. Then delete the ones you don't want, and add `func` rows for `lat`, `lon`,
    `mgrs` and `uuid`.
-7. Open **output layers** and check the layer name and CRS. Set the **output geopackage**
+7. Open **output layers** and check the layer name and CRS. Set the **output file**
    path at the top of the page.
 
 The map and the **Data Table** tab update as you go. Then:

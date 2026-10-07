@@ -17,13 +17,14 @@ flowchart LR
     ST --> M[mapping]
     M --> L1[layer 1]
     M --> L2[layer 2<br/>filtered]
-    L1 --> G[(output.gpkg)]
+    L1 --> G[(output.gpkg<br/>or .parquet)]
     L2 --> G
 ```
 
-## Config, pipelines and the shared GeoPackage
+## Config, pipelines and the shared output
 
-A YAML file is a **config**. It names one output **GeoPackage** and holds one or more
+A YAML file is a **config**. It names one output (a **GeoPackage**, or **GeoParquet** when the
+path ends in `.parquet`) and holds one or more
 **pipelines**:
 
 ```yaml
@@ -102,7 +103,7 @@ column is written as-is.**
 
 ## Layers
 
-A pipeline writes one or more **layers** into the shared GeoPackage. Every layer gets the same
+A pipeline writes one or more **layers** into the shared output. Every layer gets the same
 rows, and each layer can:
 
 - reproject to its own `crs`,
@@ -139,7 +140,7 @@ flowchart LR
     S0 --> S1[step_1<br/>spatial_join]
     S1 --> S2[step_2<br/>filter]
     S2 --> M[mapped<br/>mapping applied]
-    M --> W["COPY … TO output.gpkg"]
+    M --> W["COPY … TO output.gpkg / .parquet"]
 ```
 
 DuckDB plans the whole chain as one query, so data streams through without intermediate

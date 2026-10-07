@@ -232,15 +232,20 @@ export function updateLineageDiagram(cfg: Config): void {
 
   outer.appendChild(pipelinesCol)
 
-  // ---- right: shared GeoPackage node ----
+  // ---- right: shared output node (GeoPackage, or GeoParquet file/folder) ----
+  // The `gpkg` class/ids below are internal names kept for the styles and edge routing.
   const gpkgNode = document.createElement('div')
   gpkgNode.className = 'lineage-node lineage-gpkg'
-  const gpkgName = cfg.output ? cfg.output.split('/').pop() || cfg.output : 'output.gpkg'
+  const layerCount = pipelines.reduce((n, p) => n + (p.layers?.length ?? 0), 0)
+  let outName = cfg.output ? cfg.output.split(/[\\/]/).pop() || cfg.output : 'output.gpkg'
+  const isParquet = /\.(geo)?parquet$/i.test(outName)
+  // GeoParquet has no layers: several layers become <name>/<layer>.parquet (see engine.py).
+  if (isParquet && layerCount > 1) outName = outName.replace(/\.(geo)?parquet$/i, '') + '/'
   gpkgNode.innerHTML = `
-    <i data-lucide="package" style="width:14px;height:14px;color:var(--ok);"></i>
+    <i data-lucide="${isParquet && layerCount > 1 ? 'folder' : 'package'}" style="width:14px;height:14px;color:var(--ok);"></i>
     <div style="display:flex;flex-direction:column;gap:1px;">
-      <span style="font-size:12px;font-weight:600;">${esc(gpkgName)}</span>
-      <span style="font-size:10px;color:var(--muted);">${pipelines.length} layer${pipelines.length !== 1 ? 's' : ''}</span>
+      <span style="font-size:12px;font-weight:600;">${esc(outName)}</span>
+      <span style="font-size:10px;color:var(--muted);">${layerCount} layer${layerCount !== 1 ? 's' : ''}${isParquet ? ' · geoparquet' : ''}</span>
     </div>`
   gpkgNode.style.cssText = `
     display:flex; align-items:center; gap:8px; flex-shrink:0;
@@ -502,7 +507,7 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
       connect(finalMain.el, layerNode, 'var(--ok)', 'arrow-ok', finalMain.id, `p${pIdx}::layer`, 'horizontal')
     }
 
-    // Connect Layer Node -> Shared GPKG Node (converging flow)
+    // Connect Layer Node -> shared output node (converging flow)
     if (layerNode && gpkgNode) {
       connect(layerNode, gpkgNode, 'var(--ok)', 'arrow-ok', `p${pIdx}::layer`, 'gpkg', 'horizontal')
     }

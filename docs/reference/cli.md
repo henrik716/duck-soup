@@ -24,7 +24,7 @@ On failure it prints the validation error, including the path to the bad field
 duck-soup run pipelines/my_pipeline.yaml
 ```
 
-Runs every pipeline in the file and writes the GeoPackage, logging each stage as it goes:
+Runs every pipeline in the file and writes the output (GeoPackage or GeoParquet), logging each stage as it goes:
 
 ```text
   source 'places' (geojson) -> "src_places"

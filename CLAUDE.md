@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pip install -e .                                   # install duck_soup + deps
 python -m duck_soup.cli check pipelines/test.yaml  # validate pipeline YAML
-python -m duck_soup.cli run pipelines/test.yaml    # execute → GeoPackage
+python -m duck_soup.cli run pipelines/test.yaml    # execute → GeoPackage (or GeoParquet)
 uvicorn duck_soup.web.app:app --reload              # dev server at :8000
 ```
 
@@ -43,7 +43,7 @@ frontend unit-test framework yet — the frontend job is a type-check/build gate
 
 ## Architecture
 
-The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/attribute join steps, output column mapping, and an output GeoPackage. All processing runs inside a single DuckDB in-memory session using the spatial extension (GDAL-backed `ST_Read`/`ST_Write`).
+The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/attribute join steps, output column mapping, and an output GeoPackage (or GeoParquet, for a `.parquet` path). All processing runs inside a single DuckDB in-memory session using the spatial extension (GDAL-backed `ST_Read`/`ST_Write`).
 
 ### Python modules
 
@@ -54,7 +54,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 - `wfs`: HTTP GetFeature (GML/3.2) → temp `.gml` → `ST_Read`
 - `parquet`: DuckDB's native `read_parquet()`, not `ST_Read` — the GDAL build bundled with the `spatial` extension has no Parquet/Arrow driver
 
-**`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. Spatial joins (first match or largest overlap), nearest-neighbor joins, clip and erase all go through `_per_row_match_select`: a plain `JOIN` on the spatial predicate (so DuckDB plans it as its R-tree `SPATIAL_JOIN`), aggregated per base row — `arg_min` for the single best match, `ST_Union_Agg` for erase. Avoid `LATERAL` subqueries for spatial predicates: they compare every base row against every source row. Nearest-neighbor uses `ST_DWithin` as the join condition when `max_distance` is set; without it, every pair is compared. Attribute joins are 1:1 left joins. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`.
+**`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. Spatial joins (first match or largest overlap), nearest-neighbor joins, clip and erase all go through `_per_row_match_select`: a plain `JOIN` on the spatial predicate (so DuckDB plans it as its R-tree `SPATIAL_JOIN`), aggregated per base row — `arg_min` for the single best match, `ST_Union_Agg` for erase. Avoid `LATERAL` subqueries for spatial predicates: they compare every base row against every source row. Nearest-neighbor uses `ST_DWithin` as the join condition when `max_distance` is set; without it, every pair is compared. Attribute joins are 1:1 left joins. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or, when the output path ends in `.parquet`/`.geoparquet`, via native `COPY … (FORMAT PARQUET)` as GeoParquet (`_write_parquet_layer`). The geometry is cast to `GEOMETRY('<layer crs>')` there, since without a CRS-typed column DuckDB omits `crs` from the `geo` metadata and readers assume OGC:CRS84. GeoParquet has no layers: 1 layer in total → that file, more → `<stem>/<layer>.parquet` (`parquet_layer_path`).
 
 **`derive.py`** — Registers Python UDFs into DuckDB (`to_mgrs`, backed by the `mgrs` package, a required dependency). Also owns connection bootstrap: `load_extensions()` (spatial + postgres) and `init_duckdb()` (extensions + UDFs) — every DuckDB connection in the codebase goes through one of these.
 

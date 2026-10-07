@@ -6,7 +6,8 @@ Read every source once, reproject geometry to a single working CRS, then build a
 chain of SQL views: base -> step1 -> step2 -> ... -> mapped. DuckDB plans the
 whole chain as one query, so joins and projections stay fast and stream from
 GDAL where possible. The final view is written straight to GeoPackage via
-COPY ... (FORMAT GDAL, DRIVER 'GPKG').
+COPY ... (FORMAT GDAL, DRIVER 'GPKG'), or, for a .parquet/.geoparquet output path,
+to GeoParquet via DuckDB's native COPY ... (FORMAT PARQUET) (see _write_parquet_layer).
 
 Spatial joins, nearest-neighbor joins and clips keep a single best match per base
 feature (see Engine._best_match_select), so each base feature stays a single row
@@ -26,7 +27,7 @@ from . import sources as src_readers
 from .config import (
     AttributeJoin, Buffer, Centroid, Clip, CodeCase, CodeList, Config,
     Dissolve, Erase, Filter, IntersectOverlay, MapItem, Merge, NearestNeighbor,
-    OutputLayer, Pipeline, Snapshot, SpatialJoin,
+    OutputLayer, Pipeline, Snapshot, SpatialJoin, is_parquet_path,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .sql_util import quote_ident as _ident, quote_literal as _lit
@@ -79,6 +80,30 @@ def _transform(col: str, from_crs: str, to_crs: str) -> str:
     return f"ST_Transform({col}, {_lit(from_crs)}, {_lit(to_crs)}, always_xy := true)"
 
 
+def parquet_output_root(out_path: Path, multi: bool) -> Path:
+    """Where a GeoParquet output lands: the file itself for a single layer, otherwise
+    the folder `<out_path without suffix>/` holding one `<layer>.parquet` per layer."""
+    return out_path.with_suffix("") if multi else out_path
+
+
+def parquet_layer_path(out_path: Path, layer_name: str, multi: bool) -> Path:
+    if not multi:
+        return out_path
+    return parquet_output_root(out_path, multi) / f"{layer_name}.parquet"
+
+
+def _clear_parquet_output(out_path: Path, multi: bool) -> None:
+    """Overwrite for a GeoParquet output: remove the file, or the layer files in its
+    folder. Only `*.parquet` files directly in the folder go; anything else is left."""
+    root = parquet_output_root(out_path, multi)
+    if not multi:
+        if root.is_file():
+            root.unlink()
+    elif root.is_dir():
+        for f in root.glob("*.parquet"):
+            f.unlink()
+
+
 def _merge_gpkg_layer(main_path: Path, temp_path: Path) -> None:
     """Splice the single layer written to temp_path into main_path.
 
@@ -123,10 +148,20 @@ def _merge_gpkg_layer(main_path: Path, temp_path: Path) -> None:
 
 
 class Engine:
-    def __init__(self, pipeline: Pipeline, log: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        pipeline: Pipeline,
+        log: Callable[[str], None] | None = None,
+        parquet_multi: bool | None = None,
+    ):
+        """`parquet_multi` says whether a GeoParquet output gets one file per layer
+        (see parquet_layer_path). run_config sets it from the layer count across *all*
+        its pipelines, since they share one output; left None, it's derived from this
+        pipeline's own layers."""
         self.p = pipeline
         self.working_crs = pipeline.effective_working_crs
         self.log = log or (lambda m: None)
+        self.parquet_multi = parquet_multi
 
     # -- source views -------------------------------------------------------
     def _create_source_views(
@@ -742,6 +777,20 @@ class Engine:
                 for out in self.p.outputs:
                     out_path = Path(out.path)
                     out_path.parent.mkdir(parents=True, exist_ok=True)
+                    if is_parquet_path(out_path):
+                        multi = self._parquet_multi(out_path)
+                        if out.overwrite and out_path not in deleted_paths:
+                            _clear_parquet_output(out_path, multi)
+                            deleted_paths.add(out_path)
+                        for layer in out.layers:
+                            self._write_parquet_layer(
+                                con, self._final_select(prev, layer), layer,
+                                parquet_layer_path(out_path, layer.layer, multi),
+                            )
+                        root = str(parquet_output_root(out_path, multi))
+                        if root not in out_paths:
+                            out_paths.append(root)
+                        continue
                     if out.overwrite and out_path not in deleted_paths:
                         if out_path.exists():
                             out_path.unlink()
@@ -768,6 +817,32 @@ class Engine:
                     if str(out_path) not in out_paths:
                         out_paths.append(str(out_path))
                 return out_paths
+
+    def _parquet_multi(self, out_path: Path) -> bool:
+        if self.parquet_multi is not None:
+            return self.parquet_multi
+        return sum(len(o.layers) for o in self.p.outputs if Path(o.path) == out_path) > 1
+
+    def _write_parquet_layer(self, con, final_sql: str, layer: OutputLayer, target: Path) -> None:
+        """Write one layer as GeoParquet via DuckDB's native Parquet writer.
+
+        The spatial extension adds GeoParquet's `geo` metadata for any GEOMETRY column,
+        but only names a CRS when the column's *type* carries one. A plain GEOMETRY gets
+        no `crs` entry, which per the GeoParquet spec means OGC:CRS84, so a UTM layer
+        would be read back as lon/lat. Hence the cast to GEOMETRY('<layer.crs>'). The
+        intermediate ::GEOMETRY drops any CRS the column already has (e.g. from a typed
+        GeoParquet source), since DuckDB refuses to cast between two different CRSs; the
+        engine tracks the actual CRS itself, and `geom` is in layer.crs at this point.
+        """
+        target.parent.mkdir(parents=True, exist_ok=True)
+        sql = final_sql
+        if self.p.base_source.has_geometry:
+            sql = (
+                f"SELECT * REPLACE (geom::GEOMETRY::GEOMETRY({_lit(layer.crs)}) AS geom) "
+                f"FROM ({final_sql})"
+            )
+        self.log(f"writing {target} ({layer.crs})")
+        con.execute(f"COPY ({sql}) TO {_lit(str(target))} (FORMAT PARQUET, COMPRESSION ZSTD)")
 
     @staticmethod
     def _bbox_filter(bbox: tuple[float, float, float, float] | None, crs: str) -> str:
@@ -859,13 +934,24 @@ def preview_pipeline(
 
 
 def run_config(config: Config, log: Callable[[str], None] | None = None) -> str:
-    """Run all pipelines in a Config, appending each as a separate layer to one gpkg."""
+    """Run all pipelines in a Config, appending each one's layers to the shared output.
+
+    Returns the GeoPackage path, or for GeoParquet the file (one layer in total) or the
+    folder of per-layer files (several).
+    """
     out_path = Path(config.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if config.overwrite and out_path.exists():
+    multi = None
+    if is_parquet_path(out_path):
+        multi = config.layer_count > 1
+        if config.overwrite:
+            _clear_parquet_output(out_path, multi)
+    elif config.overwrite and out_path.exists():
         out_path.unlink()
     for pdef in config.pipelines:
-        Engine(pdef.to_pipeline(config.output), log=log).run()
+        Engine(pdef.to_pipeline(config.output), log=log, parquet_multi=multi).run()
+    if multi is not None:
+        return str(parquet_output_root(out_path, multi))
     return str(out_path)
 
 

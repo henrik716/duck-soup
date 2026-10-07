@@ -13,6 +13,8 @@ duck_soup/web/ui/node_modules/
 
 # Generated pipeline output
 output/*.gpkg
+output/*.parquet
+output/*/
 !output/.gitkeep
 
 # Personal/local data and pipelines (already-tracked test fixtures are unaffected)

@@ -21,13 +21,13 @@ The left side is where you **build**. The right side is where you **see** the re
 | **save as** | The file name used by **save** (`pipelines/<name>.yaml`). It defaults to the config name. |
 | **validate** | Re-checks the config now. The editor already validates automatically shortly after every change. |
 | **save** | Writes the YAML. The button is highlighted when you have unsaved changes, and the editor warns before you navigate away and lose them. |
-| **run** | Runs every pipeline and writes the GeoPackage. The log appears in **Run Logs**. |
+| **run** | Runs every pipeline and writes the output file. The log appears in **Run Logs**. |
 | **status** | Shows `valid`, `validating…`, `running…` or the first line of an error. Click it to open the **Problems** tab. |
 
 ## Lineage diagram
 
 The **ETL Pipeline Lineage** panel at the top draws the config as a flow chart: sources feed
-into the base, steps run left to right, and layers converge on the shared GeoPackage. It
+into the base, steps run left to right, and layers converge on the shared output. It
 redraws as you edit. Click any node to jump to its card, and drag to pan when the diagram is
 wider than the screen. Click the header to collapse it.
 
@@ -36,8 +36,9 @@ wider than the screen. Click the header to collapse it.
 ## Config card and metadata
 
 - **config name**: the config's `name`.
-- **output geopackage**: the `output` path every pipeline writes into. The folder icon
-  opens the file browser.
+- **output file**: the `output` path every pipeline writes into. A `.gpkg` path writes a
+  GeoPackage, a `.parquet` path writes GeoParquet (one file per layer when there's more than
+  one). The folder icon opens the file browser.
 - **Dataset Metadata**: optional catalogue fields (name, abstract, origin, update frequency,
   geometric/attribute quality, access method, GDPR note). They're saved in the config's
   `metadata:` block so they travel with the pipeline definition.
@@ -56,7 +57,7 @@ shows a short summary of what it contains:
 | **output layers** | layer names, CRS, per-layer filters | [Preview, validate & run](preview-and-run.md#output-layers) |
 
 **+ add pipeline** at the bottom adds another independent pipeline that writes into the same
-GeoPackage.
+output.
 
 ## Right-hand panel
 

@@ -426,6 +426,40 @@ def _require_layers(layers: list) -> None:
         raise ValueError("at least one layer must be defined under 'layers'")
 
 
+# Output files with these suffixes are written as GeoParquet instead of GeoPackage.
+PARQUET_SUFFIXES = (".parquet", ".geoparquet")
+
+# Characters Windows (the strictest of the platforms we run on) won't allow in a filename.
+_UNSAFE_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def is_parquet_path(path: str | Path) -> bool:
+    return Path(path).suffix.lower() in PARQUET_SUFFIXES
+
+
+def _check_parquet_layer_names(path: str, names: list[str]) -> None:
+    """GeoParquet has no layers: each layer becomes its own `<layer>.parquet` file
+    (see engine.parquet_layer_path), so layer names must be valid, distinct filenames.
+    In a GeoPackage a duplicate name is just a second table; here it would silently
+    overwrite the first layer's file."""
+    if not is_parquet_path(path):
+        return
+    seen: set[str] = set()
+    for name in names:
+        if not name.strip() or name.strip(".") == "" or _UNSAFE_FILENAME_RE.search(name):
+            raise ValueError(
+                f"layer name '{name}' can't be used as a file name, which a GeoParquet "
+                f"output ('{path}') needs; avoid < > : \" / \\ | ? * and blank names"
+            )
+        # Case-insensitive: Windows and macOS filesystems would map both to one file.
+        if name.lower() in seen:
+            raise ValueError(
+                f"layer name '{name}' is used twice; a GeoParquet output ('{path}') "
+                f"writes one file per layer, so layer names must be unique"
+            )
+        seen.add(name.lower())
+
+
 def _validate_refs(
     sources: list[Source],
     derived_sources: list[DerivedSource],
@@ -487,6 +521,7 @@ class Output(BaseModel):
     @model_validator(mode="after")
     def _check_layers(self):
         _require_layers(self.layers)
+        _check_parquet_layer_names(self.path, [layer.layer for layer in self.layers])
         return self
 
 
@@ -620,7 +655,7 @@ class PipelineDef(BaseModel):
 
 
 class DatasetMetadata(BaseModel):
-    """Dataset-level metadata for the GeoPackage output."""
+    """Dataset-level metadata for the config's output."""
 
     name: Optional[str] = None
     abstract: Optional[str] = None
@@ -633,7 +668,12 @@ class DatasetMetadata(BaseModel):
 
 
 class Config(BaseModel):
-    """Top-level config: one shared output GeoPackage + one or more pipelines."""
+    """Top-level config: one shared output + one or more pipelines.
+
+    `output` ending in .parquet/.geoparquet is written as GeoParquet, anything else as
+    GeoPackage. GeoParquet has no layers, so a single layer in total is written to
+    `output` itself, and several to `<output without suffix>/<layer>.parquet`.
+    """
 
     name: str
     description: str = ""
@@ -646,7 +686,14 @@ class Config(BaseModel):
     def _check(self):
         if not self.pipelines:
             raise ValueError("a config needs at least one pipeline")
+        _check_parquet_layer_names(
+            self.output, [layer.layer for p in self.pipelines for layer in p.layers]
+        )
         return self
+
+    @property
+    def layer_count(self) -> int:
+        return sum(len(p.layers) for p in self.pipelines)
 
 
 def _pipeline_to_config(p: Pipeline) -> Config:

@@ -1,5 +1,5 @@
 site_name: duck soup
-site_description: Config-driven geodata ETL on DuckDB — YAML pipelines and a visual editor that write GeoPackage.
+site_description: Config-driven geodata ETL on DuckDB — YAML pipelines and a visual editor that write GeoPackage or GeoParquet.
 site_url: https://henrik716.github.io/duck-soup/
 repo_url: https://github.com/henrik716/duck-soup
 repo_name: henrik716/duck-soup

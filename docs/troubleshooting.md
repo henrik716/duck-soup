@@ -70,7 +70,8 @@
   earlier steps. To run the same steps over two datasets, write two pipelines.
 - **Runs are synchronous.** The editor's run is one request: no live log, no cancellation.
   Use the CLI for long jobs.
-- **Output is GeoPackage only.**
+- **Output is GeoPackage or GeoParquet only.** GeoParquet has no layers, so a multi-layer
+  config writes a folder with one `.parquet` file per layer.
 - **Small `func` set** (`uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`,
   `length`). Anything else can be done with `expr` and DuckDB SQL.
 - **A few YAML options aren't in the editor yet**: `on_multiple` and per-layer `mapping`.

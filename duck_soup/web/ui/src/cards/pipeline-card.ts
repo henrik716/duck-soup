@@ -160,8 +160,8 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
           <span class="pl-tab-title">mapping</span>
           <span class="pl-tab-summary"></span>
         </button>
-        <button class="pl-tab-btn" type="button" role="tab" data-sec="output" id="pl-tab-output-${plId}" aria-controls="pl-panel-output-${plId}">
-          <i data-lucide="package" class="pl-tab-icon" style="width:13px;height:13px;color:var(--ok)"></i>
+        <button class="pl-tab-btn" type="button" role="tab" data-sec="output" id="pl-tab-output-${plId}" aria-controls="pl-panel-output-${plId}" title="Layers this pipeline writes into the shared output file set at the top of the page">
+          <i data-lucide="layers" class="pl-tab-icon" style="width:13px;height:13px;color:var(--ok)"></i>
           <span class="pl-tab-title">output layers</span>
           <span class="pl-tab-summary"></span>
         </button>
