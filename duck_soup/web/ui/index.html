@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>duck soup · pipeline editor</title>
 <link rel="icon" type="image/png" href="/static/favicon.png" />
+<script>
+  // Set the theme before the stylesheet paints (see src/theme.ts), so light mode doesn't flash dark.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('ds-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -28,7 +37,7 @@
 
 <header class="top">
   <div style="display:flex; align-items:center; gap:12px">
-    <img src="/static/favicon.png" alt="duck soup logo" style="width:40px;height:40px;border-radius:8px;border:1px solid rgba(139,108,255,0.4);box-shadow:0 0 8px rgba(139,108,255,0.25);" />
+    <img src="/static/favicon.png" alt="duck soup logo" style="width:40px;height:40px;border-radius:8px;border:1px solid rgb(var(--accent-rgb) / 0.4);box-shadow:0 0 8px rgb(var(--accent-rgb) / 0.25);" />
     <span class="brand">duck soup<span class="dot">.</span></span>
     <span class="tagline">duckdb geodata pipelines <i data-lucide="arrow-right" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px"></i> geopackage / geoparquet</span>
   </div>
@@ -49,6 +58,10 @@
     <button id="validateBtn" class="ghost mini" title="Ctrl+Shift+V"><i data-lucide="check-square" style="width:13px;height:13px"></i> validate</button>
     <button id="saveBtn" class="ghost mini" title="Ctrl+S"><i data-lucide="save" style="width:13px;height:13px"></i> save</button>
     <button id="runBtn" class="primary mini" title="Ctrl+Enter"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
+    <button type="button" class="ghost mini theme-toggle" id="themeBtn" aria-label="Toggle light/dark mode" title="Switch to light mode">
+      <i data-lucide="sun" class="theme-icon-sun" style="width:14px;height:14px"></i>
+      <i data-lucide="moon" class="theme-icon-moon" style="width:14px;height:14px"></i>
+    </button>
     <button type="button" class="status idle" id="status" aria-label="Validation status — open the problems panel">idle</button>
   </div>
 </header>
@@ -57,7 +70,7 @@
   <main class="builder">
 
     <!-- ETL Lineage Diagram -->
-    <div id="lineage-diagram-container" class="card" style="margin-bottom:24px;padding:14px 18px;border-color:rgba(139,108,255,0.25);">
+    <div id="lineage-diagram-container" class="card" style="margin-bottom:24px;padding:14px 18px;border-color:rgb(var(--accent-rgb) / 0.25);">
       <div class="lineage-header" style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;display:flex;justify-content:space-between;align-items:center;">
         <span>ETL Pipeline Lineage</span>
         <span style="display:flex;align-items:center;gap:10px;">
@@ -89,7 +102,7 @@
     <div id="pipelines" style="display:flex;flex-direction:column;gap:16px;"></div>
 
     <!-- Add pipeline button -->
-    <button class="addbtn" id="addPipeline" style="margin-top:16px;width:100%;border-style:dashed;border-color:rgba(139,108,255,0.4);color:var(--accent);">
+    <button class="addbtn" id="addPipeline" style="margin-top:16px;width:100%;border-style:dashed;border-color:rgb(var(--accent-rgb) / 0.4);color:var(--accent);">
       <i data-lucide="plus" style="width:14px;height:14px"></i> add pipeline
     </button>
 
@@ -104,15 +117,15 @@
         <span>No geometry in this preview</span>
         <small>The rows may be non-spatial, or the step dropped the geometry column.</small>
       </div>
-      <div id="map-toolbar" style="position:absolute;top:8px;left:8px;z-index:1000;background:rgba(10,8,25,0.85);border:1px solid var(--line);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:6px;">
+      <div id="map-toolbar" style="position:absolute;top:8px;left:8px;z-index:1000;background:rgb(var(--header-rgb) / 0.85);border:1px solid var(--line);border-radius:6px;padding:3px 8px;display:flex;align-items:center;gap:6px;">
         <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">view</span>
-        <select id="map-layer-select" aria-label="What to preview" style="background:#0d0a1f;border:none;color:var(--ink);font-family:var(--mono);font-size:11px;cursor:pointer;outline:none;max-width:180px;">
+        <select id="map-layer-select" aria-label="What to preview" style="background:var(--panel-solid);border:none;color:var(--ink);font-family:var(--mono);font-size:11px;cursor:pointer;outline:none;max-width:180px;">
           <option value="">pipeline output</option>
         </select>
         <span style="width:1px;height:16px;background:var(--line);"></span>
         <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">limit</span>
         <input id="previewLimit" type="number" min="1" max="20000" step="100" value="1000" title="Max features to preview" aria-label="Maximum features to preview"
-          style="width:64px;background:#0d0a1f;border:1px solid var(--line);border-radius:4px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 4px;outline:none;">
+          style="width:64px;background:var(--panel-solid);border:1px solid var(--line);border-radius:4px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 4px;outline:none;">
         <button id="bboxToggleBtn" type="button" class="ghost mini" aria-pressed="false" title="Only preview features within the current map view, instead of an arbitrary slice"
           style="display:flex;align-items:center;gap:4px;padding:3px 7px;font-size:11px;height:22px;white-space:nowrap;flex-shrink:0;">
           <i data-lucide="crosshair" style="width:12px;height:12px"></i> in view

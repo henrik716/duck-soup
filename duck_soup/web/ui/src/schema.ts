@@ -27,12 +27,12 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
 
   if (status.ok && status.columns) {
     const colCount = status.columns.length
-    badge.innerHTML = `<a href="#" class="schema-toggle-btn" style="font-size:11px;color:var(--ok);border:1px solid rgba(99,255,173,0.2);background:var(--ok-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px">
+    badge.innerHTML = `<a href="#" class="schema-toggle-btn" style="font-size:11px;color:var(--ok);border:1px solid rgb(var(--ok-rgb) / 0.2);background:var(--ok-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px">
       <i data-lucide="database" style="width:11px;height:11px"></i> ${colCount} cols <i data-lucide="chevron-down" style="width:10px;height:10px"></i></a>`
     schemaList.innerHTML =
       `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;max-height:120px;overflow-y:auto;padding:4px;">` +
       status.columns.map(c =>
-        `<div style="display:flex;justify-content:space-between;border-bottom:1px dashed rgba(255,255,255,0.05);">` +
+        `<div style="display:flex;justify-content:space-between;border-bottom:1px dashed rgb(var(--hi-rgb) / 0.05);">` +
         `<span style="color:var(--ink)">${esc(c.name)}</span><span style="color:var(--muted);font-size:10px">${esc(c.type)}</span></div>`
       ).join('') + `</div>`
 
@@ -46,7 +46,7 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
     createIcons({ icons: { Database, ChevronDown } })
   } else {
     const msg = status.error || 'failed'
-    badge.innerHTML = `<span title="${esc(msg)}" style="font-size:11px;color:var(--warn);border:1px solid rgba(255,107,107,0.2);background:var(--warn-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;cursor:help">
+    badge.innerHTML = `<span title="${esc(msg)}" style="font-size:11px;color:var(--warn);border:1px solid rgb(var(--warn-rgb) / 0.2);background:var(--warn-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;cursor:help">
       <i data-lucide="alert-circle" style="width:11px;height:11px"></i> error</span>`
     schemaList.innerHTML = `<div style="color:var(--warn);padding:4px;">${esc(msg)}</div>`
     schemaList.style.display = 'none'
@@ -162,12 +162,12 @@ export function updateDatalistsScoped(scope: Element): void {
     if (c.origin === 'base') {
       return {
         value: c.name,
-        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgba(255,255,255,0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')} [base]</span>`
+        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgb(var(--hi-rgb) / 0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')} [base]</span>`
       }
     }
     return {
       value: c.name,
-      label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(139,108,255,0.2);padding:1px 4px;border-radius:3px;">${esc(c.origin)}</span>`
+      label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgb(var(--accent-rgb) / 0.2);padding:1px 4px;border-radius:3px;">${esc(c.origin)}</span>`
     }
   })
 
@@ -250,7 +250,7 @@ export function updateDatalistsScoped(scope: Element): void {
 
       const stepColOptions: ComboOptionDef[] = cols.map(c => ({
         value: c.name,
-        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgba(255,255,255,0.05);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')}</span>`
+        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgb(var(--hi-rgb) / 0.05);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')}</span>`
       }))
 
       setComboOptions(sel, stepColOptions, emptyText)
@@ -275,9 +275,9 @@ export function updateDatalistsScoped(scope: Element): void {
 // snapshot, and the flat list of ids gave no way to tell which is which — the three behave
 // quite differently. Same right-floated badge treatment as the column pickers above.
 const SOURCE_KIND_BADGE: Record<string, { text: string; color: string; bg: string; border: string }> = {
-  source: { text: 'source', color: 'var(--muted)', bg: 'rgba(255,255,255,0.03)', border: 'var(--line)' },
-  derived: { text: 'derived', color: 'var(--accent)', bg: 'var(--accent-soft)', border: 'rgba(139,108,255,0.2)' },
-  snapshot: { text: 'snapshot', color: 'var(--spatial)', bg: 'rgba(0,235,215,0.08)', border: 'rgba(0,235,215,0.2)' },
+  source: { text: 'source', color: 'var(--muted)', bg: 'rgb(var(--hi-rgb) / 0.03)', border: 'var(--line)' },
+  derived: { text: 'derived', color: 'var(--accent)', bg: 'var(--accent-soft)', border: 'rgb(var(--accent-rgb) / 0.2)' },
+  snapshot: { text: 'snapshot', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)', border: 'rgb(var(--spatial-rgb) / 0.2)' },
 }
 
 function badgedSourceOptions(scope: Element): ComboOptionDef[] {
@@ -335,8 +335,8 @@ export function refreshBaseOptionsScoped(scope: Element): void {
   scope.querySelectorAll<HTMLElement>('.pl-sources > .card').forEach(c => {
     const id = val(c, 'id')
     const isBase = !!id && id === baseId
-    c.style.borderColor = isBase ? 'rgba(139,108,255,0.6)' : 'var(--line)'
-    c.style.boxShadow = isBase ? '0 0 15px rgba(139,108,255,0.15)' : 'none'
+    c.style.borderColor = isBase ? 'rgb(var(--accent-rgb) / 0.6)' : 'var(--line)'
+    c.style.boxShadow = isBase ? '0 0 15px rgb(var(--accent-rgb) / 0.15)' : 'none'
     const starBtn = c.querySelector<HTMLButtonElement>('[data-set-base]')
     if (starBtn) {
       starBtn.classList.toggle('is-base', isBase)

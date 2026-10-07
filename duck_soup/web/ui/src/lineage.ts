@@ -13,23 +13,23 @@ function getSourceIcon(format: string): { icon: string; color: string } {
   switch (fmt) {
     case 'xlsx':
     case 'csv':
-      return { icon: 'file-spreadsheet', color: '#ffc107' }
+      return { icon: 'file-spreadsheet', color: 'var(--fmt-sheet)' }
     case 'wfs':
     case 'arcgis_rest':
-      return { icon: 'globe', color: '#0dcaf0' }
+      return { icon: 'globe', color: 'var(--fmt-web)' }
     case 'gpkg':
-      return { icon: 'package', color: '#9d85ff' }
+      return { icon: 'package', color: 'var(--accent)' }
     case 'fgdb':
-      return { icon: 'database', color: '#9d85ff' }
+      return { icon: 'database', color: 'var(--accent)' }
     case 'parquet':
-      return { icon: 'server', color: '#a07aff' }
+      return { icon: 'server', color: 'var(--accent)' }
     case 'postgres':
-      return { icon: 'database-zap', color: '#4dabf7' }
+      return { icon: 'database-zap', color: 'var(--fmt-db)' }
     case 'geojson':
     case 'gml':
     case 'shp':
     case 'flatgeobuf':
-      return { icon: 'map', color: '#20c997' }
+      return { icon: 'map', color: 'var(--fmt-vector)' }
     default:
       return { icon: 'database', color: 'var(--muted)' }
   }
@@ -61,13 +61,13 @@ export function updateLineageDiagram(cfg: Config): void {
   svg.innerHTML = `
     <defs>
       <marker id="arrow-accent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#9d85ff"/>
+        <path d="M 0 1.5 L 10 5 L 0 8.5 z" style="fill:var(--accent)"/>
       </marker>
       <marker id="arrow-spatial" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#00ebd7"/>
+        <path d="M 0 1.5 L 10 5 L 0 8.5 z" style="fill:var(--spatial)"/>
       </marker>
       <marker id="arrow-ok" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#63ffad"/>
+        <path d="M 0 1.5 L 10 5 L 0 8.5 z" style="fill:var(--ok)"/>
       </marker>
     </defs>
   `
@@ -249,7 +249,7 @@ export function updateLineageDiagram(cfg: Config): void {
     </div>`
   gpkgNode.style.cssText = `
     display:flex; align-items:center; gap:8px; flex-shrink:0;
-    border-color: rgba(99,255,173,0.4); background: rgba(99,255,173,0.06);
+    border-color: rgb(var(--ok-rgb) / 0.4); background: rgb(var(--ok-rgb) / 0.06);
     padding: 8px 14px; z-index: 2;`
   outer.appendChild(gpkgNode)
 

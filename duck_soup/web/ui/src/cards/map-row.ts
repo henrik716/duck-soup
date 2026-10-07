@@ -98,17 +98,17 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
         uuid: { name: 'ID', color: 'var(--accent)', bg: 'var(--accent-soft)' },
         now: { name: 'TIME', color: 'var(--accent)', bg: 'var(--accent-soft)' },
         today: { name: 'TIME', color: 'var(--accent)', bg: 'var(--accent-soft)' },
-        lon: { name: 'COORD', color: '#00ebd7', bg: 'rgba(0,235,215,0.08)' },
-        lat: { name: 'COORD', color: '#00ebd7', bg: 'rgba(0,235,215,0.08)' },
-        mgrs: { name: 'COORD', color: '#00ebd7', bg: 'rgba(0,235,215,0.08)' },
-        wkb: { name: 'GEOM', color: '#00ebd7', bg: 'rgba(0,235,215,0.08)' },
+        lon: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        lat: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        mgrs: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        wkb: { name: 'GEOM', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
         area: { name: 'MEAS', color: 'var(--ok)', bg: 'var(--ok-soft)' },
         length: { name: 'CALC', color: 'var(--ok)', bg: 'var(--ok-soft)' }
       }
 
       const wrapperDiv = mkEl('div')
       const funcOptions = META.funcs.map(f => {
-        const cat = FUNC_CATEGORIES[f] || { name: 'FUNC', color: 'var(--muted)', bg: 'rgba(255,255,255,0.05)' }
+        const cat = FUNC_CATEGORIES[f] || { name: 'FUNC', color: 'var(--muted)', bg: 'rgb(var(--hi-rgb) / 0.05)' }
         const catTag = `<span style="color:${cat.color}; background:${cat.bg}; font-size:8.5px; font-weight:600; padding:1px 4px; border-radius:3px; margin-right:8px; font-family:var(--display);">${cat.name}</span>`
         return {
           value: f,

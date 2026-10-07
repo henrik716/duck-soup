@@ -2,6 +2,7 @@ import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { PreviewRow } from './types'
 import { esc } from './dom'
+import { getTheme, onThemeChange } from './theme'
 
 // maplibre-gl resolves its worker script relative to its own bundled URL, which doesn't
 // exist once Vite inlines everything into one chunk, and the worker module itself imports
@@ -28,7 +29,9 @@ const STYLES = {
   light: 'https://tiles.openfreemap.org/styles/positron',
 } as const
 type StyleKey = keyof typeof STYLES
-let currentStyleKey: StyleKey = 'dark'
+// Starts out matching the app theme and follows it on every theme toggle; the on-map
+// Dark/Light switcher can still override it in between.
+let currentStyleKey: StyleKey = getTheme()
 
 // MapLibre paint properties are style-spec values (color strings/expressions), not CSS —
 // they can't reference `var(--token)`. So resolve the tokens to literal colors instead. Done
@@ -84,12 +87,9 @@ class BaseLayerControl implements maplibregl.IControl {
       const btn = document.createElement('button')
       btn.type = 'button'
       btn.textContent = key === 'dark' ? 'Dark' : 'Light'
+      btn.dataset['style'] = key
       btn.className = key === currentStyleKey ? 'active' : ''
-      btn.addEventListener('click', () => {
-        switchBaseStyle(key)
-        this.container?.querySelectorAll('button').forEach(b => b.classList.remove('active'))
-        btn.classList.add('active')
-      })
+      btn.addEventListener('click', () => switchBaseStyle(key))
       this.container!.appendChild(btn)
     })
     return this.container
@@ -104,8 +104,31 @@ class BaseLayerControl implements maplibregl.IControl {
 function switchBaseStyle(key: StyleKey): void {
   if (!map || key === currentStyleKey) return
   currentStyleKey = key
+  document.querySelectorAll<HTMLButtonElement>('.map-base-switcher button')
+    .forEach(b => b.classList.toggle('active', b.dataset['style'] === key))
   map.setStyle(STYLES[key])
   map.once('style.load', () => setupPreviewLayers())
+}
+
+// The preview layers' colours are read from the theme's CSS tokens, so re-read them after a
+// theme change. A basemap switch rebuilds the layers from colors() anyway; when the basemap
+// stays put, repaint the existing layers in place.
+function applyTheme(theme: StyleKey): void {
+  _colors = null
+  if (!map) return
+  if (theme !== currentStyleKey) { switchBaseStyle(theme); return }
+  const c = colors()
+  const paint: [string, keyof maplibregl.AllPaintProperties, string][] = [
+    ['preview-fill', 'fill-color', c.feature],
+    ['preview-line', 'line-color', c.feature],
+    ['preview-point', 'circle-color', c.feature],
+    ['preview-point', 'circle-stroke-color', c.ink],
+    ['hover-fill', 'fill-color', c.accent],
+    ['hover-line', 'line-color', c.accent],
+  ]
+  for (const [layer, prop, value] of paint) {
+    if (map.getLayer(layer)) map.setPaintProperty(layer, prop, value)
+  }
 }
 
 export function initMap(): void {
@@ -120,6 +143,7 @@ export function initMap(): void {
     map.addControl(new BaseLayerControl(), 'top-right')
 
     map.once('load', () => setupPreviewLayers())
+    onThemeChange(applyTheme)
 
     new ResizeObserver(() => map?.resize()).observe(document.getElementById('map-container')!)
   } catch (e) {

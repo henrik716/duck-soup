@@ -58,7 +58,7 @@ to go back.
 - **in view**: preview only features inside the current map extent, rather than the first N.
   While it's on, panning or zooming re-runs the preview. Use it to inspect one area of a big
   dataset.
-- **Light / Dark**: switch the basemap.
+- **Light / Dark**: switch the basemap. It follows the editor's theme by default; this overrides it until the next theme toggle.
 
 Click a feature to see all its attributes in a popup:
 

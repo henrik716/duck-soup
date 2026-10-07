@@ -7,7 +7,7 @@ import {
   ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
   Crosshair, Scissors, Eraser, Layers, GitMerge, Radar, UploadCloud,
   Filter as FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText
+  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon
 } from 'lucide'
 
 const appIcons = {
@@ -17,7 +17,7 @@ const appIcons = {
   ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
   Crosshair, Scissors, Eraser, Layers, GitMerge, Radar, UploadCloud,
   Filter: FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText
+  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon
 }
 import {
   fetchMeta, fetchPipelineNames, fetchPipeline, savePipeline,
@@ -36,6 +36,7 @@ import { updateTable, showTableError } from './table'
 import { setPreviewBusy, resetPreviewBusy, setRunBusy } from './busy'
 import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from './history'
 import { openPasteYamlModal } from './paste-yaml'
+import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
 import type { Config, PreviewRow } from './types'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
@@ -732,7 +733,18 @@ function wireGlobalShortcuts(): void {
 }
 
 // ---- init ----
+function wireThemeToggle(): void {
+  const btn = document.getElementById('themeBtn')
+  if (!btn) return
+  const label = () => { btn.title = getTheme() === 'light' ? 'Switch to dark mode' : 'Switch to light mode' }
+  label()
+  onThemeChange(label)
+  btn.addEventListener('click', toggleTheme)
+}
+
 async function init(): Promise<void> {
+  initTheme()
+  wireThemeToggle()
   setStatus('busy', 'loading…')
 
   const meta = await fetchMeta()
@@ -798,7 +810,7 @@ function wirePreviewControls(): void {
   const setBboxBtnVisual = () => {
     if (!bboxBtn) return
     bboxBtn.style.background = bboxMode ? 'var(--accent)' : ''
-    bboxBtn.style.color = bboxMode ? '#0c0822' : ''
+    bboxBtn.style.color = bboxMode ? 'var(--on-accent)' : ''
     bboxBtn.style.fontWeight = bboxMode ? '600' : ''
     bboxBtn.setAttribute('aria-pressed', String(bboxMode))
   }
