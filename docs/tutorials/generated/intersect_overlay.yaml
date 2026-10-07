@@ -1,0 +1,5 @@
+base: parks
+steps:
+- type: intersect_overlay
+  source: districts
+  fields: {district: district_name}

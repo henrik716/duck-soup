@@ -1,0 +1,7 @@
+base: places
+steps:
+- type: nearest_neighbor
+  source: stops
+  max_distance: 300
+  distance_field: stop_distance_m
+  fields: {nearest_stop: stop_name}

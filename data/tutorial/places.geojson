@@ -1,0 +1,192 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Mallard Museum",
+    "category": "MUS",
+    "opened": "1887",
+    "bread_crumbs": 52000,
+    "inspected": "2024-03-14"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0028786,
+     51.4570268
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Puddle Lane Café",
+    "category": "CAF",
+    "opened": "2015",
+    "bread_crumbs": 18000,
+    "inspected": "14.03.2024"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0046058,
+     51.4574764
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Quackington Library",
+    "category": "LIB",
+    "opened": "1962",
+    "bread_crumbs": 75000,
+    "inspected": "2023-11-02"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.006045,
+     51.456667
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Soggy Crust Café",
+    "category": "CAF",
+    "opened": "1999",
+    "bread_crumbs": 9000,
+    "inspected": null
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0092116,
+     51.4573862
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Duckling Swim School",
+    "category": "SCH",
+    "opened": "1975",
+    "bread_crumbs": null,
+    "inspected": "March 2024"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0118023,
+     51.4569364
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Breadcrumb Hill",
+    "category": "PRK",
+    "opened": "unknown",
+    "bread_crumbs": 30000,
+    "inspected": null
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0021588,
+     51.4528007
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Featherhill Library",
+    "category": "LIB",
+    "opened": "2008",
+    "bread_crumbs": 21000,
+    "inspected": "2024-01-20"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0047492,
+     51.4522611
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Museum of Rubber Ducks",
+    "category": "MUS",
+    "opened": "2021",
+    "bread_crumbs": 14000,
+    "inspected": "2022-09-30"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.010362,
+     51.4525305
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Reedmoor Pond Café",
+    "category": "CAF",
+    "opened": "2010",
+    "bread_crumbs": 6000,
+    "inspected": null
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0126648,
+     51.4529799
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Old Duck House",
+    "category": "",
+    "opened": "1901",
+    "bread_crumbs": null,
+    "inspected": null
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0064764,
+     51.45343
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Old Lighthouse",
+    "category": "LND",
+    "opened": "1820",
+    "bread_crumbs": 4000,
+    "inspected": null
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0179908,
+     51.4558566
+    ]
+   }
+  }
+ ]
+}

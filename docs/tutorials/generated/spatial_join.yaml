@@ -1,0 +1,6 @@
+base: places
+steps:
+- type: spatial_join
+  source: districts
+  predicate: intersects
+  fields: {district: district_name}

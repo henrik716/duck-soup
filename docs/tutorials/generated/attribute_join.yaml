@@ -1,0 +1,7 @@
+base: places
+steps:
+- type: attribute_join
+  source: categories
+  left: category
+  right: code
+  fields: {category_label: label}

@@ -1,0 +1,13 @@
+mapping:
+- {to: name, from: name}
+- {to: dataset, const: "Pondsworth open data"}
+- {to: name_upper, expr: "upper(name)"}
+- to: size
+  expr: |-
+    CASE
+      WHEN bread_crumbs >= 50000 THEN 'large'
+      WHEN bread_crumbs >= 15000 THEN 'medium'
+      WHEN bread_crumbs IS NULL THEN 'unknown'
+      ELSE 'small'
+    END
+- {to: label, expr: "name || ' (' || coalesce(district, 'outside town') || ')'"}

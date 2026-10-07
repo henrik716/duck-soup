@@ -1,0 +1,103 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Crumb Market",
+    "stop_type": "T"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0037421,
+     51.4562176
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Waddle Bridge",
+    "stop_type": "B"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0074841,
+     51.4551384
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Webfoot Lane",
+    "stop_type": "B"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.010075,
+     51.4565769
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Nest Gate",
+    "stop_type": "T"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.006477,
+     51.4580158
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Feather Road",
+    "stop_type": "B"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.003598,
+     51.4538797
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Reed Loop",
+    "stop_type": "B"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0093547,
+     51.4534298
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "stop_name": "Paddle Boat Pier",
+    "stop_type": "P"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0141043,
+     51.4541487
+    ]
+   }
+  }
+ ]
+}

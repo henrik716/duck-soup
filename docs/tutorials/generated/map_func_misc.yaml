@@ -1,0 +1,5 @@
+mapping:
+- {to: name, from: name}
+- {to: id, func: uuid}
+- {to: loaded_at, func: now}
+- {to: loaded_on, func: today}

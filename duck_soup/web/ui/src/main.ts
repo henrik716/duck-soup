@@ -115,11 +115,17 @@ function findBaseSourceCard(plCard: HTMLElement): HTMLElement | null {
 
 function highlightPreviewingStep(): void {
   clearStepHighlights()
-  if (activePreview.type !== 'step' || activePreview.stepIdx === undefined) return
-
   const plCards = Array.from(document.querySelectorAll<HTMLElement>('.pipeline-card'))
   const plCard = plCards[activePreview.pipelineIdx ?? 0]
   if (!plCard) return
+
+  if (activePreview.type === 'source') {
+    Array.from(plCard.querySelectorAll<HTMLElement>('.pl-sources > .card'))
+      .find(c => c.querySelector<HTMLInputElement>('[data-k="id"]')?.value.trim() === activePreview.id)
+      ?.classList.add('is-previewing')
+    return
+  }
+  if (activePreview.type !== 'step' || activePreview.stepIdx === undefined) return
 
   const target = activePreview.stepIdx === 0
     ? findBaseSourceCard(plCard)
@@ -936,6 +942,14 @@ function wirePreviewStepEvent(): void {
     const sel = qs<HTMLSelectElement>('#map-layer-select')
     if (sel) sel.value = ''
     setActivePreview({ type: 'step', stepIdx: ce.detail.stepIdx, pipelineIdx: ce.detail.pipelineIdx })
+  })
+  // A source card's eye button: same preview as picking the source in the map's
+  // "what to preview" dropdown, which is kept in sync.
+  document.addEventListener('preview-source', (e: Event) => {
+    const ce = e as CustomEvent<{ id: string; pipelineIdx: number }>
+    const sel = qs<HTMLSelectElement>('#map-layer-select')
+    if (sel) sel.value = ce.detail.id
+    setActivePreview({ type: 'source', id: ce.detail.id, pipelineIdx: ce.detail.pipelineIdx })
   })
 }
 

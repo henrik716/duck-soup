@@ -1,0 +1,33 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Harbour Fish Market",
+    "category": "MKT"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0136733,
+     51.4565765
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Pop-up Duck Gallery",
+    "category": "MUS"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     3.0080593,
+     51.4522609
+    ]
+   }
+  }
+ ]
+}

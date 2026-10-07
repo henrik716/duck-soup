@@ -2,7 +2,8 @@
 
 The **steps** tab holds the ordered list of operations applied to the base features. The full
 list, with every option, is in the [Step types reference](../reference/steps.md). This page
-covers how to work with steps in the editor.
+covers how to work with steps in the editor. For what each step does, with diagrams, see
+[Steps by example](../tutorials/steps.md).
 
 ## Adding a step
 

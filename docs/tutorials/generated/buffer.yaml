@@ -1,0 +1,3 @@
+base: stops
+steps:
+- {type: buffer, distance: 150}

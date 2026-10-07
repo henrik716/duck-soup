@@ -1,0 +1,5 @@
+base: districts
+steps:
+- type: dissolve
+  by:
+  - ward

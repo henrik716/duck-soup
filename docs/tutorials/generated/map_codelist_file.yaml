@@ -1,0 +1,10 @@
+mapping:
+- {to: name, from: name}
+- {to: category_code, from: category}
+- to: category_name
+  codelist:
+    source: category
+    file: data/tutorial/categories.csv
+    file_match_col: code
+    file_value_col: label
+    default: "Unknown category"

@@ -1,0 +1,6 @@
+base: parks
+steps:
+- type: spatial_join
+  source: districts
+  match: all
+  fields: {district: district_name}

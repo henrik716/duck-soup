@@ -1,0 +1,6 @@
+mapping:
+- {to: name, from: name}
+- {to: opened_text, from: opened}
+- {to: opened_year, from: opened, cast: INTEGER}
+- {to: inspected_text, from: inspected}
+- {to: inspected_date, from: inspected, cast: DATE}

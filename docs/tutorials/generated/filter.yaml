@@ -1,0 +1,6 @@
+base: places
+steps:
+- type: spatial_join
+  source: districts
+  fields: {district: district_name}
+- {type: filter, where: "district IS NOT NULL AND bread_crumbs >= 20000"}

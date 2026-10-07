@@ -4,6 +4,10 @@ Steps run in order, each one transforming the rows produced by the step before i
 base source, for the first step). Every step type accepts an optional
 [`branch`](#branch) key.
 
+!!! tip "See them in action"
+    [Steps by example](../tutorials/steps.md) runs every step type on a small sample town, with
+    before/after diagrams and the actual output.
+
 | `type` | Row count | Changes geometry | Adds columns |
 |---|---|---|---|
 | [`spatial_join`](#spatial_join) | same (`match: all`: may grow) | – | ✓ |

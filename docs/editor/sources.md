@@ -111,5 +111,7 @@ steps to the main chain.
 
 ## Previewing a source on its own
 
-The **view** dropdown in the map toolbar lists every source. Pick one to see its raw features
-(no steps, no mapping) on the map and in the table. Pick *pipeline output* to go back.
+Click the eye button on a source card to see that source's raw features (no steps, no
+mapping) on the map and in the table. The card is highlighted while you preview it. The
+**view** dropdown in the map toolbar does the same, and lists every source. Pick *pipeline
+output* there, or click **Show pipeline output** above the table, to go back.

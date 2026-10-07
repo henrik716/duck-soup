@@ -1,0 +1,38 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "River Waddle"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       2.9992804,
+       51.455777
+      ],
+      [
+       3.0151116,
+       51.4536
+      ],
+      [
+       3.0151117,
+       51.4541395
+      ],
+      [
+       2.9992804,
+       51.4563165
+      ],
+      [
+       2.9992804,
+       51.455777
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

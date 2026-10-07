@@ -68,3 +68,59 @@
 [data-md-color-scheme="default"] .md-typeset img.screenshot[src$="#only-dark"] {
   display: none;
 }
+
+/* Tutorial before/after diagrams (inline SVG from scripts/build_tutorial.py). Colours come
+   from the page, so they follow the light/dark toggle without separate image files. */
+:root {
+  --ds-base: #7c4dff;
+  --ds-ref: #00a896;
+  --ds-water: #2f8fdd;
+  --ds-park: #43a047;
+  --ds-miss: #e53935;
+}
+[data-md-color-scheme="slate"] {
+  --ds-base: #a58bff;
+  --ds-ref: #2ee6cf;
+  --ds-water: #5cb0f0;
+  --ds-park: #66bb6a;
+  --ds-miss: #ff6b6b;
+}
+svg.ds-diagram {
+  display: block;
+  width: 100%;
+  max-width: 780px;
+  height: auto;
+  margin: 1.2rem auto;
+  font-family: var(--md-text-font-family);
+}
+svg.ds-diagram .hd { fill: var(--md-default-fg-color--light); font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+svg.ds-diagram .lbl { fill: var(--md-default-fg-color--light); font-size: 10px; }
+svg.ds-diagram .frame { fill: var(--md-code-bg-color); stroke: var(--md-default-fg-color--lightest); }
+svg.ds-diagram path, svg.ds-diagram polyline { stroke-width: 1.4; stroke-linejoin: round; }
+svg.ds-diagram .bg { fill: none; stroke: var(--md-default-fg-color--lightest); }
+svg.ds-diagram path.base { fill: color-mix(in srgb, var(--ds-base) 30%, transparent); stroke: var(--ds-base); }
+svg.ds-diagram path.out { fill: color-mix(in srgb, var(--ds-base) 60%, transparent); stroke: var(--ds-base); }
+svg.ds-diagram path.ref { fill: color-mix(in srgb, var(--ds-ref) 18%, transparent); stroke: var(--ds-ref); }
+svg.ds-diagram path.refline { fill: none; stroke: var(--ds-ref); stroke-dasharray: 5 3; stroke-width: 2; }
+svg.ds-diagram path.ghost { fill: none; stroke: var(--md-default-fg-color--lighter); stroke-dasharray: 4 3; }
+svg.ds-diagram path.water { fill: color-mix(in srgb, var(--ds-water) 35%, transparent); stroke: var(--ds-water); }
+svg.ds-diagram path.waterline { fill: none; stroke: var(--ds-water); stroke-dasharray: 5 3; }
+svg.ds-diagram path.park { fill: color-mix(in srgb, var(--ds-park) 35%, transparent); stroke: var(--ds-park); }
+svg.ds-diagram polyline.link { fill: none; stroke: var(--ds-ref); stroke-dasharray: 3 2; }
+svg.ds-diagram circle { stroke: var(--md-default-bg-color); stroke-width: 1; }
+svg.ds-diagram circle.base, svg.ds-diagram circle.out { fill: var(--ds-base); }
+svg.ds-diagram circle.ref, svg.ds-diagram circle.stop { fill: var(--ds-ref); }
+svg.ds-diagram circle.ghostpt { fill: var(--md-default-fg-color--lighter); }
+svg.ds-diagram circle.miss { fill: var(--md-default-bg-color); stroke: var(--ds-miss); stroke-width: 2; }
+
+/* Colour key under a diagram */
+.ds-key { font-size: .7rem; color: var(--md-default-fg-color--light); text-align: center; margin-top: -.6rem; }
+.ds-key span { display: inline-flex; align-items: center; gap: .3em; margin: 0 .6em; }
+.ds-key i { width: .8em; height: .8em; border-radius: 50%; display: inline-block; }
+.ds-key .k-base { background: var(--ds-base); }
+.ds-key .k-out { background: var(--ds-base); }
+.ds-key .k-ref { background: var(--ds-ref); }
+.ds-key .k-water { background: var(--ds-water); }
+.ds-key .k-park { background: var(--ds-park); }
+.ds-key .k-ghost { background: var(--md-default-fg-color--lighter); }
+.ds-key .k-miss { background: transparent; box-shadow: inset 0 0 0 2px var(--ds-miss); }

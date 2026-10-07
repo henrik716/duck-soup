@@ -58,7 +58,9 @@ markdown_extensions:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.keys
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.superfences:
@@ -79,6 +81,10 @@ nav:
       - Steps: editor/steps.md
       - Mapping: editor/mapping.md
       - Preview, validate & run: editor/preview-and-run.md
+  - Tutorials:
+      - The sample town: tutorials/index.md
+      - Steps by example: tutorials/steps.md
+      - Mapping by example: tutorials/mapping.md
   - Reference:
       - Pipeline YAML: reference/yaml.md
       - Source formats: reference/sources.md
@@ -87,6 +93,10 @@ nav:
       - Command line: reference/cli.md
   - Troubleshooting: troubleshooting.md
   - Development: development.md
+
+# Generated tables/snippets for the tutorials: included into pages, not pages themselves.
+exclude_docs: |
+  tutorials/generated/
 
 validation:
   links:

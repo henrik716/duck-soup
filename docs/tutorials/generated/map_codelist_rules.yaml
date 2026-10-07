@@ -1,0 +1,13 @@
+mapping:
+- {to: name, from: name}
+- {to: category_code, from: category}
+- to: category_name
+  codelist:
+    source: category
+    cases:
+    - {match: MUS, value: Museum}
+    - {match: LIB, value: Library}
+    - {like: "CA%", value: "Café"}
+    - {regex: "^(SCH|UNI)$", value: Education}
+    - {is_blank: true, value: "Not categorised"}
+    default: Other

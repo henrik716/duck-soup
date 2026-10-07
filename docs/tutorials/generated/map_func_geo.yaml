@@ -1,0 +1,6 @@
+mapping:
+- {to: name, from: name}
+- {to: longitude, func: lon}
+- {to: latitude, func: lat}
+- {to: grid_ref, func: mgrs}
+- {to: geom_wkb, func: wkb}

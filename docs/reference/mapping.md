@@ -3,6 +3,10 @@
 `mapping` is an ordered list of output columns. Each item has a `to` (the output column name)
 and **exactly one** value source.
 
+!!! tip "See them in action"
+    [Mapping by example](../tutorials/mapping.md) walks through every value source, `func` and
+    `cast` with real output from a sample dataset.
+
 ```yaml
 mapping:
   - {to: name,        from: road_name}

@@ -1,0 +1,9 @@
+base: parks
+steps:
+- type: spatial_join
+  source: districts
+  fields: {district_first: district_name}
+- type: spatial_join
+  source: districts
+  on_multiple: largest_overlap
+  fields: {district_largest: district_name}

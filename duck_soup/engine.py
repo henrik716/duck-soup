@@ -658,7 +658,10 @@ class Engine:
         if func == "area":
             return "ST_Area(geom)"
         if func == "length":
-            return "ST_Length(geom)"
+            # ST_Length only measures lines (0 for polygons) and ST_Perimeter only polygons
+            # (0 for lines), so their sum is the length of a line, the perimeter of a polygon,
+            # and the total of both for a mixed collection.
+            return "(ST_Length(geom) + ST_Perimeter(geom))"
         raise ValueError(f"unknown func: {func}")
 
     def _final_select(self, prev: str, layer: OutputLayer) -> str:
@@ -693,6 +696,13 @@ class Engine:
             f"{cols},\n            " if cols
             else "* EXCLUDE (geom, __geom4326, __centroid4326, __src_row),\n            "
         )
+        # With no mapping, every upstream column is written — but not GDAL's OGC_FID: ST_Read
+        # adds it for GeoJSON (and other FID-less) sources, and the GeoPackage writer rejects a
+        # field by that name, since it's GDAL's default name for the feature ID itself.
+        # COLUMNS(lambda) rather than EXCLUDE, which errors when the column isn't there (most
+        # sources have none); it can't come up empty here because `geom` always survives.
+        if not cols:
+            source = f"(SELECT COLUMNS(lambda c: lower(c) <> 'ogc_fid') FROM {source})"
         return f"""
         WITH base4326 AS (
             SELECT *,

@@ -1,0 +1,5 @@
+mapping:
+- {to: name, from: name}
+- {to: area_m2, func: area}
+- {to: perimeter_m, func: length}
+- {to: area_ha, expr: "round(ST_Area(geom) / 10000, 2)"}

@@ -1,0 +1,145 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "district_name": "Old Puddleton",
+    "ward": "Upstream",
+    "population": 12000
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0,
+       51.4547789
+      ],
+      [
+       3.0071962,
+       51.4547787
+      ],
+      [
+       3.0071967,
+       51.4583754
+      ],
+      [
+       3.0,
+       51.4583756
+      ],
+      [
+       3.0,
+       51.4547789
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district_name": "Mallard Quay",
+    "ward": "Upstream",
+    "population": 8500
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0071962,
+       51.4547787
+      ],
+      [
+       3.0143923,
+       51.454778
+      ],
+      [
+       3.0143935,
+       51.4583748
+      ],
+      [
+       3.0071967,
+       51.4583754
+      ],
+      [
+       3.0071962,
+       51.4547787
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district_name": "Featherhill",
+    "ward": "Downstream",
+    "population": 6200
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0,
+       51.4511822
+      ],
+      [
+       3.0071956,
+       51.451182
+      ],
+      [
+       3.0071962,
+       51.4547787
+      ],
+      [
+       3.0,
+       51.4547789
+      ],
+      [
+       3.0,
+       51.4511822
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "district_name": "Reedmoor",
+    "ward": "Downstream",
+    "population": 4300
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0071956,
+       51.451182
+      ],
+      [
+       3.0143912,
+       51.4511813
+      ],
+      [
+       3.0143923,
+       51.454778
+      ],
+      [
+       3.0071962,
+       51.4547787
+      ],
+      [
+       3.0071956,
+       51.451182
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

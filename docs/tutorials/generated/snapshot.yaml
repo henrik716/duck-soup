@@ -1,0 +1,11 @@
+base: places
+steps:
+- {type: snapshot, id: crumb_hotspots}
+- {type: filter, branch: crumb_hotspots, where: "bread_crumbs >= 50000"}
+- {type: buffer, branch: crumb_hotspots, distance: 250}
+- type: spatial_join
+  source: crumb_hotspots
+  predicate: within
+  match: all
+  fields: {near_hotspot: name}
+- {type: filter, where: "near_hotspot IS NULL OR near_hotspot <> name"}

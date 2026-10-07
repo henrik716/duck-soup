@@ -1,0 +1,5 @@
+derived_sources:
+- {id: old_puddleton, from: districts, where: "district_name = 'Old Puddleton'"}
+base: parks
+steps:
+- {type: clip, source: old_puddleton}

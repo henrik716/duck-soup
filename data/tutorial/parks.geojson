@@ -1,0 +1,141 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Central Puddle Park",
+    "kind": "park"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0060447,
+       51.4541493
+      ],
+      [
+       3.009211,
+       51.4541491
+      ],
+      [
+       3.0092113,
+       51.4558576
+      ],
+      [
+       3.0060449,
+       51.4558578
+      ],
+      [
+       3.0060447,
+       51.4541493
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Willow Wallow",
+    "kind": "park"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0014391,
+       51.4520814
+      ],
+      [
+       3.0037418,
+       51.4520813
+      ],
+      [
+       3.0037419,
+       51.4533402
+      ],
+      [
+       3.0014392,
+       51.4533402
+      ],
+      [
+       3.0014391,
+       51.4520814
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Kingfisher Meadow",
+    "kind": "meadow"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0100749,
+       51.4561273
+      ],
+      [
+       3.0129535,
+       51.456127
+      ],
+      [
+       3.0129539,
+       51.4576556
+      ],
+      [
+       3.0100753,
+       51.4576559
+      ],
+      [
+       3.0100749,
+       51.4561273
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Bulrush Fields",
+    "kind": "meadow"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       3.0109374,
+       51.4517212
+      ],
+      [
+       3.0138157,
+       51.4517209
+      ],
+      [
+       3.0138162,
+       51.4533394
+      ],
+      [
+       3.0109378,
+       51.4533397
+      ],
+      [
+       3.0109374,
+       51.4517212
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

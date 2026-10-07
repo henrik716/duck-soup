@@ -2,7 +2,8 @@
 
 The **mapping** tab defines the output schema: which columns are written, in what order, and
 how each is filled. The YAML side is covered in the
-[Mapping & codelists reference](../reference/mapping.md).
+[Mapping & codelists reference](../reference/mapping.md), and every value source is
+explained with examples in [Mapping by example](../tutorials/mapping.md).
 
 !!! note "No mapping = everything"
     With no mapping rows at all, every upstream column (base columns plus every pulled field) is

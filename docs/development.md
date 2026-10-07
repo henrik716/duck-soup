@@ -68,6 +68,15 @@ Pages live in `docs/`, and navigation is in `mkdocs.yml`. When you add or change
 `config.py`, update the matching reference page. The site deploys to GitHub Pages
 automatically on every push to `main` that touches `docs/` or `mkdocs.yml`.
 
+The tutorial pages include tables, YAML and diagrams from `docs/tutorials/generated/`, which
+`scripts/build_tutorial.py` produces by running every example through the engine. It also
+writes the sample data and `data/tutorial/pondsworth.yaml`. Re-run it after changing the
+engine or the examples, and commit the output:
+
+```bash
+python scripts/build_tutorial.py
+```
+
 ## CI
 
 `.github/workflows/ci.yml` runs `pytest` and the frontend build on every push and PR, and on
