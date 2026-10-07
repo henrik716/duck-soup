@@ -35,6 +35,8 @@ There are three ways to add one:
 
 ## The source card
 
+![The sources tab with an expanded source card](../assets/screenshots/sources-tab.png){ .screenshot loading=lazy }
+
 | Field | Notes |
 |---|---|
 | **id** | Your handle for the source, used by `base`, steps and derived sources. |

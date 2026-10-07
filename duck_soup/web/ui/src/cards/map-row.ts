@@ -242,13 +242,17 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
         editBtn.addEventListener('click', e => {
           e.preventDefault()
           e.stopPropagation()
-          const availableDetails = card ? collectAvailableColumnDetailsScoped(card) : []
+          // Looked up here, not reused from `card` above: rows built while hydrating a loaded
+          // config aren't in the DOM yet when that runs, so `card` is null for them — which
+          // left the drawer with no columns and no live check.
+          const plCard = row.closest('.pipeline-card')
+          const availableDetails = plCard ? collectAvailableColumnDetailsScoped(plCard) : []
           // Builds a throwaway single-column preview config from the pipeline's real
           // sources/steps as currently drafted in the form, so the drawer can validate the
           // expression against real sample data via /api/preview without a dedicated
           // backend endpoint.
-          const buildPreviewConfig = card ? (draftExpr: string): Config | null => {
-            const pdef = collectPipelineDef(card as HTMLElement)
+          const buildPreviewConfig = plCard ? (draftExpr: string): Config | null => {
+            const pdef = collectPipelineDef(plCard as HTMLElement)
             if (!pdef.base) return null
             return {
               name: 'expr_preview',

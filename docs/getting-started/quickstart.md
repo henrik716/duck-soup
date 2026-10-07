@@ -98,6 +98,8 @@ The map and the **Data Table** tab update as you go. Then:
 - <kbd>Ctrl</kbd>+<kbd>S</kbd> (**save**) stores the config as `pipelines/<name>.yaml`.
 - <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (**run**) runs it and switches to **Run Logs**.
 
+![Run Logs after a successful run](../assets/screenshots/run-logs.png){ .screenshot .narrow loading=lazy }
+
 The **YAML Config** tab shows the exact YAML the editor generated. It's the same format you'd
 write by hand, so you can commit it and run it from the CLI later.
 

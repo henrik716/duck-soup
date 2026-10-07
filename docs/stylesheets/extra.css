@@ -47,3 +47,17 @@
   font-size: 1.15rem;
   opacity: 0.85;
 }
+
+/* Editor screenshots */
+.md-typeset img.screenshot {
+  display: block;
+  margin: 1rem auto;
+  border: 1px solid rgba(157, 133, 255, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.md-typeset img.screenshot.narrow {
+  max-width: 560px;
+  width: 100%;
+}

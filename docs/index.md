@@ -86,8 +86,11 @@ pipelines:
 duck-soup run places_by_county.yaml
 ```
 
-The same pipeline in the editor is five cards (two sources, one step, a mapping grid and an
-output layer), with a live map of the result next to them.
+In the editor, the same pipeline is a handful of cards (sources, steps, a mapping grid,
+output layers) next to a live map and table of the result. Here it is with a larger example
+loaded:
+
+![The duck soup editor](assets/screenshots/editor-overview.png){ .screenshot loading=lazy }
 
 ## How the guide is organised
 

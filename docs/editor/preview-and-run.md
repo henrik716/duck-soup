@@ -10,6 +10,8 @@ GeoPackage. Each layer card has:
 - **filter**: an optional SQL condition. Rows where it's false are left out of *this* layer
   only. A live check under the field tells you whether it parses.
 
+![The output layers tab](../assets/screenshots/output-layers.png){ .screenshot loading=lazy }
+
 All layers of a pipeline get the same rows, so filters are how you split them. For example, a
 `stations` layer with no filter and a `stations_outside_county` layer with
 `county IS NULL`.
@@ -47,6 +49,8 @@ to go back.
 
 ### Map toolbar
 
+![Map and Data Table showing the pipeline output](../assets/screenshots/map-preview.png){ .screenshot .narrow loading=lazy }
+
 - **view**: pipeline output, or any single source.
 - **limit**: how many features to fetch (1–20 000, default 1 000). The table shows
   *limit reached* when there may be more.
@@ -55,7 +59,9 @@ to go back.
   dataset.
 - **Light / Dark**: switch the basemap.
 
-Click a feature to see all its attributes in a popup.
+Click a feature to see all its attributes in a popup:
+
+![Feature popup on the map](../assets/screenshots/map-popup.png){ .screenshot .narrow loading=lazy }
 
 ### Data Table
 
@@ -67,6 +73,9 @@ type in the filter box to search all columns. **export csv** downloads what's sh
 When the config is invalid, the **Problems** tab opens and its badge shows the number of
 errors. Each problem shows the location (`pipelines.0.steps.2.source`) and the message. Click
 one to jump to the card it refers to: the editor expands it, scrolls to it and flashes it.
+
+
+![The Problems tab with one validation error](../assets/screenshots/problems-tab.png){ .screenshot .narrow loading=lazy }
 
 Errors come from the same validation as `duck-soup check`, so a config that's valid in the
 editor is valid on the command line.
@@ -90,6 +99,8 @@ GeoPackage. While it runs, the button shows elapsed seconds. When it finishes, t
 - `→ wrote output/xyz.gpkg [12.3s]` on success,
 - the error and the last lines of the traceback on failure.
 
+![Run Logs after a successful run](../assets/screenshots/run-logs.png){ .screenshot .narrow loading=lazy }
+
 New runs are appended under a divider so you can compare them. **clear** empties the log.
 
 !!! warning "Runs are synchronous"
@@ -100,6 +111,8 @@ New runs are appended under a divider so you can compare them. **clear** empties
 
 This tab shows the YAML the editor would save, with line numbers. Use it to learn the format,
 or to copy the config somewhere else.
+
+![The YAML Config tab](../assets/screenshots/yaml-tab.png){ .screenshot .narrow loading=lazy }
 
 - **copy** puts the YAML on the clipboard.
 - **export .py** downloads a standalone Python script with the pipeline embedded. Run it with

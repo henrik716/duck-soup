@@ -7,20 +7,7 @@ editor.
 
 Start it with `duck-soup serve` (or the Docker image) and open <http://localhost:8000>.
 
-```text
-┌──────────────────────────────── top bar ───────────────────────────────────┐
-│ load ▾  new  import │ save as [____]  validate  save  ▶ run   ● status     │
-├──────────────────────────────────────────────┬─────────────────────────────┤
-│ ETL Pipeline Lineage (diagram)               │                             │
-│ config: name · output geopackage             │           map               │
-│ Dataset Metadata (collapsible)               │                             │
-│ ┌ pipeline ───────────────────────────────┐  ├─────────────────────────────┤
-│ │ sources │ derived │ steps │ mapping │ out│  │ Data Table │ YAML │ Logs │ ! │
-│ │  …cards for the selected section…       │  │                             │
-│ └─────────────────────────────────────────┘  │                             │
-│ + add pipeline                               │                             │
-└──────────────────────────────────────────────┴─────────────────────────────┘
-```
+![The editor: builder on the left, map and preview tabs on the right](../assets/screenshots/editor-overview.png){ .screenshot loading=lazy }
 
 The left side is where you **build**. The right side is where you **see** the result.
 
@@ -43,6 +30,8 @@ The **ETL Pipeline Lineage** panel at the top draws the config as a flow chart: 
 into the base, steps run left to right, and layers converge on the shared GeoPackage. It
 redraws as you edit. Click any node to jump to its card, and drag to pan when the diagram is
 wider than the screen. Click the header to collapse it.
+
+![Lineage diagram for a multi-pipeline config](../assets/screenshots/lineage.png){ .screenshot loading=lazy }
 
 ## Config card and metadata
 

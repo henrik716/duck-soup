@@ -8,6 +8,8 @@ covers how to work with steps in the editor.
 
 Click **add step** (at the top or bottom of the list) to open the step gallery:
 
+![The step gallery](../assets/screenshots/step-gallery.png){ .screenshot .narrow loading=lazy }
+
 | Gallery card | Step type | In one line |
 |---|---|---|
 | Spatial Join | `spatial_join` | Copy attributes from intersecting / containing / contained features. |
@@ -24,6 +26,8 @@ Click **add step** (at the top or bottom of the list) to open the step gallery:
 | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
 
 ## The step card
+
+![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab.png){ .screenshot loading=lazy }
 
 The header shows the step's type and a short summary, such as `→ fylke` for a join source,
 `(500m)` for a buffer, or `@zones` when the step runs on a branch. Hover the type to see what the step does. The header buttons are:
@@ -61,6 +65,8 @@ The body depends on the step type:
     [Spatial join](../reference/steps.md#spatial_join).
 
 ## Working step by step
+
+![Previewing the rows after step 1](../assets/screenshots/step-preview.png){ .screenshot .narrow loading=lazy }
 
 The step preview is the main tool for debugging a pipeline. A typical loop:
 
