@@ -70,8 +70,9 @@ automatically on every push to `main` that touches `docs/` or `mkdocs.yml`.
 
 The tutorial pages include tables, YAML and diagrams from `docs/tutorials/generated/`, which
 `scripts/build_tutorial.py` produces by running every example through the engine. It also
-writes the sample data and `data/tutorial/pondsworth.yaml`. Re-run it after changing the
-engine or the examples, and commit the output:
+writes the sample data and `pondsworth.yaml` into `duck_soup/tutorial/`, which ships inside
+the package so `duck-soup tutorial` (`duck_soup/tutorial.py`) can copy it into a user's project
+folder. Re-run it after changing the engine or the examples, and commit the output:
 
 ```bash
 python scripts/build_tutorial.py

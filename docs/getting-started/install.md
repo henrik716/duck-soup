@@ -110,3 +110,8 @@ that matches its own version, so the pin is what keeps spatial behaviour reprodu
 Curved geometry (CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface), which
 DuckDB's spatial extension can't parse, is linearized automatically with `pyogrio`, so no
 extras are needed.
+
+## Next steps
+
+Try the [Quickstart](quickstart.md), or get the [tutorial](../tutorials/index.md) sample town
+with `duck-soup tutorial` and explore every step and mapping option on real data.

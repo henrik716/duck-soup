@@ -10,12 +10,20 @@ its places (the Mallard Museum, the Puddle Lane Café, Quackington Library…) a
 of its districts, both GeoJSON in WGS84. You want a GeoPackage layer where every place carries
 the name of the district it's in, plus its latitude/longitude and a unique ID.
 
-Both datasets are committed in the repository under `data/tutorial/`, so you only need a
-clone.
+Both datasets come with duck soup. Copy them into a project folder first:
+
+```bash
+mkdir -p ~/duck-soup   # the editor's default project folder
+cd ~/duck-soup
+duck-soup tutorial  # writes data/tutorial/ (and a config with every tutorial example)
+```
+
+Using Docker? See [Get the data](../tutorials/index.md#get-the-data) for the equivalent
+command.
 
 ## From the command line
 
-From the root of a clone, save this as `quickstart.yaml`:
+In that folder, save this as `quickstart.yaml`:
 
 ```yaml
 name: quickstart
@@ -82,7 +90,7 @@ features that match nothing.
 
 ## In the editor
 
-1. Start the editor (`duck-soup serve`, or the Docker command) and open
+1. Start the editor from the same folder (`duck-soup serve`, or the Docker command) and open
    <http://localhost:8000>.
 2. Click **new** in the top bar. You get an empty config with one pipeline.
 3. In the pipeline's **sources** tab, click the **GeoJSON** template button twice to add two

@@ -15,7 +15,7 @@ Any of them can add [`cast`](#cast-set-the-column-type) to convert the result to
 type.
 
 The examples run on the [Pondsworth places](index.md), after a spatial join that adds each
-place's `district`. They're the `map_*` pipelines in `data/tutorial/pondsworth.yaml`. In the
+place's `district`. They're the `map_*` pipelines in `pipelines/pondsworth.yaml` (from [`duck-soup tutorial`](index.md#get-the-data)). In the
 editor, these are the **value source** and **cast** columns of the
 [mapping grid](../editor/mapping.md).
 

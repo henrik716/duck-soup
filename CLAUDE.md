@@ -32,7 +32,10 @@ touching `docs/` or `mkdocs.yml`. When a `config.py` option changes, update the 
 `docs/reference/*.md` page (and `docs/editor/*.md` if the editor UI changes).
 The tutorial pages (`docs/tutorials/`) include generated tables/diagrams from
 `docs/tutorials/generated/`: re-run `python scripts/build_tutorial.py` after an engine change
-that affects step or mapping output, and commit the regenerated files.
+that affects step or mapping output, and commit the regenerated files. The tutorial data and
+config ship in the package (`duck_soup/tutorial/`, listed in `pyproject.toml` package-data);
+`duck-soup tutorial` (`duck_soup/tutorial.py`) copies them into a project folder as
+`data/tutorial/` + `pipelines/pondsworth.yaml`.
 
 **Tests**
 ```bash

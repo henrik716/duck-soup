@@ -22,7 +22,16 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
 
+    tutorial = sub.add_parser(
+        "tutorial", help="Copy the Pondsworth tutorial data and config into a folder"
+    )
+    tutorial.add_argument("folder", nargs="?", default=".", help="Project folder (default: current)")
+    tutorial.add_argument("--force", action="store_true", help="Overwrite existing tutorial files")
+
     args = parser.parse_args(argv)
+
+    if args.cmd == "tutorial":
+        return _tutorial(args.folder, args.force)
 
     if args.cmd == "serve":
         import uvicorn
@@ -42,6 +51,35 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     return 1
+
+
+def _tutorial(folder: str, force: bool) -> int:
+    import os
+    from pathlib import Path
+
+    from .tutorial import CONFIG_NAME, PIPELINES_DIR, install
+
+    try:
+        written = install(folder, force=force)
+    except FileExistsError as e:
+        print(f"Not copying the tutorial: {e}", file=sys.stderr)
+        return 1
+    for path in written:
+        print(f"  wrote {path}")
+
+    dest = Path(folder).resolve()
+    # Same default as web/app.py: the editor lists pipelines/ under its project folder.
+    editor_root = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
+    config = (PIPELINES_DIR / CONFIG_NAME).as_posix()
+    print(f"\nPondsworth is ready in {dest}. From that folder:")
+    print(f"  duck-soup run {config}    (every tutorial example, one layer each)")
+    if dest == editor_root:
+        print(f"  duck-soup serve    (then pick '{Path(CONFIG_NAME).stem}' in the editor's load list)")
+    else:
+        print(f"  To open it in the editor, set DUCK_SOUP_ROOT to {dest} and run duck-soup serve")
+        print(f"  from there (the editor's project folder is currently {editor_root}).")
+    print("Guide: https://henrik716.github.io/duck-soup/tutorials/")
+    return 0
 
 
 if __name__ == "__main__":

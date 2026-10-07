@@ -1,9 +1,9 @@
 # The sample town
 
 The tutorials take place in **Pondsworth**, a small made-up town on the River Waddle where the
-ducks run everything. Its data is committed to the repository under
-[`data/tutorial/`](https://github.com/henrik716/duck-soup/tree/main/data/tutorial). It's
-deliberately tiny (a few dozen features) so you can follow every row from input to output.
+ducks run everything. Its data comes with duck soup, so `duck-soup tutorial` puts it on your
+machine (see [Get the data](#get-the-data)). It's deliberately tiny (a few dozen features) so you
+can follow every row from input to output.
 
 --8<-- "docs/tutorials/generated/overview.svg"
 
@@ -14,6 +14,41 @@ deliberately tiny (a few dozen features) so you can follow every row from input 
 <span><i class="k-water"></i>River Waddle</span>
 <span><i class="k-ghost"></i>new places (for `merge`)</span>
 </div>
+
+## Get the data
+
+One command copies the Pondsworth data and a config with every tutorial example into a folder:
+`data/tutorial/` holds the datasets, and `pipelines/pondsworth.yaml` the config. Run it in the
+editor's project folder (by default `~/duck-soup`), so the editor finds the config too:
+
+=== "pipx / pip"
+
+    ```bash
+    mkdir -p ~/duck-soup      # the editor's default project folder
+    cd ~/duck-soup
+    duck-soup tutorial
+    duck-soup serve           # then pick "pondsworth" in the editor's load list
+    ```
+
+=== "Docker"
+
+    From the folder you mount as `/data` (your project folder):
+
+    ```bash
+    docker run --rm -v "$PWD":/data ghcr.io/henrik716/duck-soup duck-soup tutorial
+    docker run -p 8000:8000 -v "$PWD":/data ghcr.io/henrik716/duck-soup
+    ```
+
+=== "From a clone"
+
+    The data lives in [`duck_soup/tutorial/`](https://github.com/henrik716/duck-soup/tree/main/duck_soup/tutorial).
+    Run `duck-soup tutorial` in a separate folder rather than the repository root, to keep the
+    copies out of your working tree.
+
+`duck-soup tutorial` never overwrites existing files, so a config you've been editing is safe.
+Add `--force` to start over. To use another folder, pass it as an argument
+(`duck-soup tutorial path/to/folder`); to open it in the editor, see
+[Where the editor keeps your files](../getting-started/install.md#where-the-editor-keeps-your-files).
 
 ## The datasets
 
@@ -55,17 +90,16 @@ sources:
 
 ## Run every example yourself
 
-[`data/tutorial/pondsworth.yaml`](https://github.com/henrik716/duck-soup/blob/main/data/tutorial/pondsworth.yaml)
-holds every example from these pages as its own pipeline, each writing one layer named after
-the example. From the root of a clone:
+`pipelines/pondsworth.yaml` holds every example from these pages as its own pipeline, each
+writing one layer named after the example. From the folder you ran `duck-soup tutorial` in:
 
 ```bash
-duck-soup run data/tutorial/pondsworth.yaml
+duck-soup run pipelines/pondsworth.yaml
 ```
 
 Then open `output/pondsworth_tutorial.gpkg` in QGIS and compare the layers. To explore them
-with live previews instead, start the editor from the repository root, click **import**, and
-paste the file's contents.
+with live previews instead, pick **pondsworth** in the editor's **load** list and use the
+eye buttons on the steps.
 
 !!! note "The pages are generated from real runs"
     The result tables and before/after diagrams on these pages come from running the examples

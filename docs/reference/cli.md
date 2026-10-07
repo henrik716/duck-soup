@@ -37,6 +37,21 @@ Wrote output/quickstart.gpkg
 
 Relative paths in the YAML resolve against the directory you run the command from.
 
+## `duck-soup tutorial`
+
+```bash
+duck-soup tutorial [folder] [--force]
+```
+
+Copies the [Pondsworth tutorial](../tutorials/index.md) into `folder` (default: the current
+one): the sample data into `data/tutorial/`, and a config with every tutorial example into
+`pipelines/pondsworth.yaml`. Then, from that folder, `duck-soup run pipelines/pondsworth.yaml`
+runs them all.
+
+It refuses to overwrite existing files unless you pass `--force`. It ends by telling you how to
+open the config in the editor: directly if `folder` is the editor's project folder, otherwise by
+setting `DUCK_SOUP_ROOT`.
+
 ## `duck-soup serve`
 
 ```bash

@@ -57,3 +57,29 @@ def test_run_writes_output_file(tmp_path):
 
     assert rc == 0
     assert (tmp_path / "cli_run.gpkg").exists()
+
+
+def test_tutorial_copies_data_and_config(tmp_path, capsys):
+    rc = cli.main(["tutorial", str(tmp_path)])
+
+    assert rc == 0
+    assert (tmp_path / "pipelines" / "pondsworth.yaml").is_file()
+    data = {p.name for p in (tmp_path / "data" / "tutorial").iterdir()}
+    assert {"places.geojson", "districts.geojson", "categories.csv"} <= data
+    assert "pondsworth.yaml" not in data
+    assert "Pondsworth is ready" in capsys.readouterr().out
+    # The copied config validates against the copied data's relative paths.
+    assert cli.main(["check", str(tmp_path / "pipelines" / "pondsworth.yaml")]) == 0
+
+
+def test_tutorial_refuses_to_overwrite_without_force(tmp_path, capsys):
+    assert cli.main(["tutorial", str(tmp_path)]) == 0
+    config = tmp_path / "pipelines" / "pondsworth.yaml"
+    config.write_text("# my edits", encoding="utf-8")
+
+    assert cli.main(["tutorial", str(tmp_path)]) == 1
+    assert "already exists" in capsys.readouterr().err
+    assert config.read_text(encoding="utf-8") == "# my edits"
+
+    assert cli.main(["tutorial", str(tmp_path), "--force"]) == 0
+    assert config.read_text(encoding="utf-8") != "# my edits"

@@ -1,7 +1,7 @@
 # Steps by example
 
 This page runs every step type on the [Pondsworth sample data](index.md) and shows what comes
-out. Each example is a pipeline in `data/tutorial/pondsworth.yaml` with the same name as its
+out. Each example is a pipeline in `pipelines/pondsworth.yaml` (from [`duck-soup tutorial`](index.md#get-the-data)) with the same name as its
 section, using the [shared source list](index.md#the-datasets) and
 `working_crs: EPSG:32631`. The YAML below shows only the parts that differ.
 
