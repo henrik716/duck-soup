@@ -8,7 +8,8 @@ whole chain as one query, so joins and projections stay fast and stream from
 GDAL where possible. The final view is written straight to GeoPackage via
 COPY ... (FORMAT GDAL, DRIVER 'GPKG').
 
-Spatial joins use LATERAL ... LIMIT 1 so each base feature stays a single row
+Spatial joins, nearest-neighbor joins and clips keep a single best match per base
+feature (see Engine._best_match_select), so each base feature stays a single row
 even when it matches several polygons (this mirrors what the FME SpatialFilter
 + first-match behaviour did).
 """
@@ -35,6 +36,41 @@ _PREDICATE_SQL = {
     "contains": "ST_Contains",
     "within": "ST_Within",
 }
+
+
+# Geographic CRSs (coordinates in degrees) common enough to expect as a working_crs — mostly
+# because working_crs defaults to the base source's CRS, and GeoJSON / ArcGIS REST / OGC API
+# sources are lon/lat. There's no CRS database in this codebase to ask "is this geographic?"
+# in general (see sources.crs_extent_warning), so this is a list, not a lookup.
+_GEOGRAPHIC_CRS = {
+    "EPSG:4326",  # WGS 84
+    "EPSG:4258",  # ETRS89
+    "EPSG:4269",  # NAD83
+    "EPSG:4267",  # NAD27
+    "EPSG:4230",  # ED50
+    "EPSG:4283",  # GDA94
+    "EPSG:4167",  # NZGD2000
+    "EPSG:4674",  # SIRGAS 2000
+}
+
+
+def _same_dimension(result: str, like: str) -> str:
+    """`result` (an overlay result such as ST_Intersection) reduced to the parts with the
+    same dimension as `like`: areas stay areas, lines stay lines, points stay points.
+
+    "intersects" also matches features that only share an edge or a corner, and the
+    intersection of two such polygons is a line or a point. Without this, clipping a
+    polygon layer by neighbouring polygons (counties, districts, ...) wrote those slivers
+    into the output as extra line/point features. A feature left with nothing of its own
+    dimension comes out empty;
+    callers drop those rows (see _drop_empty).
+    """
+    return f"ST_CollectionExtract({result}, ST_Dimension({like}) + 1)"
+
+
+def _drop_empty(select: str) -> str:
+    """`select` minus rows whose geometry ended up empty (nothing left after clip/erase)."""
+    return f"SELECT * FROM ({select}) WHERE NOT ST_IsEmpty(geom)"
 
 
 def _transform(col: str, from_crs: str, to_crs: str) -> str:
@@ -176,67 +212,104 @@ class Engine:
             self.log(f"step {idx}: spatial_join {step.predicate} {step.source} (match=all)")
             return sql, out_view
 
-        pulled = ", ".join(
-            f"j.{_ident(out)}" for out in step.fields
-        )
-        inner = ", ".join(
-            f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()
-        )
+        fields = {out: f"b.{_ident(col)}" for out, col in step.fields.items()}
         # Deterministic match selection: __src_row is a stable row_number() assigned to
         # each join-source row when its view is created (see _create_source_views), so
-        # ordering by it makes "first match" reproducible instead of depending on
-        # unspecified query-plan order. "largest_overlap" ranks by intersection area first,
-        # falling back to __src_row to break ties.
+        # ranking by it makes "first match" reproducible instead of depending on
+        # unspecified query-plan order. "largest_overlap" ranks by intersection area first
+        # (negated, since the best match is the lowest rank), falling back to __src_row.
         if step.on_multiple == "largest_overlap":
-            order_by = "ORDER BY ST_Area(ST_Intersection(a.geom, b.geom)) DESC, b.__src_row ASC"
+            rank = ["-ST_Area(ST_Intersection(a.geom, b.geom))", "b.__src_row"]
         else:
-            order_by = "ORDER BY b.__src_row ASC"
-        sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-        SELECT a.*{(', ' + pulled) if pulled else ''}
-        FROM {_ident(prev)} a
-        LEFT JOIN LATERAL (
-            SELECT {inner if inner else '1'}
-            FROM {src_view} b
-            WHERE {pred}(a.geom, b.geom)
-            {order_by}
-            LIMIT 1
-        ) j ON true
-        """
+            rank = ["b.__src_row"]
+        select = self._best_match_select(prev, src_view, f"{pred}(a.geom, b.geom)", rank, fields)
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
         self.log(f"step {idx}: spatial_join {step.predicate} {step.source} (on_multiple={step.on_multiple})")
         return sql, out_view
 
     def _apply_nearest_neighbor(self, prev: str, step: NearestNeighbor, idx: int) -> str:
         src_view = _ident(f"src_{step.source}")
         dist_expr = "ST_Distance(a.geom, b.geom)"
-        pulled = ", ".join(f"j.{_ident(out)}" for out in step.fields)
+        fields = {out: f"b.{_ident(col)}" for out, col in step.fields.items()}
         if step.distance_field:
-            pulled += (", " if pulled else "") + f"j.{_ident(step.distance_field)}"
-        inner = ", ".join(
-            f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()
-        )
-        if step.distance_field:
-            inner += (", " if inner else "") + f"{dist_expr} AS {_ident(step.distance_field)}"
-        where_clause = (
-            f"WHERE ST_DWithin(a.geom, b.geom, {step.max_distance})"
-            if step.max_distance is not None else ""
+            fields[step.distance_field] = dist_expr
+        # With max_distance, ST_DWithin lets DuckDB use its spatial join (an R-tree over the
+        # source). Without it every base row has to be compared against every source row —
+        # inherently a full scan per base row, so a large source wants a max_distance.
+        on = (
+            f"ST_DWithin(a.geom, b.geom, {step.max_distance})"
+            if step.max_distance is not None else "true"
         )
         out_view = f"step_{idx}"
-        sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-        SELECT a.*{(', ' + pulled) if pulled else ''}
-        FROM {_ident(prev)} a
-        LEFT JOIN LATERAL (
-            SELECT {inner if inner else '1'}
-            FROM {src_view} b
-            {where_clause}
-            ORDER BY {dist_expr}
-            LIMIT 1
-        ) j ON true
-        """
+        select = self._best_match_select(prev, src_view, on, [dist_expr, "b.__src_row"], fields)
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
         suffix = f" (max_distance={step.max_distance})" if step.max_distance is not None else ""
         self.log(f"step {idx}: nearest_neighbor {step.source}{suffix}")
         return sql, out_view
+
+    @staticmethod
+    def _per_row_match_select(
+        prev: str,
+        src_view: str,
+        on: str,
+        agg: str,
+        columns: str,
+        inner: bool = False,
+    ) -> str:
+        """SELECT `columns` over every `prev` row (`a`) joined to `m.__agg`: the aggregate
+        `agg` over that row's matches in `src_view` (`b`), i.e. the source rows satisfying
+        `on`. Unmatched rows get a NULL `m.__agg`, or are dropped when `inner`.
+
+        This replaces per-row `LATERAL (... WHERE <predicate> ...)` subqueries: DuckDB only
+        plans a spatial predicate in a plain JOIN as its SPATIAL_JOIN operator (an R-tree
+        over one side), while the LATERAL form compared every base row against every source
+        row. Against a 1.1M-feature source that's ~2 s instead of not finishing in 10
+        minutes for 50 base rows.
+
+        Base rows get a fresh __a_row number to group by — their own __src_row isn't
+        unique once a match=all join or a merge has run. The numbered base is MATERIALIZED
+        because it's read twice, and row_number() OVER () may number differently each time.
+        """
+        return f"""
+        WITH a AS MATERIALIZED (
+            SELECT *, row_number() OVER () AS __a_row FROM {_ident(prev)}
+        ),
+        m AS (
+            SELECT a.__a_row, {agg} AS __agg
+            FROM a JOIN {src_view} b ON {on}
+            GROUP BY a.__a_row
+        )
+        SELECT {columns}
+        FROM a {'INNER' if inner else 'LEFT'} JOIN m ON m.__a_row = a.__a_row
+        ORDER BY a.__a_row
+        """
+
+    @classmethod
+    def _best_match_select(
+        cls,
+        prev: str,
+        src_view: str,
+        on: str,
+        rank: list[str],
+        fields: dict[str, str],
+    ) -> str:
+        """SELECT of every `prev` row (`a`) plus `fields` taken from its single best-ranked
+        match in `src_view` (`b`): the match with the lowest `rank` tuple among those
+        satisfying `on`, or NULL fields when nothing matches. arg_min keeps one running
+        best per base row, so memory stays bounded even when `on` is `true`
+        (nearest_neighbor without max_distance).
+        """
+        if not fields:
+            return f"SELECT * FROM {_ident(prev)}"
+        best = ", ".join(f"{_lit(out)}: {expr}" for out, expr in fields.items())
+        pulled = ", ".join(
+            f"struct_extract(m.__agg, {_lit(out)}) AS {_ident(out)}" for out in fields
+        )
+        return cls._per_row_match_select(
+            prev, src_view, on,
+            agg=f"arg_min({{{best}}}, row({', '.join(rank)}))",
+            columns=f"a.* EXCLUDE (__a_row), {pulled}",
+        )
 
     def _apply_attribute_join(self, prev: str, step: AttributeJoin, idx: int) -> str:
         src_view = _ident(f"src_{step.source}")
@@ -283,17 +356,16 @@ class Engine:
         pred = _PREDICATE_SQL[step.predicate]
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
-        sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-        SELECT a.* EXCLUDE (geom), ST_Intersection(a.geom, j.clip_geom) AS geom
-        FROM {_ident(prev)} a
-        INNER JOIN LATERAL (
-            SELECT b.geom AS clip_geom
-            FROM {src_view} b
-            WHERE {pred}(a.geom, b.geom)
-            LIMIT 1
-        ) j ON true
-        """
+        # Clipped by the first match (in source row order); unmatched features, and ones
+        # that only touch the mask, are dropped.
+        clipped = _same_dimension("ST_Intersection(a.geom, m.__agg)", "a.geom")
+        select = _drop_empty(self._per_row_match_select(
+            prev, src_view, f"{pred}(a.geom, b.geom)",
+            agg="arg_min(b.geom, b.__src_row)",
+            columns=f"a.* EXCLUDE (__a_row, geom), {clipped} AS geom",
+            inner=True,
+        ))
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
         self.log(f"step {idx}: clip {step.predicate} {step.source}")
         return sql, out_view
 
@@ -301,34 +373,39 @@ class Engine:
         pred = _PREDICATE_SQL[step.predicate]
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
-        sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-        SELECT a.* EXCLUDE (geom),
-               COALESCE(ST_Difference(a.geom, j.union_geom), a.geom) AS geom
-        FROM {_ident(prev)} a
-        LEFT JOIN LATERAL (
-            SELECT ST_Union_Agg(b.geom) AS union_geom
-            FROM {src_view} b
-            WHERE {pred}(a.geom, b.geom)
-        ) j ON true
-        """
+        # Each feature minus the union of everything it matches; unmatched ones pass
+        # through, and ones erased completely are dropped rather than kept as empty shapes.
+        select = _drop_empty(self._per_row_match_select(
+            prev, src_view, f"{pred}(a.geom, b.geom)",
+            agg="ST_Union_Agg(b.geom)",
+            columns=(
+                "a.* EXCLUDE (__a_row, geom), "
+                "COALESCE(ST_Difference(a.geom, m.__agg), a.geom) AS geom"
+            ),
+        ))
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
         self.log(f"step {idx}: erase {step.predicate} {step.source}")
         return sql, out_view
 
     def _apply_dissolve(self, prev: str, step: Dissolve, idx: int) -> tuple[str, str]:
         out_view = f"step_{idx}"
+        # Dissolved features are new rows, so they get a fresh __src_row: later steps and
+        # the final SELECT expect every feature to carry one (match ranking when this branch
+        # is a join source, and the default "all columns" output, which excludes it).
         if step.by:
             by_cols = ", ".join(_ident(c) for c in step.by)
             sql = f"""
             CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-            SELECT {by_cols}, ST_Union_Agg(geom) AS geom
-            FROM {_ident(prev)}
-            GROUP BY {by_cols}
+            SELECT *, row_number() OVER () AS __src_row FROM (
+                SELECT {by_cols}, ST_Union_Agg(geom) AS geom
+                FROM {_ident(prev)}
+                GROUP BY {by_cols}
+            )
             """
         else:
             sql = f"""
             CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-            SELECT ST_Union_Agg(geom) AS geom
+            SELECT ST_Union_Agg(geom) AS geom, 1 AS __src_row
             FROM {_ident(prev)}
             """
         self.log(f"step {idx}: dissolve by {step.by or '(all)'}")
@@ -340,13 +417,16 @@ class Engine:
             f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()
         )
         out_view = f"step_{idx}"
-        sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
+        # Only the overlapping area itself: pairs that merely touch would otherwise add
+        # line/point slivers to a polygon layer (see _same_dimension).
+        overlaid = _same_dimension("ST_Intersection(a.geom, b.geom)", "a.geom")
+        pairs = f"""
         SELECT a.* EXCLUDE (geom){(', ' + b_fields) if b_fields else ''},
-               ST_Intersection(a.geom, b.geom) AS geom
+               {overlaid} AS geom
         FROM {_ident(prev)} a
         JOIN {src_view} b ON ST_Intersects(a.geom, b.geom)
         """
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {_drop_empty(pairs)}"
         self.log(f"step {idx}: intersect_overlay {step.source}")
         return sql, out_view
 
@@ -563,6 +643,8 @@ class Engine:
         # -> EPSG:4326) per feature, not a second independent transform from the source CRS.
         # This keeps lon/lat/mgrs consistent with the geometry actually used for joins/steps
         # and avoids double rounding/drift from reprojecting the same feature twice.
+        # __centroid4326 is the centroid taken in working_crs, then reprojected: a centroid
+        # computed on lon/lat degrees is distorted (~100 km off for a line spanning Norway).
         select_cols = (
             f"{cols},\n            " if cols
             else "* EXCLUDE (geom, __geom4326, __centroid4326, __src_row),\n            "
@@ -574,13 +656,48 @@ class Engine:
             FROM {source}
         ),
         enriched AS (
-            SELECT *, ST_Centroid(__geom4326) AS __centroid4326
+            SELECT *,
+                {_transform('ST_Centroid(geom)', self.working_crs, 'EPSG:4326')} AS __centroid4326
             FROM base4326
         )
         SELECT
             {select_cols}{geom_out} AS geom
         FROM enriched
         """
+
+    def _check_working_crs_units(self) -> None:
+        """Refuse to run distance/area operations in a geographic working CRS.
+
+        Buffer distances, nearest_neighbor's max_distance/distance_field and the area/length
+        mapping funcs are all in working_crs units. In a degrees CRS a `buffer: 500` meant as
+        metres becomes 500 degrees and Oslo–Bergen measures 5.45 — silently wrong rather
+        than an error, which is why this is checked up front.
+        """
+        if self.working_crs.upper() not in _GEOGRAPHIC_CRS:
+            return
+        uses: list[str] = []
+        for i, step in enumerate(self.p.steps, start=1):
+            if isinstance(step, Buffer):
+                uses.append(f"step {i} (buffer)")
+            elif isinstance(step, NearestNeighbor) and (
+                step.max_distance is not None or step.distance_field
+            ):
+                uses.append(f"step {i} (nearest_neighbor distance)")
+        uses += [f"derived source '{ds.id}' (buffer)" for ds in self.p.derived_sources if ds.buffer is not None]
+        mappings = [self.p.mapping] + [l.mapping for o in self.p.outputs for l in o.layers if l.mapping]
+        funcs = sorted({m.func for mp in mappings for m in mp if m.func in ("area", "length")})
+        uses += [f"mapping func '{f}'" for f in funcs]
+        if not uses:
+            return
+        origin = (
+            "" if self.p.working_crs
+            else f" (inherited from base source '{self.p.base}', since working_crs isn't set)"
+        )
+        raise ValueError(
+            f"working CRS {self.working_crs}{origin} is in degrees, but {', '.join(uses)} "
+            f"measure distance or area in working CRS units, so they'd be in degrees too. "
+            f"Set working_crs to a projected CRS in metres, e.g. EPSG:25833 for Norway."
+        )
 
     # -- run ----------------------------------------------------------------
     def _prepare(
@@ -601,6 +718,7 @@ class Engine:
         bbox must still re-apply it to the final SELECT, since a geometry-mutating step
         (buffer, dissolve, ...) can move a feature relative to it.
         """
+        self._check_working_crs_units()
         self._create_source_views(con, workdir, bbox=bbox, max_features=max_features)
         self._create_derived_source_views(con)
         con.execute(
