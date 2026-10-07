@@ -80,6 +80,10 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
         <i data-lucide="alert-triangle" style="width:12px;height:12px;flex-shrink:0"></i>
         <span></span>
       </div>
+      <div class="card-warning card-note" data-reader-note hidden>
+        <i data-lucide="info" style="width:12px;height:12px;flex-shrink:0"></i>
+        <span></span>
+      </div>
       <div class="row" data-header-row style="display:none; margin-top:8px;">
         <label class="field grow">header row
           <select data-k="header_row">
@@ -313,6 +317,7 @@ function createInspectors(
       const xField = val(c, 'x_field')
       const yField = val(c, 'y_field')
       const geomField = val(c, 'geom_field')
+      updateReaderNote(c, null)
       if (!id || !uri) { updateSourceBadge(c, null); updateCrsWarning(c, null); return }
       if (format === 'wfs' && !layer) {
         updateSourceBadge(c, { ok: false, error: 'select a layer typename from the dropdown first' })
@@ -350,6 +355,7 @@ function createInspectors(
           SOURCE_SCHEMAS[id] = d.columns
           updateSourceBadge(c, { ok: true, columns: d.columns })
           updateCrsWarning(c, d.crs_warning)
+          updateReaderNote(c, d.reader_note)
           // Offer the just-inspected columns as suggestions for the geometry-column
           // pickers below — same idea as doInspectFile populating the `layer` combo.
           if (TABULAR_GEOM_FORMATS.includes(format)) {
@@ -468,11 +474,21 @@ function showChip(c: HTMLElement, sel: string, on: boolean): void {
 // Shows/hides the "this crs looks wrong for the sampled coordinates" hint from
 // /api/inspect's crs_warning — see crs_extent_warning in sources.py.
 function updateCrsWarning(c: HTMLElement, warning: string | null | undefined): void {
-  const box = c.querySelector<HTMLElement>('[data-crs-warning]')
+  updateCardHint(c, '[data-crs-warning]', warning)
+}
+
+// /api/inspect's reader_note: the source is read via pyogrio rather than ST_Read (a file
+// over 2 GiB on Windows) — see large_file_reader_note in sources.py.
+function updateReaderNote(c: HTMLElement, note: string | null | undefined): void {
+  updateCardHint(c, '[data-reader-note]', note)
+}
+
+function updateCardHint(c: HTMLElement, sel: string, text: string | null | undefined): void {
+  const box = c.querySelector<HTMLElement>(sel)
   if (!box) return
-  box.hidden = !warning
+  box.hidden = !text
   const msg = box.querySelector('span')
-  if (msg) msg.textContent = warning ?? ''
+  if (msg) msg.textContent = text ?? ''
 }
 
 const URI_PLACEHOLDERS: Record<string, string> = {

@@ -387,3 +387,19 @@ def test_upload_rejects_relpath_escaping_data_dir(client, bad_relpath):
     finally:
         if escapee.exists():
             escapee.unlink()
+
+
+def test_inspect_reports_reader_note_only_for_large_files(client, monkeypatch):
+    import duck_soup.sources as sources_mod
+
+    source = {"id": "places", "format": "flatgeobuf", "uri": "data/test.fgb", "crs": "EPSG:4326"}
+    body = client.post("/api/inspect", json={"source": source}).json()
+    assert body["ok"] is True
+    assert body["reader_note"] is None
+
+    # Pretend the fixture is over the size limit, as a 2 GiB+ file would be on Windows.
+    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 1)
+    body = client.post("/api/inspect", json={"source": source}).json()
+    assert body["ok"] is True
+    assert "pyogrio" in body["reader_note"]
+    assert {"name", "category"} <= {c["name"] for c in body["columns"]}

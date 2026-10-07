@@ -622,3 +622,94 @@ def test_fetch_oapif_cache_expires_after_ttl(tmp_path: Path, monkeypatch):
     data = json.loads(Path(out_path).read_text(encoding="utf-8"))
     assert [f["properties"]["nr"] for f in data["features"]] == ["99"]
     assert len(session.calls) == 2
+
+
+# -- pyogrio fallback for files ST_Read can't handle (>= 2 GiB on Windows) -------------
+# _ST_READ_MAX_BYTES is patched down to 1 byte so the small committed fixtures take the
+# pyogrio path; the real trigger is a 2 GiB+ file, far too big to commit.
+
+
+@pytest.fixture()
+def force_pyogrio(monkeypatch):
+    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 1)
+
+
+def _describe(con, expr: str) -> list[tuple[str, str]]:
+    return [(r[0], str(r[1])) for r in con.execute(f"DESCRIBE SELECT * FROM {expr}").fetchall()]
+
+
+@pytest.mark.parametrize("fmt,uri", [
+    ("flatgeobuf", "data/test.fgb"),
+    ("gpkg", "data/castles_and_parks.gpkg"),
+])
+def test_read_expr_pyogrio_matches_st_read_schema_and_rows(
+    spatial_con, tmp_path: Path, monkeypatch, fmt, uri
+):
+    src = Source(id="s", format=fmt, uri=uri)
+    st_read = read_expr(src, tmp_path, con=spatial_con)
+
+    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 1)
+    via_pyogrio = read_expr(src, tmp_path, con=spatial_con)
+
+    assert not via_pyogrio.startswith(("ST_Read", "(SELECT"))  # a temp table, not ST_Read
+    assert _describe(spatial_con, via_pyogrio) == _describe(spatial_con, st_read)
+    count = "SELECT count(*), sum(ST_Area(geom) + ST_Length(geom)) FROM {}"
+    assert (
+        spatial_con.execute(count.format(via_pyogrio)).fetchone()
+        == pytest.approx(spatial_con.execute(count.format(st_read)).fetchone())
+    )
+
+
+def test_read_expr_pyogrio_pushes_down_bbox_in_layer_crs(spatial_con, tmp_path: Path, force_pyogrio):
+    # castles_and_parks is EPSG:3857, so the WGS84 preview bbox has to be transformed into
+    # the layer's CRS before it can be used as GDAL's spatial filter.
+    bbox = (10.0, 59.0, 12.0, 61.0)
+    src = Source(id="s", format="gpkg", uri="data/castles_and_parks.gpkg")
+    table = read_expr(src, tmp_path, con=spatial_con, bbox=bbox)
+
+    env = (
+        "ST_Transform(ST_MakeEnvelope(10.0, 59.0, 12.0, 61.0), 'EPSG:4326', 'EPSG:3857', "
+        "always_xy := true)"
+    )
+    (read,) = spatial_con.execute(f"SELECT count(*) FROM {table}").fetchone()
+    (exact,) = spatial_con.execute(
+        f"SELECT count(*) FROM {table} WHERE ST_Intersects(geom, {env})"
+    ).fetchone()
+    (total,) = spatial_con.execute(
+        "SELECT count(*) FROM ST_Read('data/castles_and_parks.gpkg')"
+    ).fetchone()
+    (expected,) = spatial_con.execute(
+        f"SELECT count(*) FROM ST_Read('data/castles_and_parks.gpkg') WHERE ST_Intersects(geom, {env})"
+    ).fetchone()
+    assert 0 < exact == expected  # nothing the engine's exact filter would keep is lost
+    assert read < total  # ...and the read really was narrowed down
+
+
+def test_read_expr_pyogrio_honors_max_features_and_sample(spatial_con, tmp_path: Path, force_pyogrio):
+    src = Source(id="s", format="gpkg", uri="data/castles_and_parks.gpkg")
+    limited = read_expr(src, tmp_path, con=spatial_con, max_features=3)
+    assert spatial_con.execute(f"SELECT count(*) FROM {limited}").fetchone() == (3,)
+
+    sampled = read_expr(src, tmp_path, con=spatial_con, sample=True)
+    assert spatial_con.execute(f"SELECT count(*) FROM {sampled}").fetchone() == (
+        sources_mod._PYOGRIO_SAMPLE_ROWS,
+    )
+
+
+def test_needs_pyogrio_reader_only_above_threshold(tmp_path: Path, monkeypatch):
+    f = tmp_path / "x.gpkg"
+    f.write_bytes(b"0" * 10)
+    gdb = tmp_path / "x.gdb"
+    gdb.mkdir()
+    (gdb / "a0000000a.gdbtable").write_bytes(b"0" * 10)
+
+    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", None)  # non-Windows
+    assert not sources_mod.needs_pyogrio_reader(str(f))
+
+    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 10)
+    assert sources_mod.needs_pyogrio_reader(str(f))
+    assert sources_mod.needs_pyogrio_reader(str(gdb))  # largest file inside the folder
+    assert not sources_mod.needs_pyogrio_reader("https://example.com/x.gpkg")
+
+    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 11)
+    assert not sources_mod.needs_pyogrio_reader(str(f))

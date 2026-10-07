@@ -10,6 +10,8 @@ with DuckDB's own native read_parquet() instead (see read_expr's `parquet` branc
 postgres is a third exception, for the same reason: it's read via DuckDB's own
 postgres extension (ATTACH ... TYPE postgres) rather than GDAL's PG driver, which
 isn't part of the bundled spatial-extension GDAL build either.
+Finally, on Windows a local file of 2 GiB or more is read through pyogrio instead of
+ST_Read, which segfaults on such files there — see `_read_via_pyogrio`.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -46,6 +49,23 @@ _CURVE_MARKERS = ("curve", "surface")
 # every single preview/run) and keyed by the source file's mtime+size, so an
 # edited source file invalidates its own cache entry automatically.
 _LINEARIZE_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_linearize_cache"
+
+# On Windows, DuckDB's spatial extension (confirmed through duckdb 1.5.6) segfaults —
+# taking the whole process down, web server included — once ST_Read gets past the 2 GiB
+# mark of a file. Small reads (a LIMITed preview, a schema sample) finish before reaching
+# that point, which is why such a file inspects fine and then crashes on a full scan (a
+# join against it, or an "in view" preview of features stored late in the file). Files at
+# or above this size are read through pyogrio instead (see `_read_via_pyogrio`). None
+# disables the fallback; elsewhere ST_Read handles large files fine.
+_ST_READ_MAX_BYTES: int | None = 2**31 if sys.platform == "win32" else None
+
+# Rows read for a schema-inspection sample (read_expr's `sample=True`) on the pyogrio path —
+# enough for /api/inspect's CRS sanity check, which looks at up to 500 features.
+_PYOGRIO_SAMPLE_ROWS = 500
+
+# Formats the pyogrio fallback covers: plain GDAL vector files. xlsx/csv are left on ST_Read,
+# since their header-row open options and SQL-built geometry are ST_Read-specific.
+_PYOGRIO_FORMATS = ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf")
 
 # Short-lived in-memory cache for fetch_oapif, keyed by (root url, collection, bbox,
 # page_size). The web editor's schema-inspection sample and its live preview are two
@@ -682,6 +702,117 @@ def _read_expr_normalized(
     return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
 
 
+def _local_file_size(uri: str) -> int:
+    """Size in bytes of a local file, or of the largest file inside a directory source (a
+    .gdb is a folder, and GDAL opens each of its files separately). 0 if `uri` isn't a
+    local path we can stat (a URL, a /vsi path, ...)."""
+    p = Path(uri)
+    try:
+        if p.is_dir():
+            return max((f.stat().st_size for f in p.iterdir() if f.is_file()), default=0)
+        return p.stat().st_size
+    except OSError:
+        return 0
+
+
+def needs_pyogrio_reader(uri: str) -> bool:
+    """True when `uri` is too large for ST_Read on this platform (see _ST_READ_MAX_BYTES)."""
+    return _ST_READ_MAX_BYTES is not None and _local_file_size(uri) >= _ST_READ_MAX_BYTES
+
+
+def large_file_reader_note(src: Source) -> str | None:
+    """User-facing explanation when `src` will be read via pyogrio, else None."""
+    if src.format not in _PYOGRIO_FORMATS or not needs_pyogrio_reader(src.uri):
+        return None
+    size_gib = _local_file_size(src.uri) / 2**30
+    return (
+        f"Large file ({size_gib:.1f} GiB): read via pyogrio instead of DuckDB's reader, which "
+        f"crashes on files over 2 GiB on Windows. Join steps against this source load the "
+        f"whole layer into memory."
+    )
+
+
+def _bbox_in_crs(
+    con: duckdb.DuckDBPyConnection,
+    bbox: tuple[float, float, float, float],
+    crs: str,
+) -> tuple[float, float, float, float]:
+    """A WGS84 (west, south, east, north) bbox as the extent of the same envelope in `crs`.
+
+    Transforms the same 4-corner envelope engine._bbox_filter does, so its extent always
+    covers the polygon that filter later tests against.
+    """
+    west, south, east, north = bbox
+    if crs == "EPSG:4326":
+        return bbox
+    row = con.execute(
+        f"SELECT ST_XMin(e), ST_YMin(e), ST_XMax(e), ST_YMax(e) FROM (SELECT ST_Transform("
+        f"ST_MakeEnvelope({west}, {south}, {east}, {north}), 'EPSG:4326', {_sql_str(crs)}, "
+        f"always_xy := true) AS e)"
+    ).fetchone()
+    return tuple(row)
+
+
+def _read_via_pyogrio(
+    con: duckdb.DuckDBPyConnection,
+    uri: str,
+    layer: str | None,
+    source_id: str,
+    bbox: tuple[float, float, float, float] | None,
+    max_features: int | None,
+    log: Callable[[str], None] | None,
+) -> str:
+    """Load a layer into a DuckDB temp table via pyogrio's Arrow stream; returns the table name.
+
+    The ST_Read-free path for files ST_Read can't handle (see _ST_READ_MAX_BYTES). pyogrio
+    bundles its own GDAL with ordinary file I/O, and streams Arrow batches straight into
+    DuckDB — which turns the GeoArrow WKB column into GEOMETRY on its own. A full 1.1M-feature
+    layer of a 2.2 GiB GeoPackage loads in ~3 s. The result matches ST_Read's columns: the
+    FID column is included under its own name unless it's already a regular field (GeoJSON's
+    `id`), and the geometry column is renamed to `geom` (see _read_expr_normalized).
+
+    `bbox` (WGS84) is pushed down as a GDAL spatial filter in the layer's own CRS, and
+    `max_features` stops pulling batches once that many rows are in — the same bounded reads
+    fetch_oapif does for a preview. Both are best-effort narrowing; the engine still applies
+    its exact bbox filter and LIMIT afterwards.
+    """
+    import pyogrio
+
+    info = pyogrio.read_info(uri, layer=layer)
+    # A driver without a named FID column (FlatGeobuf) still gets one from ST_Read, as OGC_FID.
+    return_fids = info.get("fid_column") not in list(info.get("fields", []))
+
+    layer_bbox = None
+    if bbox and info.get("crs"):
+        try:
+            layer_bbox = _bbox_in_crs(con, bbox, _normalize_crs(info["crs"]) or info["crs"])
+        except Exception:
+            layer_bbox = None  # unknown CRS to PROJ etc. — read unfiltered, engine still filters
+
+    table = _sql_ident(f"__pyogrio_{source_id}")
+    stream = f"__pyogrio_stream_{source_id}"
+    limit = f" LIMIT {int(max_features)}" if max_features is not None else ""
+    kwargs = {"batch_size": min(max_features, 65536)} if max_features else {}
+    with pyogrio.raw.open_arrow(
+        uri, layer=layer, bbox=layer_bbox, return_fids=return_fids, **kwargs
+    ) as (_meta, reader):
+        con.register(stream, reader)
+        try:
+            con.execute(
+                f"CREATE OR REPLACE TEMP TABLE {table} AS "
+                f"SELECT * FROM {_sql_ident(stream)}{limit}"
+            )
+        finally:
+            con.unregister(stream)
+
+    geom_col = _geometry_column_via_describe(con, table)
+    if geom_col and geom_col != "geom":
+        con.execute(f"ALTER TABLE {table} RENAME COLUMN {_sql_ident(geom_col)} TO geom")
+    if log:
+        log(f"source '{source_id}': file >= 2 GiB, read via pyogrio instead of ST_Read")
+    return table
+
+
 def _open_options_arg(opts: list[str]) -> str:
     """`open_options=['...', ...]` fragment for `_st_read`'s `extra` param, or "" if `opts` is empty."""
     if not opts:
@@ -753,8 +884,9 @@ def read_expr(
     and transparently linearized first — see `_maybe_linearize` — and their geometry
     field is aliased to `geom` if it isn't already — see `_read_expr_normalized`.
 
-    `bbox` and `max_features` are only honored for `oapif` sources — see `fetch_oapif`.
-    `sample` is honored by both `oapif` and `arcgis_rest`.
+    `bbox` and `max_features` are only honored for `oapif` sources — see `fetch_oapif` — and
+    for files read via pyogrio instead of ST_Read — see `_read_via_pyogrio`.
+    `sample` is honored by `oapif`, `arcgis_rest` and the pyogrio path.
     """
     fmt = src.format
 
@@ -804,6 +936,9 @@ def read_expr(
         uri, layer = src.uri, src.layer
         if fmt in ("gpkg", "fgdb", "gml"):
             uri, layer = _maybe_linearize(uri, layer, workdir, src.id, con, log)
+        if con is not None and fmt in _PYOGRIO_FORMATS and needs_pyogrio_reader(uri):
+            limit = _PYOGRIO_SAMPLE_ROWS if sample and max_features is None else max_features
+            return _read_via_pyogrio(con, uri, layer, src.id, bbox, limit, log)
         extra = ""
         if fmt in ("xlsx", "csv") and src.header_row is not None:
             extra = _open_options_arg([_header_open_option(fmt, src.header_row)])

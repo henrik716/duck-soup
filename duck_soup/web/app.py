@@ -33,6 +33,7 @@ from ..config import (
 from ..engine import run_config, preview_config_pipeline
 from ..sources import (
     crs_extent_warning,
+    large_file_reader_note,
     list_arcgis_rest_layers,
     list_gdal_layers,
     list_oapif_collections,
@@ -156,7 +157,10 @@ def inspect_source(req: InspectRequest) -> dict:
                                 crs_warning = crs_extent_warning(src.crs, *ext)
                         except Exception:
                             pass
-                    return {"ok": True, "columns": columns, "crs_warning": crs_warning}
+                    return {
+                        "ok": True, "columns": columns, "crs_warning": crs_warning,
+                        "reader_note": large_file_reader_note(src),
+                    }
             finally:
                 con.close()
     except Exception as e:

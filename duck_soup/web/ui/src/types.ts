@@ -205,6 +205,9 @@ export interface InspectResponse {
   // coordinate magnitudes (e.g. EPSG:4326 but values are clearly meters) — see
   // crs_extent_warning in sources.py. null/absent means nothing looked off.
   crs_warning?: string | null
+  // Set when the source is read via pyogrio instead of ST_Read (a file over 2 GiB on
+  // Windows) — see large_file_reader_note in sources.py. Informational, not an error.
+  reader_note?: string | null
   error?: string
 }
 
