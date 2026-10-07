@@ -54,36 +54,36 @@ or visually in a browser-based editor. duck soup runs it inside **DuckDB** with 
 
 ## A pipeline in 30 seconds
 
-This pipeline takes a set of points, finds which county each one falls in, and writes a
-tidy layer with coordinates and an ID:
+This pipeline takes a set of duck sightings, finds which pond each duck is paddling in, and
+writes a tidy layer with coordinates and an ID:
 
 ```yaml
-name: places_by_county
-output: output/places.gpkg
+name: ducks_by_pond
+output: output/ducks.gpkg
 pipelines:
-  - name: places
-    working_crs: EPSG:25833          # all joins happen in this (metric) CRS
+  - name: ducks
+    working_crs: EPSG:32631          # all joins happen in this (metric) CRS
     sources:
-      - {id: places, format: geojson, uri: data/places.geojson, crs: EPSG:4326}
-      - {id: county, format: gpkg,    uri: data/counties.gpkg, layer: county, crs: EPSG:25833}
-    base: places                     # features flow from here…
+      - {id: ducks, format: geojson, uri: data/ducks.geojson, crs: EPSG:4326}
+      - {id: ponds, format: gpkg,    uri: data/ponds.gpkg, layer: ponds, crs: EPSG:32631}
+    base: ducks                      # features flow from here…
     steps:
-      - type: spatial_join           # …and pick up the county they fall in
-        source: county
+      - type: spatial_join           # …and pick up the pond they're in
+        source: ponds
         predicate: intersects
-        fields: {county_name: name}
+        fields: {pond_name: name}
     mapping:                         # …and come out with exactly these columns
       - {to: name,      from: name}
-      - {to: county,    from: county_name}
+      - {to: pond,      from: pond_name}
       - {to: latitude,  func: lat}
       - {to: longitude, func: lon}
       - {to: id,        func: uuid}
     layers:
-      - {layer: places, crs: EPSG:25833}
+      - {layer: ducks, crs: EPSG:32631}
 ```
 
 ```bash
-duck-soup run places_by_county.yaml
+duck-soup run ducks_by_pond.yaml
 ```
 
 In the editor, the same pipeline is a handful of cards (sources, steps, a mapping grid,

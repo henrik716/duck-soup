@@ -101,7 +101,7 @@ has:
 
 - **id**: the new name.
 - **from**: the source (or another derived source) to start from.
-- **where**: an optional SQL filter, e.g. `facility_type = 'hospital'`.
+- **where**: an optional SQL filter, e.g. `vibe = 'chill'`.
 - **buffer distance**: optional, in working-CRS units.
 - **repair invalid geometry**: on by default.
 

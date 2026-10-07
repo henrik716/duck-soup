@@ -27,10 +27,10 @@ duck-soup run quickstart.yaml
 Runs every pipeline in the file and writes the output (GeoPackage or GeoParquet), logging each stage as it goes:
 
 ```text
-  source 'attractions' (geojson) -> "src_attractions"
+  source 'places' (geojson) -> "src_places"
   source 'districts' (geojson) -> "src_districts"
   step 1: spatial_join intersects districts (on_multiple=first)
-  writing output/quickstart.gpkg layer 'attractions' (EPSG:25833)
+  writing output/quickstart.gpkg layer 'places' (EPSG:32631)
 
 Wrote output/quickstart.gpkg
 ```

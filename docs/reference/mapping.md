@@ -9,18 +9,18 @@ and **exactly one** value source.
 
 ```yaml
 mapping:
-  - {to: name,        from: road_name}
-  - {to: dataset,     const: "OpenStreetMap"}
-  - {to: label,       expr: "road_name || ' (' || city || ')'"}
+  - {to: name,        from: duck_name}
+  - {to: dataset,     const: "Annual Duck Census"}
+  - {to: label,       expr: "duck_name || ' of ' || pond_name"}
   - {to: id,          func: uuid}
-  - {to: lanes,       from: lane_count, cast: INTEGER}
-  - to: road_class
+  - {to: ducklings,   from: duckling_count, cast: INTEGER}
+  - to: species
     codelist:
-      source: class_code
+      source: species_code
       cases:
-        - {match: "M", value: "Motorway"}
-        - {match: "A", value: "Primary road"}
-      default: "Other"
+        - {match: "MAL", value: "Mallard"}
+        - {match: "TEA", value: "Teal"}
+      default: "Mystery duck"
 ```
 
 An empty `mapping: []` writes every upstream column unchanged. The output geometry is always
@@ -117,7 +117,7 @@ layers:
   - layer: slim
     crs: EPSG:4326
     mapping:
-      - {to: name, from: road_name}
+      - {to: name, from: duck_name}
       - {to: id,   func: uuid}
 ```
 

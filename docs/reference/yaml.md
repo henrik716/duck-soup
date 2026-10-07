@@ -113,7 +113,7 @@ An `output` path ending in `.parquet` or `.geoparquet` is written as
 [GeoParquet](https://geoparquet.org/) instead of a GeoPackage:
 
 ```yaml
-output: output/transport.parquet
+output: output/pond_survey.parquet
 ```
 
 A GeoParquet file holds exactly one table, so the layout depends on how many layers the
@@ -121,8 +121,8 @@ config has **in total**, across all pipelines:
 
 | Layers | Written to |
 |---|---|
-| 1 | `output/transport.parquet` |
-| 2 or more | `output/transport/<layer>.parquet`, one file per layer |
+| 1 | `output/pond_survey.parquet` |
+| 2 or more | `output/pond_survey/<layer>.parquet`, one file per layer |
 
 - Each layer's `crs` is embedded in the file's GeoParquet metadata, so GIS tools read the
   coordinates in the right CRS.

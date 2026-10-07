@@ -35,11 +35,11 @@
 ### GeoPackage, GeoJSON, Shapefile, FlatGeobuf, GML
 
 ```yaml
-- id: roads
+- id: ponds
   format: gpkg
-  uri: data/roads.gpkg
-  layer: roads          # needed when the file holds several layers
-  crs: EPSG:25833
+  uri: data/ponds.gpkg
+  layer: ponds          # needed when the file holds several layers
+  crs: EPSG:32631
 ```
 
 Curved geometry types (CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface),
@@ -52,19 +52,19 @@ crashes on them there. This happens automatically.
 ### File Geodatabase
 
 ```yaml
-- id: parcels
+- id: nests
   format: fgdb
-  uri: C:/gis/cadastre.gdb   # the .gdb folder itself
-  layer: parcels
-  crs: EPSG:25832
+  uri: C:/pond-survey/nesting.gdb   # the .gdb folder itself
+  layer: nests
+  crs: EPSG:32631
 ```
 
 ### Parquet / GeoParquet
 
 ```yaml
-- id: buildings
+- id: duck_tracks
   format: parquet
-  uri: data/buildings.parquet
+  uri: data/duck_tracks.parquet   # GPS pings from tagged ducks
   crs: EPSG:4326
 ```
 
@@ -85,9 +85,9 @@ Tabular by default, so they're usable in attribute joins without any geometry. E
 `x_field`/`y_field` and `geom_field` are mutually exclusive, and need a `crs`:
 
 ```yaml
-- id: stations
+- id: sightings
   format: csv
-  uri: data/stations.csv
+  uri: data/duck_sightings.csv
   x_field: lon
   y_field: lat
   crs: EPSG:4326
@@ -98,11 +98,11 @@ Tabular by default, so they're usable in attribute joins without any geometry. E
 ### PostgreSQL / PostGIS
 
 ```yaml
-- id: municipalities
+- id: ponds
   format: postgres
-  uri: postgresql://user:pass@dbhost:5432/gis
-  layer: admin.municipalities     # schema.table; plain "table" means public.table
-  crs: EPSG:25833
+  uri: postgresql://user:pass@dbhost:5432/pond_registry
+  layer: wetlands.ponds           # schema.table; plain "table" means public.table
+  crs: EPSG:32631
 ```
 
 Read via DuckDB's `postgres` extension (`ATTACH … TYPE postgres`), not GDAL. Geometry comes back
@@ -117,11 +117,11 @@ as hex EWKB and is parsed automatically.
 ### WFS
 
 ```yaml
-- id: protected_areas
+- id: wetlands
   format: wfs
   uri: https://wfs.example.org/wfs
-  layer: ns:ProtectedSite        # feature type name
-  crs: EPSG:25833
+  layer: ns:ProtectedWetland     # feature type name
+  crs: EPSG:32631
 ```
 
 duck soup sends `GetFeature` (GML 3.2) with `SRSNAME` set to the source's `crs`, so you get
@@ -130,10 +130,10 @@ coordinates in the CRS you declared, never in silently swapped axes.
 ### OGC API - Features
 
 ```yaml
-- id: lakes
+- id: ponds
   format: oapif
   uri: https://api.example.org/features     # API root, not /items
-  layer: lakes                               # collection id
+  layer: ponds                               # collection id
   page_size: 2000
 ```
 
@@ -143,11 +143,11 @@ Always fetched as CRS84 (EPSG:4326), so leave `crs` out or set it to EPSG:4326. 
 ### ArcGIS REST
 
 ```yaml
-- id: hydrants
+- id: bread_stalls
   format: arcgis_rest
-  uri: https://services.example.com/arcgis/rest/services/Water/FeatureServer
+  uri: https://services.example.com/arcgis/rest/services/Parks/FeatureServer
   layer: "3"                 # sublayer id
-  where: "status = 'active'" # evaluated server-side, default 1=1
+  where: "status = 'open'"   # evaluated server-side, default 1=1
   page_size: 2000
 ```
 

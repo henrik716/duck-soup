@@ -33,11 +33,11 @@ Copies attributes from features in another source that spatially match each base
 
 ```yaml
 - type: spatial_join
-  source: county
+  source: ponds
   predicate: intersects        # intersects | contains | within
   match: first                 # first | all
   on_multiple: largest_overlap # first | largest_overlap (only with match: first)
-  fields: {county_name: name, county_no: number}
+  fields: {pond_name: name, pond_vibe: vibe}
 ```
 
 | Key | Default | Meaning |
@@ -49,7 +49,8 @@ Copies attributes from features in another source that spatially match each base
 | `fields` | `{}` | Columns to copy. |
 
 !!! warning "`match: first` hides multiple matches"
-    A feature that straddles two polygons silently gets only one of them. Use
+    A duck paddling exactly on the boundary between two overlapping ponds silently gets only
+    one of them. Use
     `on_multiple: largest_overlap` for "which one is it mostly in", or `match: all` to see
     every match.
 
@@ -68,7 +69,7 @@ A left join on a column value, like a VLOOKUP.
 | Key | Meaning |
 |---|---|
 | `source` | The source to look values up in (spatial or tabular). |
-| `left` | A SQL expression evaluated on the current row: usually just a column name, but it can be `upper(code)` or a quoted literal like `'Embassies'`. |
+| `left` | A SQL expression evaluated on the current row: usually just a column name, but it can be `upper(code)` or a quoted literal like `'Mallard'`. |
 | `right` | Column on the join source that must equal `left`. |
 | `fields` | Columns to copy. |
 
@@ -81,10 +82,10 @@ Copies attributes from the closest feature in another source, whether or not the
 
 ```yaml
 - type: nearest_neighbor
-  source: stations
-  max_distance: 5000        # optional search radius (working-CRS units)
-  distance_field: dist_m    # optional output column with the distance
-  fields: {nearest_station: name}
+  source: bread_stalls
+  max_distance: 500         # optional search radius (working-CRS units)
+  distance_field: waddle_m  # optional output column with the distance
+  fields: {nearest_bread: name}
 ```
 
 Without `max_distance`, every base feature is compared with every source feature, which is
@@ -96,7 +97,7 @@ Features with nothing in range get NULL fields. Needs a projected working CRS wh
 
 ```yaml
 - type: buffer
-  distance: 250     # working-CRS units; negative shrinks polygons
+  distance: 50      # working-CRS units; negative shrinks polygons
 ```
 
 Requires a projected working CRS.
@@ -115,7 +116,7 @@ Keeps only the part of each feature that overlaps a mask feature.
 
 ```yaml
 - type: clip
-  source: municipality_boundary
+  source: nature_reserve
   predicate: intersects
 ```
 
@@ -128,7 +129,7 @@ Removes the part of each feature that overlaps the mask source.
 
 ```yaml
 - type: erase
-  source: water
+  source: reed_beds
   predicate: intersects
 ```
 
@@ -141,7 +142,7 @@ Merges geometries that share the same values in the `by` columns.
 
 ```yaml
 - type: dissolve
-  by: [county, land_use]   # omit or [] to dissolve everything into one feature
+  by: [pond, species]   # omit or [] to dissolve everything into one feature
 ```
 
 **Every column not listed in `by` is dropped.**
@@ -152,8 +153,8 @@ One output row per overlapping (base × source) pair, with the intersection as t
 
 ```yaml
 - type: intersect_overlay
-  source: soil_types
-  fields: {soil: class}
+  source: feeding_zones
+  fields: {zone: name}
 ```
 
 Base features that overlap nothing are dropped, and pairs that only touch are ignored. Row
@@ -163,7 +164,7 @@ count can grow a lot when there are many overlaps.
 
 ```yaml
 - type: filter
-  where: "county IS NOT NULL AND population > 1000"
+  where: "pond IS NOT NULL AND bread_crumbs > 1000"
 ```
 
 Drops rows where the SQL condition is false (or NULL).
@@ -174,7 +175,7 @@ Appends another source's rows (`UNION ALL BY NAME`).
 
 ```yaml
 - type: merge
-  source: extra_points
+  source: late_arrivals   # ducks that flew in after the census
 ```
 
 Columns are matched by name. A column that exists on only one side is NULL on the other.
@@ -186,10 +187,10 @@ Names the chain's current state without changing it.
 
 ```yaml
 - type: snapshot
-  id: after_join
+  id: after_pond_join
 ```
 
-Later steps can use `after_join` as a `source:` (join back against processed rows) or as a
+Later steps can use `after_pond_join` as a `source:` (join back against processed rows) or as a
 `branch:` (keep transforming that copy). With `branch:` set on the snapshot itself, it copies
 that branch instead of the main chain.
 
@@ -200,9 +201,9 @@ that branch instead of the main chain.
 Any step can carry `branch: <snapshot id>` to operate on that branch instead of the main chain:
 
 ```yaml
-- {type: snapshot, id: zones}
-- {type: buffer, distance: 5000, branch: zones}   # only the branch is buffered
-- {type: spatial_join, source: zones, predicate: within, match: all, fields: {near: name}}
+- {type: snapshot, id: personal_space}
+- {type: buffer, distance: 50, branch: personal_space}   # only the branch is buffered
+- {type: spatial_join, source: personal_space, predicate: within, match: all, fields: {flockmate: name}}
 ```
 
 The branch must be created by a snapshot **earlier** in the list. Output layers are always

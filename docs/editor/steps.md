@@ -32,8 +32,8 @@ Click **add step** (at the top or bottom of the list) to open the step gallery:
 ![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-light.png#only-light){ .screenshot loading=lazy }
 ![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
-The header shows the step's type and a short summary, such as `→ districts` for a join source,
-`(500m)` for a buffer, or `@zones` when the step runs on a branch. Hover the type to see what the step does. The header buttons are:
+The header shows the step's type and a short summary, such as `→ ponds` for a join source,
+`(50m)` for a buffer, or `@personal_space` when the step runs on a branch. Hover the type to see what the step does. The header buttons are:
 
 - :material-eye: **Preview up to this step** shows the rows exactly as they are after this
   step, on the map and in the table, before the mapping is applied. The card is highlighted
@@ -49,12 +49,12 @@ The body depends on the step type:
 - **predicate**: `intersects`, `contains` or `within` (spatial join, clip, erase).
 - **match**: `first` (one row per base feature) or `all` (one row per match). Spatial join only.
 - **left / right**: for an attribute join, the upstream column (or a quoted literal such as
-  `'Embassies'`) and the column on the join source. A live check under **left** confirms it
+  `'Mallard'`) and the column on the join source. A live check under **left** confirms it
   evaluates against real data.
 - **pulled fields**: the `source column → output name` pairs this step copies in. **+ field**
   adds one, and **+ all columns** pulls every column of the join source not already pulled. A
   step with no pulled fields still matches, but copies nothing.
-- **where**: for a filter, a SQL boolean such as `county IS NOT NULL`, checked live against
+- **where**: for a filter, a SQL boolean such as `pond IS NOT NULL`, checked live against
   sample data.
 - **distance**, **max distance**, **distance field**: in working-CRS units.
 - **group by columns**: for dissolve. Leave it empty to dissolve everything into one feature.

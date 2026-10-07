@@ -15,12 +15,12 @@ output. Each layer card has:
 ![The output layers tab](../assets/screenshots/output-layers-dark.png#only-dark){ .screenshot loading=lazy }
 
 All layers of a pipeline get the same rows, so filters are how you split them. For example, a
-`stations` layer with no filter and a `stations_outside_county` layer with
-`county IS NULL`.
+`ducks` layer with no filter and a `ducks_off_pond` layer with `pond IS NULL` (ducks
+that wandered off for a waddle).
 
 !!! note "Filters use upstream column names"
     A layer filter runs **before** the mapping, so it refers to the column names coming out of
-    the last step (`county`, `s_pond_type`), not the renamed output columns.
+    the last step (`pond`, `s_pond_type`), not the renamed output columns.
 
 !!! info "Per-layer mapping is YAML-only"
     In YAML a layer can carry its own `mapping:` that replaces the pipeline mapping for that

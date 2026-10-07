@@ -17,7 +17,7 @@ Open <http://localhost:8000>.
 
 The container mounts your current directory as `/data`, which is also its working
 directory. Keep your `pipelines/`, `data/` and `output/` folders there and the editor will
-read and write them directly. Relative paths in a pipeline (`data/roads.gpkg`) resolve against
+read and write them directly. Relative paths in a pipeline (`data/ponds.gpkg`) resolve against
 that folder.
 
 To upgrade: `docker pull ghcr.io/henrik716/duck-soup`.
@@ -65,7 +65,7 @@ Saved configs go in `<project folder>/pipelines/`, and the editor's file browser
 project folder.
 
 !!! tip "Start the server from your project folder"
-    Relative paths in a pipeline (`data/roads.gpkg`, `output/result.gpkg`) are resolved
+    Relative paths in a pipeline (`data/ponds.gpkg`, `output/ducks.gpkg`) are resolved
     against the folder the server was **started from**. When you run outside Docker, start
     `duck-soup serve` from the same folder you set as `DUCK_SOUP_ROOT`, so relative paths
     and the file browser agree:
@@ -73,14 +73,14 @@ project folder.
     === "macOS / Linux"
 
         ```bash
-        cd ~/gis-project
+        cd ~/pond-survey
         DUCK_SOUP_ROOT=$PWD duck-soup serve
         ```
 
     === "Windows (PowerShell)"
 
         ```powershell
-        cd C:\gis-project
+        cd C:\pond-survey
         $env:DUCK_SOUP_ROOT = (Get-Location).Path
         duck-soup serve
         ```

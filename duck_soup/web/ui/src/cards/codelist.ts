@@ -13,7 +13,7 @@ function caseRow(cr: Partial<CodeCase> = {}, syncFn: () => void): HTMLElement {
   const pattern = cr.match ?? cr.like ?? cr.regex ?? ''
   r.innerHTML = `
     ${comboField('data-ckind', kind, ['match', 'like', 'regex', { value: 'is_blank', label: 'is blank/null' }])}
-    <input data-cpattern placeholder="pattern" value="${esc(pattern)}" style="display:${kind === 'is_blank' ? 'none' : ''}">
+    <input data-cpattern placeholder="pattern" value="${esc(pattern)}" style="visibility:${kind === 'is_blank' ? 'hidden' : ''}">
     <input data-cvalue placeholder="value" value="${esc(cr.value)}">
     <button class="mini ghost" data-cup aria-label="Move this rule earlier" title="Move up — earlier rules win"><i data-lucide="arrow-up" style="width:11px;height:11px"></i></button>
     <button class="mini ghost" data-cdown aria-label="Move this rule later" title="Move down"><i data-lucide="arrow-down" style="width:11px;height:11px"></i></button>
@@ -33,7 +33,9 @@ function caseRow(cr: Partial<CodeCase> = {}, syncFn: () => void): HTMLElement {
   const kindInput = r.querySelector<HTMLInputElement>('[data-ckind]')!
   const patternInput = r.querySelector<HTMLInputElement>('[data-cpattern]')!
   kindInput.addEventListener('input', () => {
-    patternInput.style.display = kindInput.value === 'is_blank' ? 'none' : ''
+    // visibility, not display: the row is a fixed-column grid, and a display:none cell would
+    // shift the value input and buttons one column left.
+    patternInput.style.visibility = kindInput.value === 'is_blank' ? 'hidden' : ''
   })
   r.querySelectorAll('select,input').forEach(i => i.addEventListener('input', syncFn))
   wireCombos(r)

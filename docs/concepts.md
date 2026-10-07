@@ -28,13 +28,13 @@ path ends in `.parquet`) and holds one or more
 **pipelines**:
 
 ```yaml
-name: transport
-output: output/transport.gpkg   # every pipeline writes into this one file
-overwrite: true                 # delete the file before writing (default)
+name: pond_survey
+output: output/pond_survey.gpkg  # every pipeline writes into this one file
+overwrite: true                  # delete the file before writing (default)
 pipelines:
-  - name: stations
+  - name: ducks
     # sources / base / steps / mapping / layers …
-  - name: bridges
+  - name: nests
     # … a completely independent chain
 ```
 
@@ -49,11 +49,11 @@ path, folder, URL or connection string) and usually a `layer` and `crs`:
 
 ```yaml
 sources:
-  - id: roads
+  - id: ponds
     format: gpkg
-    uri: data/roads.gpkg
-    layer: roads
-    crs: EPSG:25833
+    uri: data/ponds.gpkg
+    layer: ponds
+    crs: EPSG:32631
 ```
 
 Every source is read once. Invalid geometry is repaired on load (`make_valid`, on by default)
@@ -91,9 +91,9 @@ one of these:
 
 | kind | example | meaning |
 |---|---|---|
-| `from` | `{to: name, from: road_name}` | copy a column |
-| `const` | `{to: source, const: "OpenStreetMap"}` | a fixed value |
-| `expr` | `{to: label, expr: "upper(road_name)"}` | any DuckDB SQL expression |
+| `from` | `{to: name, from: duck_name}` | copy a column |
+| `const` | `{to: source, const: "Annual Duck Census"}` | a fixed value |
+| `expr` | `{to: label, expr: "upper(duck_name)"}` | any DuckDB SQL expression |
 | `func` | `{to: id, func: uuid}` | a built-in: `uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`, `length` |
 | `codelist` | see [Codelists](reference/mapping.md#codelists) | translate codes via rules or a CSV |
 
@@ -112,8 +112,8 @@ rows, and each layer can:
 
 ```yaml
 layers:
-  - {layer: stations,          crs: EPSG:25833}
-  - {layer: stations_unmatched, crs: EPSG:25833, filter: "county IS NULL"}
+  - {layer: ducks,           crs: EPSG:32631}
+  - {layer: ducks_off_pond,  crs: EPSG:32631, filter: "pond IS NULL"}
 ```
 
 ## The working CRS
@@ -135,8 +135,8 @@ Under the hood, a pipeline compiles to a chain of DuckDB SQL views:
 
 ```mermaid
 flowchart LR
-    A["src_attractions<br/>(read + reproject)"] --> S0[step_0<br/>= base]
-    B["src_districts"] --> S1
+    A["src_ducks<br/>(read + reproject)"] --> S0[step_0<br/>= base]
+    B["src_ponds"] --> S1
     S0 --> S1[step_1<br/>spatial_join]
     S1 --> S2[step_2<br/>filter]
     S2 --> M[mapped<br/>mapping applied]
@@ -156,10 +156,10 @@ like any other source:
 
 ```yaml
 derived_sources:
-  - id: big_lakes
-    from: lakes
-    where: "area_km2 > 10"
-    buffer: 100            # optional, working-CRS units
+  - id: deep_ponds
+    from: ponds
+    where: "depth_m > 2"   # only the ponds deep enough for diving ducks
+    buffer: 10             # optional, working-CRS units: include the reedy edge
 ```
 
 **Snapshots** name the chain's state partway through, so a later step can join against
@@ -167,16 +167,19 @@ the processed rows (`source: my_snapshot`). Steps can also keep working on that 
 (`branch: my_snapshot`) while the main chain carries on unchanged. Output layers are always
 written from the **main** chain, so a branch is only useful as the `source:` of a later step.
 
-This example finds, for every hospital, the other hospitals within 5 km:
+This example finds, for every duck, the other ducks within 50 m (its flockmates):
 
 ```yaml
-base: hospitals
+base: ducks
 steps:
-  - {type: snapshot, id: zones}                        # copy the current rows to a branch
-  - {type: buffer, distance: 5000, branch: zones}      # buffer the copy, not the main chain
-  - type: spatial_join                                 # main chain: still hospital points
-    source: zones
+  - {type: snapshot, id: personal_space}                  # copy the current rows to a branch
+  - {type: buffer, distance: 50, branch: personal_space}  # buffer the copy, not the main chain
+  - type: spatial_join                                    # main chain: still duck points
+    source: personal_space
     predicate: within
-    match: all                                         # one row per zone the hospital is in
-    fields: {nearby_hospital: name}                    # (each hospital also matches its own zone)
+    match: all                                            # one row per circle the duck is in
+    fields: {flockmate: name}                             # (each duck also matches its own circle)
 ```
+
+The [snapshot tutorial](tutorials/steps.md#snapshot) walks through a similar example step by
+step.

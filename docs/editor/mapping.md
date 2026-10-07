@@ -20,9 +20,9 @@ per output column:
 
 | output column | value source | value | cast | |
 |---|---|---|---|---|
-| `name` | `from` | `road_name` | | 🗑 |
+| `name` | `from` | `duck_name` | | 🗑 |
 | `id` | `func` | `uuid` | | 🗑 |
-| `pop` | `from` | `population` | `INTEGER` | 🗑 |
+| `crumbs` | `from` | `bread_crumbs` | `INTEGER` | 🗑 |
 
 ## Building the mapping quickly
 
@@ -37,9 +37,9 @@ per output column:
 
 | value source | value field | example |
 |---|---|---|
-| `from` | pick an upstream column | `road_name` |
-| `const` | type a literal | `OpenStreetMap` |
-| `expr` | a SQL expression, edited in the expression builder | `upper(road_name)` |
+| `from` | pick an upstream column | `duck_name` |
+| `const` | type a literal | `Annual Duck Census` |
+| `expr` | a SQL expression, edited in the expression builder | `upper(duck_name)` |
 | `func` | pick a built-in | `uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`, `length` |
 | `codelist` | opens the codelist panel | see below |
 
