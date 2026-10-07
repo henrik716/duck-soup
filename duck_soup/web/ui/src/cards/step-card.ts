@@ -154,7 +154,7 @@ function buildStepCardMarkup(kind: Step['type'], bodyHtml: string): string {
       <span class="tag" title="${STEP_HINTS[kind]}"><i data-lucide="${STEP_ICONS[kind]}" style="width:12px;height:12px;margin-right:2px"></i>${STEP_LABELS[kind]}</span>
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="spacer"></span>
-      <button class="mini ghost data-step-preview" title="Preview up to this step" aria-label="Preview the data up to and including this step"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
+      <button class="mini ghost data-step-preview" title="Preview the result of this step" aria-label="Preview the data after this step and all steps before it"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
       <button class="mini ghost" data-up title="Move up (Alt+Up)" aria-label="Move this step earlier"><i data-lucide="arrow-up" style="width:12px;height:12px"></i></button>
       <button class="mini ghost" data-down title="Move down (Alt+Down)" aria-label="Move this step later"><i data-lucide="arrow-down" style="width:12px;height:12px"></i></button>
       <button class="mini danger ghost" data-del aria-label="Remove this step"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>

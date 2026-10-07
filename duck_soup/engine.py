@@ -500,7 +500,14 @@ class Engine:
         )
 
     def _build_step_views(self, con: duckdb.DuckDBPyConnection, prev: str, limit_steps: int | None = None) -> str:
+        """Build the step views; returns the main chain's final view.
+
+        With `limit_steps` (previewing up to a given step) it instead returns the view of
+        the branch that step ran on, so previewing a step on a snapshot branch (e.g. a buffer
+        of the snapshot) shows that step's output rather than the untouched main chain.
+        """
         chains: dict[str, str] = {self._MAIN_BRANCH: prev}
+        last_branch = self._MAIN_BRANCH
 
         for i, step in enumerate(self.p.steps, start=1):
             if limit_steps is not None and i > limit_steps:
@@ -512,6 +519,7 @@ class Engine:
                 chains[step.id] = chains[source_branch]
                 self._sync_branch_view(con, chains, step.id)
                 self.log(f"step {i}: snapshot '{step.id}' <- {source_branch}")
+                last_branch = step.id
                 continue
 
             target = step.branch or self._MAIN_BRANCH
@@ -543,8 +551,9 @@ class Engine:
             con.execute(sql)
             chains[target] = new_view
             self._sync_branch_view(con, chains, target)
+            last_branch = target
 
-        return chains[self._MAIN_BRANCH]
+        return chains[last_branch if limit_steps is not None else self._MAIN_BRANCH]
 
     # -- mapping ------------------------------------------------------------
     def _map_expr(self, item: MapItem) -> str:

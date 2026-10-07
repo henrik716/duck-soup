@@ -393,7 +393,7 @@ async function runPreview(): Promise<void> {
   const pipelineIdx = Math.min(activePreview.pipelineIdx ?? 0, cfg.pipelines.length - 1)
   const preview_until_step = activePreview.type === 'step' ? activePreview.stepIdx : undefined
 
-  // The buffer/nearest-neighbour radius overlay needs the step being previewed.
+  // The nearest-neighbour search-radius overlay needs the step being previewed.
   let activeStep: unknown = null
   if (activePreview.type === 'step' && (activePreview.stepIdx ?? 0) > 0) {
     activeStep = cfg.pipelines[pipelineIdx]?.steps?.[(activePreview.stepIdx as number) - 1] ?? null

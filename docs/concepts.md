@@ -91,9 +91,9 @@ one of these:
 
 | kind | example | meaning |
 |---|---|---|
-| `from` | `{to: name, from: navn}` | copy a column |
-| `const` | `{to: source, const: "NVDB"}` | a fixed value |
-| `expr` | `{to: label, expr: "upper(navn)"}` | any DuckDB SQL expression |
+| `from` | `{to: name, from: road_name}` | copy a column |
+| `const` | `{to: source, const: "OpenStreetMap"}` | a fixed value |
+| `expr` | `{to: label, expr: "upper(road_name)"}` | any DuckDB SQL expression |
 | `func` | `{to: id, func: uuid}` | a built-in: `uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`, `length` |
 | `codelist` | see [Codelists](reference/mapping.md#codelists) | translate codes via rules or a CSV |
 
@@ -125,7 +125,7 @@ reprojected into it when read, and each layer is reprojected out of it when writ
 - Buffer distances, `max_distance`, `distance_field`, and the `area`/`length` functions are all
   in working-CRS units. duck soup **refuses to run** these in a geographic (degree) CRS such
   as EPSG:4326, because "buffer 500" would mean 500 degrees. Pick a projected CRS in metres
-  (for example EPSG:25833 for Norway).
+  (for example the UTM zone covering your data, such as EPSG:32633 for UTM zone 33N).
 - `lon`, `lat` and `mgrs` are always computed in EPSG:4326 from the centroid, whatever the
   working CRS is.
 
@@ -135,8 +135,8 @@ Under the hood, a pipeline compiles to a chain of DuckDB SQL views:
 
 ```mermaid
 flowchart LR
-    A["src_places<br/>(read + reproject)"] --> S0[step_0<br/>= base]
-    B["src_fylke"] --> S1
+    A["src_attractions<br/>(read + reproject)"] --> S0[step_0<br/>= base]
+    B["src_districts"] --> S1
     S0 --> S1[step_1<br/>spatial_join]
     S1 --> S2[step_2<br/>filter]
     S2 --> M[mapped<br/>mapping applied]

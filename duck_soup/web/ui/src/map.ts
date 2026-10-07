@@ -227,11 +227,16 @@ function wireInteractions(): void {
     map!.on('mouseenter', id, () => { map!.getCanvas().style.cursor = 'pointer' })
     map!.on('mouseleave', id, () => { map!.getCanvas().style.cursor = '' })
 
+    // Nearest-neighbor search radius around a hovered point, which the preview data itself
+    // doesn't show. Not drawn for buffer steps (the preview shows the real buffered
+    // geometry), nor around lines/polygons, whose search area isn't a circle.
     map!.on('mouseenter', id, (e: maplibregl.MapLayerMouseEvent) => {
-      const radiusVal = lastActiveStep?.max_distance || lastActiveStep?.distance
-      const radiusNum = Number(radiusVal)
-      if (!radiusVal || isNaN(radiusNum) || radiusNum <= 0) return
-      const poly = circlePolygon([e.lngLat.lng, e.lngLat.lat], radiusNum)
+      if (lastActiveStep?.type !== 'nearest_neighbor') return
+      const radiusNum = Number(lastActiveStep.max_distance)
+      if (!radiusNum || isNaN(radiusNum) || radiusNum <= 0) return
+      const geom = e.features?.[0]?.geometry
+      if (geom?.type !== 'Point') return
+      const poly = circlePolygon(geom.coordinates as [number, number], radiusNum)
       const src = map!.getSource(HOVER_SOURCE_ID) as maplibregl.GeoJSONSource
       src?.setData({ type: 'FeatureCollection', features: [poly] })
     })

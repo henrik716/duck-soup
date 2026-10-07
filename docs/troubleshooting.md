@@ -38,8 +38,9 @@
 ??? question "\"working CRS … is in degrees\" error"
     You're buffering, measuring distances or computing `area`/`length` in a geographic CRS
     (like EPSG:4326, often inherited from the base source). Set `working_crs` to a projected
-    CRS in metres, e.g. EPSG:25833 (Norway), EPSG:25832, EPSG:3857 (approximate), or your
-    national UTM zone.
+    CRS in metres: the UTM zone covering your data (EPSG:326xx in the northern hemisphere,
+    EPSG:327xx in the southern, e.g. EPSG:32633), your national grid, or EPSG:3857 as a
+    rough fallback (its distances are only accurate near the equator).
 
 ??? question "My output has more rows than the base source"
     A step is fanning out: `spatial_join` with `match: all`, `intersect_overlay`, or `merge`.

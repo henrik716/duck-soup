@@ -19,7 +19,7 @@ per output column:
 
 | output column | value source | value | cast | |
 |---|---|---|---|---|
-| `name` | `from` | `navn` | | 🗑 |
+| `name` | `from` | `road_name` | | 🗑 |
 | `id` | `func` | `uuid` | | 🗑 |
 | `pop` | `from` | `population` | `INTEGER` | 🗑 |
 
@@ -36,9 +36,9 @@ per output column:
 
 | value source | value field | example |
 |---|---|---|
-| `from` | pick an upstream column | `navn` |
-| `const` | type a literal | `NVDB` |
-| `expr` | a SQL expression, edited in the expression builder | `upper(navn)` |
+| `from` | pick an upstream column | `road_name` |
+| `const` | type a literal | `OpenStreetMap` |
+| `expr` | a SQL expression, edited in the expression builder | `upper(road_name)` |
 | `func` | pick a built-in | `uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`, `length` |
 | `codelist` | opens the codelist panel | see below |
 

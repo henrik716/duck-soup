@@ -31,7 +31,7 @@ Click **add step** (at the top or bottom of the list) to open the step gallery:
 ![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-light.png#only-light){ .screenshot loading=lazy }
 ![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
-The header shows the step's type and a short summary, such as `→ fylke` for a join source,
+The header shows the step's type and a short summary, such as `→ districts` for a join source,
 `(500m)` for a buffer, or `@zones` when the step runs on a branch. Hover the type to see what the step does. The header buttons are:
 
 - :material-eye: **Preview up to this step** shows the rows exactly as they are after this

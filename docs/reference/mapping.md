@@ -5,17 +5,17 @@ and **exactly one** value source.
 
 ```yaml
 mapping:
-  - {to: name,        from: navn}
-  - {to: dataset,     const: "NVDB"}
-  - {to: label,       expr: "navn || ' (' || kommune || ')'"}
+  - {to: name,        from: road_name}
+  - {to: dataset,     const: "OpenStreetMap"}
+  - {to: label,       expr: "road_name || ' (' || city || ')'"}
   - {to: id,          func: uuid}
-  - {to: population,  from: pop, cast: INTEGER}
+  - {to: lanes,       from: lane_count, cast: INTEGER}
   - to: road_class
     codelist:
-      source: vegkategori
+      source: class_code
       cases:
-        - {match: "E", value: "European route"}
-        - {match: "R", value: "National road"}
+        - {match: "M", value: "Motorway"}
+        - {match: "A", value: "Primary road"}
       default: "Other"
 ```
 
@@ -113,7 +113,7 @@ layers:
   - layer: slim
     crs: EPSG:4326
     mapping:
-      - {to: name, from: navn}
+      - {to: name, from: road_name}
       - {to: id,   func: uuid}
 ```
 

@@ -21,18 +21,18 @@ On failure it prints the validation error, including the path to the bad field
 ## `duck-soup run`
 
 ```bash
-duck-soup run pipelines/my_pipeline.yaml
+duck-soup run quickstart.yaml
 ```
 
 Runs every pipeline in the file and writes the output (GeoPackage or GeoParquet), logging each stage as it goes:
 
 ```text
-  source 'places' (geojson) -> "src_places"
-  source 'fylke' (geojson) -> "src_fylke"
-  step 1: spatial_join intersects fylke (on_multiple=first)
-  writing output/test.gpkg layer 'output' (EPSG:25833)
+  source 'attractions' (geojson) -> "src_attractions"
+  source 'districts' (geojson) -> "src_districts"
+  step 1: spatial_join intersects districts (on_multiple=first)
+  writing output/quickstart.gpkg layer 'attractions' (EPSG:25833)
 
-Wrote output/test.gpkg
+Wrote output/quickstart.gpkg
 ```
 
 Relative paths in the YAML resolve against the directory you run the command from.

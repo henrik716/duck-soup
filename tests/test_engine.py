@@ -321,3 +321,23 @@ def test_lon_lat_use_centroid_taken_in_working_crs(tmp_path):
         "ST_Point(500000, 7150000), 'EPSG:25833', 'EPSG:4326', always_xy := true) AS c)"
     ).fetchone()
     assert (row["lon"], row["lat"]) == pytest.approx(expected)
+
+
+def test_preview_of_branch_step_shows_that_branch(tmp_path):
+    # A step on a snapshot branch (here: buffer the snapshot) leaves the main chain
+    # untouched; previewing that step has to show the branch, or edits to it never
+    # visibly change the preview.
+    import json
+
+    cfg = _config(
+        tmp_path, [("p", _point(0, 0))],
+        [{"type": "snapshot", "id": "snap"}, {"type": "buffer", "branch": "snap", "distance": 10}],
+        [], working_crs="EPSG:25833",
+    )
+
+    def geom_types(**kw):
+        return {json.loads(r["__geojson"])["type"] for r in preview_config_pipeline(cfg, limit=10, **kw)}
+
+    assert geom_types(preview_until_step=2) == {"Polygon"}  # the buffered branch
+    assert geom_types(preview_until_step=1) == {"Point"}  # the snapshot itself
+    assert geom_types() == {"Point"}  # the full pipeline output is still the main chain
