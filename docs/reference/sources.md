@@ -112,6 +112,10 @@ takes seconds. The copy is rebuilt when the file changes.
   crs: EPSG:4326
 ```
 
+A value that can't be parsed (a non-numeric coordinate, or malformed WKT, WKB or GeoJSON) gives
+that row an empty geometry instead of failing the read. Such a row never matches a spatial step,
+so it ends up in that step's rejects layer if it has one.
+
 ### JSON
 
 For plain JSON records, such as an API response, rather than GeoJSON. A GeoJSON

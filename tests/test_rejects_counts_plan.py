@@ -116,6 +116,35 @@ def test_spatial_join_rejects_take_unmatched_rows_out_of_the_chain(tmp_path, mat
     assert "zone" not in _layer_columns(out, "no_zone")
 
 
+def test_unparseable_geometry_text_goes_to_spatial_join_rejects(tmp_path):
+    # A malformed WKT value gives the row a NULL geometry instead of failing the run; it
+    # can't match a spatial join, so it ends up among the step's rejects. The column is named
+    # WKT, which GDAL's CSV driver turns into a geometry field of its own (see
+    # _apply_tabular_geometry): the output still gets exactly one geometry column.
+    csv = tmp_path / "pts.csv"
+    csv.write_text("name,WKT\np1,POINT(0.5 0.5)\nbroken,POINT(1 x\n", encoding="utf-8")
+    cfg = load_config_dict({
+        "name": "t", "output": str(tmp_path / "out.gpkg"),
+        "pipelines": [{
+            "name": "p", "working_crs": "EPSG:25833", "base": "base",
+            "sources": [
+                {"id": "base", "format": "csv", "uri": str(csv).replace("\\", "/"),
+                 "geom_field": "WKT", "crs": "EPSG:25833"},
+                {"id": "zones", "format": "geojson", "uri": _geojson(tmp_path / "zones.geojson", _ZONES),
+                 "crs": "EPSG:25833"},
+            ],
+            "steps": [{
+                "type": "spatial_join", "source": "zones", "fields": {"zone": "zone"}, "rejects": "no_zone",
+            }],
+            "mapping": [], "layers": [{"layer": "out", "crs": "EPSG:25833"}],
+        }],
+    })
+    out = Path(run_config(cfg))
+
+    assert _layer_rows(out, "out", "name, zone") == [("p1", "A")]
+    assert _layer_rows(out, "no_zone", "name") == [("broken",)]
+
+
 def test_join_without_fields_still_splits_on_rejects(tmp_path):
     cfg = _cfg(tmp_path, [{"type": "spatial_join", "source": "zones", "rejects": "no_zone"}])
     assert [r["name"] for r in preview_config_pipeline(cfg, limit=10)] == ["p1", "p2", "p4"]

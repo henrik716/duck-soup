@@ -1114,29 +1114,40 @@ def _apply_tabular_geometry(
         return f"TRY_CAST({c} AS DOUBLE)"
 
     if src.x_field and src.y_field:
-        x, y = _sql_ident(src.x_field), _sql_ident(src.y_field)
         geom = f"ST_Point({_number(src.x_field)}, {_number(src.y_field)})"
-        exclude = f"{x}, {y}"
+        consumed = [src.x_field, src.y_field]
     elif src.geom_field:
         g = _sql_ident(src.geom_field)
         gtype = types.get(src.geom_field, "VARCHAR")
         if gtype == "JSON" or gtype.startswith(("STRUCT", "MAP")):
             # A GeoJSON geometry object nested in the record (json sources).
-            geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE ST_GeomFromGeoJSON(to_json({g})) END"
+            geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE TRY(ST_GeomFromGeoJSON(to_json({g}))) END"
         else:
             # Hex WKB (e.g. PostGIS's extended WKB), GeoJSON text and WKT look nothing alike,
             # so branch on the text: pure hex digits → WKB, a leading `{` → GeoJSON, else WKT
             # — the same distinctions GDAL's own GEOM_POSSIBLE_NAMES auto-detection makes.
+            # Each parse is wrapped in TRY: a malformed value gives the row a NULL geometry
+            # instead of failing the whole read, like a non-numeric x/y does above.
             geom = (
                 f"CASE WHEN {g} IS NULL OR trim({g}) = '' THEN NULL "
-                f"WHEN regexp_matches({g}, '^[0-9A-Fa-f]+$') THEN ST_GeomFromHEXWKB({g}) "
-                f"WHEN starts_with(ltrim({g}), '{{') THEN ST_GeomFromGeoJSON({g}) "
-                f"ELSE CAST({g} AS GEOMETRY) END"
+                f"WHEN regexp_matches({g}, '^[0-9A-Fa-f]+$') THEN TRY(ST_GeomFromHEXWKB({g})) "
+                f"WHEN starts_with(ltrim({g}), '{{') THEN TRY(ST_GeomFromGeoJSON({g})) "
+                f"ELSE TRY(CAST({g} AS GEOMETRY)) END"
             )
-        exclude = g
+        consumed = [src.geom_field]
     else:
         return base
-    return f"(SELECT * EXCLUDE ({exclude}), {geom} AS geom FROM {base})"
+    # The source columns are consumed into geom, and so is any `geom` the read already has:
+    # GDAL's CSV driver turns a column named WKT (any case) into a geometry field of its own,
+    # named geom, which would otherwise collide with this one. COLUMNS(lambda) rather than
+    # EXCLUDE, since that `geom` may not exist; the inner __geom keeps the filtered column
+    # list from coming out empty (a file holding nothing but its geometry column).
+    drop = ", ".join(_sql_str(c.lower()) for c in [*consumed, "geom"])
+    return (
+        f"(SELECT * EXCLUDE (__geom), __geom AS geom FROM ("
+        f"SELECT COLUMNS(lambda c: lower(c) NOT IN ({drop})) FROM ("
+        f"SELECT *, {geom} AS __geom FROM {base})))"
+    )
 
 
 def _tabular_open_extra(src: Source) -> str:
@@ -1393,7 +1404,7 @@ def read_expr(
         # The postgres extension doesn't recognize PostGIS's `geometry` type, so it comes
         # through as VARCHAR hex-EWKB text (PostGIS's default text output for that column) —
         # ST_GeomFromHEXWKB parses that directly, same as the xlsx/csv geom_field branch below.
-        geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE ST_GeomFromHEXWKB({g}) END"
+        geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE TRY(ST_GeomFromHEXWKB({g})) END"
         return f"(SELECT * EXCLUDE ({g}), {geom} AS geom FROM {base})"
 
     if fmt == "json":

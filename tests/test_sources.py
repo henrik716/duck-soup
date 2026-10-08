@@ -113,6 +113,40 @@ def test_read_expr_csv_geom_field_builds_geometry_from_wkt(spatial_con):
     assert ("Operahuset", "POINT (10.7527 59.9075)") in rows
 
 
+def test_read_expr_csv_geom_field_unparseable_values_become_null(spatial_con, tmp_path):
+    # A malformed WKT/WKB value doesn't fail the read: that row just gets a NULL geometry.
+    csv = tmp_path / "bad.csv"
+    csv.write_text('name,geom_text\nok,POINT(1 2)\nbad_wkt,POINT(1 x\nbad_wkb,ABCD\n', encoding="utf-8")
+    uri = str(csv).replace("\\", "/")
+    src = Source(id="pts", format="csv", uri=uri, crs="EPSG:4326", geom_field="geom_text")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    rows = spatial_con.execute(f"SELECT name, ST_AsText(geom) FROM {read} ORDER BY name").fetchall()
+    assert rows == [("bad_wkb", None), ("bad_wkt", None), ("ok", "POINT (1 2)")]
+
+
+@pytest.mark.parametrize("col", ["WKT", "wkt"])
+def test_read_expr_csv_geom_field_named_wkt_gives_one_geometry_column(spatial_con, tmp_path, col):
+    # GDAL's CSV driver turns a column named WKT into a geometry field (`geom`) of its own;
+    # the computed geom replaces it rather than ending up next to it as geom_1.
+    csv = tmp_path / "pts.csv"
+    csv.write_text(f"name,{col}\nok,POINT(1 2)\n", encoding="utf-8")
+    uri = str(csv).replace("\\", "/")
+    src = Source(id="pts", format="csv", uri=uri, crs="EPSG:4326", geom_field=col)
+    read = read_expr(src, tmp_path, con=spatial_con)
+    types = dict((r[0], r[1]) for r in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall())
+    assert [c for c, t in types.items() if t.startswith("GEOMETRY")] == ["geom"]
+    assert col not in types
+    assert spatial_con.execute(f"SELECT name, ST_AsText(geom) FROM {read}").fetchall() == [("ok", "POINT (1 2)")]
+
+
+def test_read_expr_json_geom_field_only_column(spatial_con, tmp_path):
+    # A record holding nothing but its geometry still reads (the column filter isn't left empty).
+    uri = _write_json(tmp_path, "t.json", [{"g": "POINT(1 2)"}])
+    src = Source(id="j", format="json", uri=uri, crs="EPSG:4326", geom_field="g")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    assert spatial_con.execute(f"SELECT * EXCLUDE (geom), ST_AsText(geom) FROM {read}").fetchall() == [("POINT (1 2)",)]
+
+
 def test_read_expr_xlsx_geom_field_builds_geometry_from_wkt(spatial_con):
     # data/test_wkt.xlsx has only string columns ("name", "geom_col"), which is exactly the
     # case GDAL's own AUTO header heuristic gets wrong for xlsx (a header row of plain text
@@ -778,6 +812,17 @@ def test_read_expr_json_geom_field_text_wkt_and_geojson(spatial_con, tmp_path):
     read = read_expr(src, tmp_path, con=spatial_con)
     rows = spatial_con.execute(f"SELECT id, ST_AsText(geom) FROM {read} ORDER BY id").fetchall()
     assert rows == [(1, "POINT (1 2)"), (2, "POINT (3 4)")]
+
+
+def test_read_expr_json_geom_field_unparseable_geojson_becomes_null(spatial_con, tmp_path):
+    uri = _write_json(tmp_path, "t.json", [
+        {"id": 1, "g": '{"type": "Point", "coordinates": [3, 4]}'},
+        {"id": 2, "g": '{"type": "Point"'},
+    ])
+    src = Source(id="j", format="json", uri=uri, crs="EPSG:4326", geom_field="g")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    rows = spatial_con.execute(f"SELECT id, ST_AsText(geom) FROM {read} ORDER BY id").fetchall()
+    assert rows == [(1, "POINT (3 4)"), (2, None)]
 
 
 def test_json_plan_expr_needs_no_connection():
