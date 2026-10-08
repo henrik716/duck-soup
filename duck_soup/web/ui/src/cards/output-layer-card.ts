@@ -1,14 +1,17 @@
-import { createIcons, Package, Trash2, ChevronDown } from 'lucide'
-import { mkEl, wireCollapse } from '../dom'
+import { createIcons, Package, Trash2, ChevronDown, Plus, Copy } from 'lucide'
+import { mkEl, refreshIcons, wireCollapse } from '../dom'
 import { mutate } from '../history'
-import { collectPipelineDef } from './pipeline-card'
+import { collectPipelineDef, wireDragReorder } from './pipeline-card'
+import { mapRow, type MapRowElement } from './map-row'
 import { attachCrsFormatCheck, attachLiveValidation, renderValidationMsg } from '../validation'
-import type { Config, OutputLayer } from '../types'
+import type { Config, MapItem, OutputLayer } from '../types'
 
 // ---- output layer card ----
 // One entry in a pipeline's `layers:` list — the same upstream chain, written
 // out with its own name/CRS/filter. Add more than one to fan a converged
 // chain out into several layers (e.g. matched vs. unmatched) in one pass.
+// A layer can also carry its own `mapping:`, which replaces the pipeline's mapping
+// for that layer only (engine.py: `layer.mapping or self.p.mapping`).
 export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => void): HTMLElement {
   const c = mkEl('div', { className: 'card collapsed' })
   c.innerHTML = `
@@ -28,6 +31,18 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
         <input data-k="filter" placeholder="county IS NOT NULL">
         <div class="expr-validation-msg" data-filter-validation></div>
       </label>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
+        <label style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui;cursor:pointer">
+          <input type="checkbox" data-ol-custom-mapping style="width:auto;margin:0"> own column mapping for this layer</label>
+        <p class="hint" style="margin-top:4px" data-ol-mapping-hint></p>
+        <div data-ol-mapping-body style="display:none">
+          <div class="ol-mapping"></div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button class="mini ghost" type="button" data-ol-addcol><i data-lucide="plus" style="width:12px;height:12px"></i> column</button>
+            <button class="mini ghost" type="button" data-ol-copy title="Replace this layer's columns with a copy of the pipeline's mapping tab, to edit from there"><i data-lucide="copy" style="width:12px;height:12px"></i> copy pipeline mapping</button>
+          </div>
+        </div>
+      </div>
     </div>`
 
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
@@ -48,6 +63,8 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
     i.addEventListener('input', syncFn)
     i.addEventListener('change', syncFn)
   })
+
+  wireLayerMapping(c, ol.mapping ?? [], syncFn)
 
   // The engine applies this filter to the step chain's own columns, before this layer's
   // mapping runs (see engine.py's _final_select: `layer.filter` narrows `prev`, the
@@ -92,6 +109,63 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
-  createIcons({ icons: { Package, Trash2, ChevronDown } })
+  createIcons({ icons: { Package, Trash2, ChevronDown, Plus, Copy } })
   return c
+}
+
+/** The layer's own mapping, or undefined when it uses the pipeline's. Read by collectPipelineDef. */
+export function readLayerMapping(c: HTMLElement): MapItem[] | undefined {
+  if (!c.querySelector<HTMLInputElement>('[data-ol-custom-mapping]')?.checked) return undefined
+  const rows = [...c.querySelectorAll('.ol-mapping > .map-item')]
+    .map(w => (w as MapRowElement)._readMapping?.() ?? null)
+    .filter((x): x is MapItem => x !== null)
+  // An empty list means "fall back to the pipeline mapping" in the engine, so don't emit it.
+  return rows.length ? rows : undefined
+}
+
+function wireLayerMapping(c: HTMLElement, initial: MapItem[], syncFn: () => void): void {
+  const toggle = c.querySelector<HTMLInputElement>('[data-ol-custom-mapping]')!
+  const body = c.querySelector<HTMLElement>('[data-ol-mapping-body]')!
+  const hint = c.querySelector<HTMLElement>('[data-ol-mapping-hint]')!
+  const listEl = c.querySelector<HTMLElement>('.ol-mapping')!
+
+  const render = () => {
+    body.style.display = toggle.checked ? '' : 'none'
+    const n = listEl.querySelectorAll(':scope > .map-item').length
+    hint.textContent = !toggle.checked
+      ? 'Off: this layer gets the columns from the mapping tab.'
+      : n
+        ? `This layer writes these ${n} column${n !== 1 ? 's' : ''} instead of the mapping tab's. Same upstream columns, same rules.`
+        : 'No columns yet — add some, or copy the pipeline mapping to start from. Until then this layer uses the mapping tab.'
+  }
+  const sync = () => { render(); syncFn() }
+
+  initial.forEach(m => listEl.appendChild(mapRow(m, sync)))
+  toggle.checked = initial.length > 0
+
+  toggle.addEventListener('change', () => {
+    mutate(toggle.checked ? 'use own layer mapping' : 'use pipeline mapping for layer')
+    sync()
+  })
+  c.querySelector('[data-ol-addcol]')!.addEventListener('click', () => {
+    mutate('add layer mapping column')
+    const row = mapRow({}, sync)
+    listEl.appendChild(row)
+    refreshIcons()
+    sync()
+    setTimeout(() => row.querySelector<HTMLInputElement>('[data-to]')?.focus(), 50)
+  })
+  c.querySelector('[data-ol-copy]')!.addEventListener('click', () => {
+    const card = c.closest('.pipeline-card') as HTMLElement | null
+    if (!card) return
+    const pipelineMapping = collectPipelineDef(card).mapping
+    mutate('copy pipeline mapping to layer')
+    listEl.innerHTML = ''
+    // structuredClone so codelist objects aren't shared with the pipeline's rows.
+    pipelineMapping.forEach(m => listEl.appendChild(mapRow(structuredClone(m), sync)))
+    refreshIcons()
+    sync()
+  })
+  wireDragReorder(listEl, '.map-item.dragging', undefined, 'reorder layer mapping', sync)
+  render()
 }

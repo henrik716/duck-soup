@@ -57,7 +57,7 @@ still gets exactly one match, and `on_multiple` decides which:
   source file: Old Puddleton. It's deterministic, but not meaningful.
 - `on_multiple: largest_overlap` takes the district with the biggest shared area: most of
   Central Puddle Park is in Mallard Quay.
-- `on_multiple` is YAML-only for now; the editor doesn't show it.
+- In the editor, this is the spatial join's **when several match** field.
 
 #### Keeping every match: `match: all`
 

@@ -72,13 +72,18 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
   // field always meant "intersects" — it just never said so. The emitted YAML is unchanged.
   const predicateVal = (st as Partial<SpatialJoin>).predicate ?? 'intersects'
   const matchVal = (st as Partial<SpatialJoin>).match ?? 'first'
+  const onMultipleVal = (st as Partial<SpatialJoin>).on_multiple ?? 'first'
 
   let bodyHtml = ''
   if (hasSrc) {
     bodyHtml += `<div class="row" style="margin-top:8px">
       <label class="field grow">source${comboField('data-k="source"', '', sourceIds, '', 'No sources defined yet — add one above')}</label>
       ${hasPredicate ? `<label class="field grow">predicate${comboField('data-k="predicate"', predicateVal, META.predicates)}</label>` : ''}
-      ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', matchVal, ['first', 'all'], 'first')}</label>` : ''}
+      ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', matchVal, ['first', 'all'], 'first')}</label>
+        <label class="field grow" data-on-multiple-field title="Which match to keep when a feature matches several — only applies to match: first">when several match${comboField('data-k="on_multiple"', onMultipleVal, [
+          { value: 'first', label: '<span style="font-family:var(--mono);font-weight:600;">first</span> <span data-tag style="font-size:10px;color:var(--muted);">join source row order</span>' },
+          { value: 'largest_overlap', label: '<span style="font-family:var(--mono);font-weight:600;">largest_overlap</span> <span data-tag style="font-size:10px;color:var(--muted);">biggest intersection area</span>' },
+        ], 'first')}</label>` : ''}
       ${kind === 'attribute_join' ? `
         <label class="field grow">left (upstream column or SQL literal)${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}
           <div class="expr-validation-msg" data-left-validation></div></label>
@@ -218,6 +223,17 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   // hydrate dissolve by-cols
   if (kind === 'dissolve') {
     ;((st as Partial<Dissolve>).by || []).forEach(col => addByCol(col))
+  }
+
+  // on_multiple is a tie-break for match: first — with match: all every match is kept,
+  // so there's nothing to choose between and the field would only mislead.
+  if (kind === 'spatial_join') {
+    const matchInp = c.querySelector<HTMLInputElement>('[data-k="match"]')!
+    const onMultipleField = c.querySelector<HTMLElement>('[data-on-multiple-field]')!
+    const syncOnMultiple = () => { onMultipleField.style.display = matchInp.value.trim() === 'all' ? 'none' : '' }
+    matchInp.addEventListener('input', syncOnMultiple)
+    matchInp.addEventListener('change', syncOnMultiple)
+    syncOnMultiple()
   }
 
   wireStepTitle(c, kind)

@@ -39,6 +39,7 @@ export interface SpatialJoin {
   source: string
   predicate: JoinPredicate
   match?: 'first' | 'all'
+  on_multiple?: 'first' | 'largest_overlap'
   fields: Record<string, string>
   branch?: string
 }
@@ -150,6 +151,7 @@ export interface MapItem {
 export interface OutputLayer {
   layer: string
   crs: string
+  mapping?: MapItem[]
   filter?: string
 }
 

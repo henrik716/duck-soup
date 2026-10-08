@@ -22,9 +22,21 @@ that wandered off for a waddle).
     A layer filter runs **before** the mapping, so it refers to the column names coming out of
     the last step (`pond`, `s_pond_type`), not the renamed output columns.
 
-!!! info "Per-layer mapping is YAML-only"
-    In YAML a layer can carry its own `mapping:` that replaces the pipeline mapping for that
-    layer. The editor doesn't show it yet. See [Pipeline YAML](../reference/yaml.md#layers).
+### Per-layer mapping
+
+By default every layer writes the columns from the **mapping** tab. To give one layer
+different columns, for example a slim public layer next to a full internal one, tick
+**own column mapping for this layer** on its card:
+
+- **+ column** adds a mapping row. The rows work like the ones on the mapping tab: the same
+  `from` / `const` / `expr` / `func` / `codelist` kinds, casts and drag-to-reorder.
+- **copy pipeline mapping** fills the list with a copy of the mapping tab, so you can start
+  from it and remove or change columns. Later changes on the mapping tab don't affect the copy.
+- Untick the box to go back to the pipeline mapping. A ticked box with no rows also uses the
+  pipeline mapping.
+
+In YAML this is the layer's `mapping:` key. See
+[Per-layer mapping](../reference/mapping.md#per-layer-mapping).
 
 ## Automatic validation and preview
 

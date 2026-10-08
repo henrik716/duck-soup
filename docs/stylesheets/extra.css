@@ -48,6 +48,13 @@
   opacity: 0.85;
 }
 
+/* Material draws outline buttons in --md-primary-fg-color, which in slate is the near-black
+   header colour (#1b1640) — invisible on the dark page until hovered. Use the accent instead. */
+[data-md-color-scheme="slate"] .md-typeset .md-button:not(.md-button--primary):not(:hover):not(:focus) {
+  color: var(--ds-accent);
+  border-color: var(--ds-accent);
+}
+
 /* Editor screenshots */
 .md-typeset img.screenshot {
   display: block;

@@ -15,7 +15,7 @@ import { sourceCard } from './source-card'
 import { derivedSourceCard } from './derived-source-card'
 import { stepCard } from './step-card'
 import { mapRow, type MapRowElement } from './map-row'
-import { outputLayerCard } from './output-layer-card'
+import { outputLayerCard, readLayerMapping } from './output-layer-card'
 import type { DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
 
 // ---- pipeline card ----
@@ -642,7 +642,7 @@ function createSyncHelpers(card: HTMLElement, plId: string, syncFn: () => void, 
  * Drag-to-reorder for a list container. `draggingSel` matches the row being dragged;
  * `afterSel` is passed through to getDragAfterElement (mapping rows use its default).
  */
-function wireDragReorder(
+export function wireDragReorder(
   container: HTMLElement,
   draggingSel: string,
   afterSel: string | undefined,
@@ -741,6 +741,8 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     }
     if (t === 'spatial_join') {
       st['match'] = val(c, 'match') || 'first'
+      // Only written when it changes anything, so existing YAML round-trips unchanged.
+      if (st['match'] === 'first' && val(c, 'on_multiple') === 'largest_overlap') st['on_multiple'] = 'largest_overlap'
     }
     if (t === 'filter') {
       st['where'] = val(c, 'where')
@@ -788,6 +790,8 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     }
     const filterVal = c.querySelector<HTMLInputElement>('[data-k="filter"]')?.value.trim()
     if (filterVal) ol.filter = filterVal
+    const layerMapping = readLayerMapping(c)
+    if (layerMapping) ol.mapping = layerMapping
     return ol
   })
   const workingCrs = card.querySelector<HTMLInputElement>('.pl-working-crs')!.value.trim()

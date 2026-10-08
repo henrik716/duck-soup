@@ -121,4 +121,6 @@ layers:
       - {to: id,   func: uuid}
 ```
 
-This is YAML-only for now: the editor doesn't show per-layer mappings.
+Without its own `mapping`, a layer uses the pipeline mapping. In the editor, turn on
+**own column mapping for this layer** on the layer's card. See
+[Preview, validate & run](../editor/preview-and-run.md#per-layer-mapping).

@@ -73,14 +73,13 @@ Starts the web editor.
     The editor can read and browse files on the server and run arbitrary SQL expressions. It
     has no authentication. Keep it on `127.0.0.1`, or behind something that controls access.
 
+## Exit codes
+
+`check` and `run` exit with `0` on success and `1` on any failure. The error goes to stderr.
+Schedulers and CI can rely on this.
+
 ## Scheduling runs
 
-Since a pipeline is just a YAML file, scheduling is ordinary cron / Task Scheduler / CI work:
-
-```bash
-# crontab: rebuild every night at 02:00
-0 2 * * * cd /srv/gis && /usr/local/bin/duck-soup run pipelines/nightly.yaml >> logs/nightly.log 2>&1
-```
-
-Alternatively, use **export .py** in the editor to get a self-contained script with the
-pipeline embedded.
+A run is one command, so cron, systemd timers, Windows Task Scheduler, Docker and CI can all
+schedule it. [Scheduling runs](../scheduling.md) has a recipe for each, and shows how to keep
+a failed run from deleting the last good output.

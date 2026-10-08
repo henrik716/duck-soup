@@ -10,6 +10,8 @@ theme:
   custom_dir: overrides   # Open Graph tags for link previews
   logo: assets/favicon.png
   favicon: assets/favicon.png
+  icon:
+    repo: fontawesome/brands/github
   font:
     text: Space Grotesk
     code: IBM Plex Mono
@@ -86,6 +88,7 @@ nav:
       - The sample town: tutorials/index.md
       - Steps by example: tutorials/steps.md
       - Mapping by example: tutorials/mapping.md
+  - Scheduling: scheduling.md
   - Reference:
       - Pipeline YAML: reference/yaml.md
       - Source formats: reference/sources.md

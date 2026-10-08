@@ -75,7 +75,5 @@
   config writes a folder with one `.parquet` file per layer.
 - **Small `func` set** (`uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`,
   `length`). Anything else can be done with `expr` and DuckDB SQL.
-- **A few YAML options aren't in the editor yet**: `on_multiple` and per-layer `mapping`.
-  The editor doesn't show them.
 
 Found a bug? [Open an issue](https://github.com/henrik716/duck-soup/issues).

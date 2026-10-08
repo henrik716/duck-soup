@@ -48,6 +48,9 @@ The body depends on the step type:
 - **source**: which source, derived source or snapshot to join against or use as a mask.
 - **predicate**: `intersects`, `contains` or `within` (spatial join, clip, erase).
 - **match**: `first` (one row per base feature) or `all` (one row per match). Spatial join only.
+- **when several match**: with `match: first`, which match a base feature keeps. `first` takes
+  the match that comes first in the join source. `largest_overlap` takes the one with the
+  biggest intersection area. Spatial join only, and hidden when **match** is `all`.
 - **left / right**: for an attribute join, the upstream column (or a quoted literal such as
   `'Mallard'`) and the column on the join source. A live check under **left** confirms it
   evaluates against real data.
@@ -61,11 +64,6 @@ The body depends on the step type:
   Every column not listed is dropped.
 - **apply to branch**: run this step on a named [snapshot branch](../concepts.md#branches-and-derived-sources)
   instead of the main chain. For a snapshot step this reads **snapshot from branch**.
-
-!!! info "`on_multiple` is YAML-only"
-    The spatial join's `on_multiple: largest_overlap` option (pick the match with the biggest
-    overlap, instead of the first one) isn't in the editor yet. Set it in the YAML. See
-    [Spatial join](../reference/steps.md#spatial_join).
 
 ## Working step by step
 
