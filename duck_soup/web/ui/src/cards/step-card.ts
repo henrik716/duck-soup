@@ -1,7 +1,7 @@
 import {
   createIcons, MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser,
   Layers, GitMerge, Split, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
-  Filter as FilterIcon, Combine, Camera, GripVertical,
+  Filter as FilterIcon, Combine, Camera, GripVertical, Code,
 } from 'lucide'
 import { mkEl, esc, wireCollapse } from '../dom'
 import { META } from '../state'
@@ -64,6 +64,16 @@ const STEP_HINTS: Record<string, string> = {
 const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge']
 const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
 const KINDS_WITH_FIELDS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay']
+export const KINDS_WITH_REJECTS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'filter']
+
+// What `rejects` catches for each step type (RejectsMixin in config.py).
+const REJECTS_HINTS: Record<string, string> = {
+  spatial_join: 'Features with no match go to this layer instead of on down the chain with empty fields.',
+  attribute_join: 'Rows with no match go to this layer instead of on down the chain with empty fields.',
+  nearest_neighbor: 'Features with no neighbour (within max distance) go to this layer instead of on down the chain with empty fields.',
+  clip: 'Features clip would drop (outside the mask, or only touching it) go to this layer, unclipped, instead of being discarded.',
+  filter: 'Rows the filter drops (where the condition is false or NULL) go to this layer instead of being discarded.',
+}
 
 function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: string[]): string {
   const hasSrc = KINDS_WITH_SOURCE.includes(kind)
@@ -149,6 +159,13 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
     </div>`
   }
 
+  if (KINDS_WITH_REJECTS.includes(kind)) {
+    bodyHtml += `<div class="row" style="margin-top:10px">
+      <label class="field grow" title="${REJECTS_HINTS[kind]} The layer is written to the output with every column as it is at this step (no mapping), in the first output layer's CRS.">rejects → output layer (optional)<input data-k="rejects" placeholder="none"></label>
+    </div>
+    <p class="hint" style="margin-top:4px">${REJECTS_HINTS[kind]}</p>`
+  }
+
   // Universal: any step can target a named branch (from an earlier snapshot)
   // instead of the main chain. For snapshot itself this means "snapshot from
   // this branch" rather than "operate on this branch".
@@ -169,6 +186,7 @@ function buildStepCardMarkup(kind: Step['type'], bodyHtml: string): string {
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="spacer"></span>
       <button class="mini ghost data-step-preview" title="Preview the result of this step" aria-label="Preview the data after this step and all steps before it"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
+      <button class="mini ghost" data-step-sql title="Show the SQL this step runs" aria-label="Show the SQL this step runs"><i data-lucide="code" style="width:12px;height:12px"></i></button>
       <button class="mini ghost" data-up title="Move up (Alt+Up)" aria-label="Move this step earlier"><i data-lucide="arrow-up" style="width:12px;height:12px"></i></button>
       <button class="mini ghost" data-down title="Move down (Alt+Down)" aria-label="Move this step later"><i data-lucide="arrow-down" style="width:12px;height:12px"></i></button>
       <button class="mini danger ghost" data-del aria-label="Remove this step"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
@@ -193,18 +211,14 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
 
   c.querySelector('.data-step-preview')!.addEventListener('click', (e) => {
     e.stopPropagation()
-    const parent = c.parentElement
-    if (parent) {
-      const siblings = Array.from(parent.querySelectorAll(':scope > .card'))
-      const stepIdx = siblings.indexOf(c) + 1
-      const plCard = c.closest('.pipeline-card')
-      const plCards = Array.from(document.querySelectorAll('.pipeline-card'))
-      const pipelineIdx = plCards.indexOf(plCard!)
-      c.dispatchEvent(new CustomEvent('preview-step', {
-        bubbles: true,
-        detail: { stepIdx, pipelineIdx }
-      }))
-    }
+    const loc = stepLocation(c)
+    if (loc) c.dispatchEvent(new CustomEvent('preview-step', { bubbles: true, detail: loc }))
+  })
+
+  c.querySelector('[data-step-sql]')!.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const loc = stepLocation(c)
+    if (loc) c.dispatchEvent(new CustomEvent('show-step-sql', { bubbles: true, detail: loc }))
   })
 
   c.querySelector('[data-del]')!.addEventListener('click', (e) => {
@@ -252,8 +266,19 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
   c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
 
-  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical } })
+  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical, Code } })
   return c
+}
+
+/** This step card's 1-based step number and its pipeline's index, as the preview and SQL
+ *  events carry them. */
+function stepLocation(c: HTMLElement): { stepIdx: number; pipelineIdx: number } | null {
+  const parent = c.parentElement
+  const plCard = c.closest('.pipeline-card')
+  if (!parent || !plCard) return null
+  const stepIdx = Array.from(parent.querySelectorAll(':scope > .card')).indexOf(c) + 1
+  const pipelineIdx = Array.from(document.querySelectorAll('.pipeline-card')).indexOf(plCard)
+  return { stepIdx, pipelineIdx }
 }
 
 // Builds a throwaway single-column preview Config scoped to the steps that run *before*
@@ -487,6 +512,8 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
     }
     const branchVal = c.querySelector<HTMLInputElement>('[data-k="branch"]')?.value.trim() ?? ''
     if (branchVal) text += `${text ? ' ' : ''}@${branchVal}`
+    const rejectsVal = c.querySelector<HTMLInputElement>('[data-k="rejects"]')?.value.trim() ?? ''
+    if (rejectsVal) text += `${text ? ' ' : ''}⤷ ${rejectsVal}`
     titleEl.textContent = text
   }
   c.querySelector('[data-k="source"]')?.addEventListener('change', updateTitle)
@@ -495,6 +522,7 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   c.querySelector('[data-k="where"]')?.addEventListener('input', updateTitle)
   c.querySelector('[data-k="branch"]')?.addEventListener('input', updateTitle)
   c.querySelector('[data-k="branch"]')?.addEventListener('change', updateTitle)
+  c.querySelector('[data-k="rejects"]')?.addEventListener('input', updateTitle)
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
   updateTitle()
 }

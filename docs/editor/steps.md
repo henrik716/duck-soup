@@ -7,7 +7,9 @@ covers how to work with steps in the editor. For what each step does, with diagr
 
 ## Adding a step
 
-Click **add step** (at the top or bottom of the list) to open the step gallery:
+Click **add step** (at the top or bottom of the list) to open the step gallery. To insert a
+step somewhere in the middle, click the **+** on that connection in the
+[pipeline flow](overview.md#ducks-in-a-row-the-pipeline-flow) instead:
 
 ![The step gallery](../assets/screenshots/step-gallery-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![The step gallery](../assets/screenshots/step-gallery-dark.png#only-dark){ .screenshot .narrow loading=lazy }
@@ -40,6 +42,8 @@ The header shows the step's type and a short summary, such as `→ ponds` for a 
   step, on the map and in the table, before the mapping is applied. The card is highlighted
   while you're previewing it, and a banner above the table offers **Show pipeline output** to
   switch back.
+- :material-code-tags: **Show the SQL** opens the [SQL tab](preview-and-run.md#sql-tab) at
+  this step.
 - **↑ / ↓** move the step. You can also drag the grip handle, or press
   <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> while it has focus.
 - **remove** deletes the step. Undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
@@ -63,6 +67,9 @@ The body depends on the step type:
 - **distance**, **max distance**, **distance field**: in working-CRS units.
 - **group by columns**: for dissolve. Leave it empty to dissolve everything into one feature.
   Every column not listed is dropped.
+- **rejects → output layer**: on joins, `clip` and `filter`, a layer for the rows the step
+  rejects (no match, outside the mask, condition not true). Those rows then go there instead of
+  on down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).
 - **apply to branch**: run this step on a named [snapshot branch](../concepts.md#branches-and-derived-sources)
   instead of the main chain. For a snapshot step this reads **snapshot from branch**.
 
@@ -76,9 +83,11 @@ The step preview is the main tool for debugging a pipeline. A typical loop:
 1. Add a join step and pull a field or two.
 2. Preview up to the step and sort the table by the pulled column. A lot of empty values
    usually means a CRS problem or the wrong predicate.
-3. Add a `filter` step (`pulled_column IS NOT NULL`) if you only want matched rows, or keep
-   them all and split matched/unmatched into separate
-   [output layers](output-layers.md).
+3. Set the join's **rejects** to send unmatched rows to a layer of their own, add a `filter`
+   step (`pulled_column IS NOT NULL`) if you only want matched rows, or keep them all and split
+   matched/unmatched into separate [output layers](output-layers.md).
+4. **count rows** (sample) in the pipeline flow shows the row count after every step at
+   once, so a join that matches far fewer rows than expected stands out.
 
 When a step's preview draws a buffer or a nearest-neighbour search radius, the map shows it as
 an overlay so you can check the distance visually.

@@ -13,7 +13,7 @@ import { attachCrsFormatCheck } from '../validation'
 import { openStepGalleryModal } from '../step-gallery'
 import { sourceCard } from './source-card'
 import { derivedSourceCard } from './derived-source-card'
-import { stepCard } from './step-card'
+import { stepCard, KINDS_WITH_REJECTS } from './step-card'
 import { mapRow, type MapRowElement } from './map-row'
 import { outputLayerCard, readLayerMapping } from './output-layer-card'
 import type { DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
@@ -196,6 +196,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
             <button type="button" class="template-btn" data-fmt="postgres" title="PostgreSQL / PostGIS"><i data-lucide="database-zap"></i> Postgres</button>
             <button type="button" class="template-btn" data-fmt="csv"><i data-lucide="file-text"></i> CSV</button>
             <button type="button" class="template-btn" data-fmt="xlsx"><i data-lucide="file-spreadsheet"></i> Excel</button>
+            <button type="button" class="template-btn" data-fmt="json" title="Plain JSON records (not GeoJSON)"><i data-lucide="file-code"></i> JSON</button>
             <button type="button" class="template-btn" data-fmt="fgdb"><i data-lucide="database"></i> FileGDB</button>
             <button type="button" class="template-btn" data-fmt="shp"><i data-lucide="map"></i> Shapefile</button>
             <button type="button" class="template-btn" data-fmt="arcgis_rest"><i data-lucide="map-pinned"></i> ArcGIS REST</button>
@@ -322,16 +323,21 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   })
 
   // ---- add buttons ----
-  card.querySelector('.pl-add-source')!.addEventListener('click', e => {
-    e.stopPropagation()
+  // A new, empty source card, already open. Also the lineage diagram's "+ source".
+  const addSource = (): HTMLElement => {
     mutate('add source')
-    // expand sources section if collapsed
     activateSection('sources')
     const newCard = sourceCard({}, fullSync)
     newCard.classList.remove('collapsed')
     sourcesEl.appendChild(newCard)
     refreshIcons()
     fullSync()
+    return newCard
+  }
+  ;(card as any)._addSource = addSource
+  card.querySelector('.pl-add-source')!.addEventListener('click', e => {
+    e.stopPropagation()
+    addSource()
   })
 
   card.querySelector('.pl-add-derived')!.addEventListener('click', e => {
@@ -364,18 +370,39 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
 
   wireSourceUpload(card, sourcesEl, activateSection, fullSync)
 
+  // A new step card at `index` (0-based; past the end appends), already open. Shared by the
+  // add-step buttons and the lineage diagram's "+" on a connection, which also passes the
+  // branch that connection belongs to.
+  const insertStep = (kind: Step['type'], index: number, init: Partial<Step> = {}): HTMLElement => {
+    mutate('add step')
+    activateSection('steps')
+    const newCard = stepCard(kind, init, fullSync, collectAllSourceIdsScoped(card))
+    newCard.classList.remove('collapsed')
+    stepsEl.insertBefore(newCard, stepsEl.children[index] ?? null)
+    refreshIcons()
+    fullSync()
+    return newCard
+  }
+  ;(card as any)._insertStep = insertStep
+
+  // Moves the step at `from` so it ends up at index `to` (both 0-based) — the lineage
+  // diagram's drag-to-reorder, same effect as the card's own up/down buttons.
+  ;(card as any)._moveStep = (from: number, to: number) => {
+    const cards = [...stepsEl.children]
+    const moving = cards[from]
+    if (!moving || from === to) return
+    mutate('reorder step')
+    const rest = cards.filter(c => c !== moving)
+    stepsEl.insertBefore(moving, rest[to] ?? null)
+    fullSync()
+  }
+
   // Step picker gallery modal
   const addStepBtn = card.querySelector<HTMLButtonElement>('.pl-add-step')!
   addStepBtn.addEventListener('click', e => {
     e.stopPropagation()
     openStepGalleryModal(k => {
-      mutate('add step')
-      activateSection('steps')
-      const newCard = stepCard(k, {}, fullSync, collectAllSourceIdsScoped(card))
-      newCard.classList.remove('collapsed')
-      stepsEl.appendChild(newCard)
-      refreshIcons()
-      fullSync()
+      const newCard = insertStep(k, stepsEl.children.length)
       // The new card lands at the bottom of a list that's often taller than the viewport, so
       // adding one could look like nothing happened. Focus scrolls it into view for free.
       // Deferred because the gallery modal restores focus to its trigger as it closes.
@@ -709,6 +736,7 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     if (val(c, 'crs')) s.crs = val(c, 'crs')
     const headerRow = val(c, 'header_row')
     if (headerRow) s.header_row = headerRow === 'true'
+    if (s.format === 'json' && val(c, 'records')) s.records = val(c, 'records')
     if (val(c, 'x_field')) s.x_field = val(c, 'x_field')
     if (val(c, 'y_field')) s.y_field = val(c, 'y_field')
     if (val(c, 'geom_field')) s.geom_field = val(c, 'geom_field')
@@ -746,6 +774,9 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     }
     if (t === 'filter') {
       st['where'] = val(c, 'where')
+    }
+    if (KINDS_WITH_REJECTS.includes(t) && val(c, 'rejects')) {
+      st['rejects'] = val(c, 'rejects')
     }
     if (t === 'snapshot') {
       st['id'] = val(c, 'id')

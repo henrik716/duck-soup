@@ -1,11 +1,11 @@
-import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info } from 'lucide'
-import { inspectSource, inspectFile } from '../api'
+import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw } from 'lucide'
+import { inspectSource, inspectFile, refreshSource } from '../api'
 import { mkEl, val, wireCollapse } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS, EXT_FORMAT } from '../state'
 import { comboField, wireCombos, setComboOptions, ensureComboOption } from '../combo'
 import { CRS_COMBO_OPTIONS } from '../crs-list'
-import { updateSourceBadge } from '../schema'
+import { updateSourceBadge, formatSourceProgress, PENDING_RETRY_MS } from '../schema'
 import { openFileExplorer } from '../file-explorer'
 import { attachCrsFormatCheck } from '../validation'
 import type { Source } from '../types'
@@ -22,7 +22,8 @@ const FORMAT_LABELS: Record<string, string> = {
   postgres: '<span title="PostgreSQL / PostGIS">Postgres</span>',
 }
 
-const TABULAR_GEOM_FORMATS = ['xlsx', 'csv']
+const TABULAR_GEOM_FORMATS = ['xlsx', 'csv', 'json']
+const HEADER_ROW_FORMATS = ['xlsx', 'csv']
 const WKT_COLUMN_NAMES = ['geom', 'geometry', 'wkt', 'the_geom', 'shape', 'wkt_geom', 'geom_wkt']
 const X_COLUMN_NAMES = ['lon', 'lng', 'long', 'longitude', 'x']
 const Y_COLUMN_NAMES = ['lat', 'latitude', 'y']
@@ -85,6 +86,14 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
         <i data-lucide="info" style="width:12px;height:12px;flex-shrink:0"></i>
         <span></span>
       </div>
+      <div class="card-warning card-note download-note" data-download-note hidden
+           title="Previews reuse this download until you refresh it. Run always downloads fresh data.">
+        <i data-lucide="download" style="width:12px;height:12px;flex-shrink:0"></i>
+        <span class="download-note-text"></span>
+        <button type="button" class="mini download-refresh" data-refresh-download title="Download this source again">
+          <i data-lucide="refresh-cw" style="width:12px;height:12px"></i><span>refresh</span>
+        </button>
+      </div>
       <div class="row" data-header-row style="display:none; margin-top:8px;">
         <label class="field grow">header row
           <select data-k="header_row">
@@ -94,12 +103,17 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
           </select>
         </label>
       </div>
+      <div class="row" data-json-records style="display:none; margin-top:8px;">
+        <label class="field grow">records path
+          <input data-k="records" placeholder="data.items — leave empty if the file is the array itself">
+        </label>
+      </div>
       <div class="row" data-tabular-geom style="display:none; margin-top:8px;">
         <label class="field grow">geometry<span class="auto-chip" data-auto-geom hidden>detected</span>
           <select data-geom-mode>
             <option value="">none (tabular only)</option>
             <option value="xy">point from X / Y columns</option>
-            <option value="wkt">WKT / WKB column</option>
+            <option value="wkt">WKT / WKB / GeoJSON column</option>
           </select>
         </label>
       </div>
@@ -112,12 +126,13 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
         </label>
       </div>
       <div class="row" data-tabular-geom-wkt style="display:none; margin-top:8px;">
-        <label class="field grow">WKT / WKB column
+        <label class="field grow">WKT / WKB / GeoJSON column
           ${comboField('data-k="geom_field"', s.geom_field ?? '', [], '—')}
         </label>
       </div>
       <p class="hint" data-arcgis style="display:none">ArcGIS REST: uri = the service root (…/MapServer or …/FeatureServer, no trailing id). Pick the sublayer below. Geometry fetched as EPSG:4326.</p>
       <p class="hint" data-oapif style="display:none">OGC API - Features: uri = the API root (e.g. https://host) — not an /items URL. Pick the collection below.</p>
+      <p class="hint" data-json style="display:none">JSON: plain records (an array of objects, or newline-delimited objects), not GeoJSON — use the geojson format for a FeatureCollection. Nested objects come through as struct columns (map them with an expression like <code>address.city</code>).</p>
       <p class="hint" data-postgres style="display:none">Postgres / PostGIS: uri = a full connection string (e.g. postgresql://user:pass@host:5432/dbname). Pick the table below (schema.table, or just table for the public schema).</p>
       <div class="schema-list" style="display:none;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--line);padding-top:6px;"></div>
     </div>`
@@ -183,7 +198,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
 
   const { doInspect, doInspectFile } = createInspectors(c, syncFn, geomModeSel, toggleTabularGeomSub)
 
-  c.querySelectorAll('[data-k="uri"],[data-k="format"],[data-k="layer"],[data-k="crs"],[data-k="header_row"],[data-k="x_field"],[data-k="y_field"],[data-k="geom_field"]').forEach(i => {
+  c.querySelectorAll('[data-k="uri"],[data-k="format"],[data-k="layer"],[data-k="crs"],[data-k="header_row"],[data-k="records"],[data-k="x_field"],[data-k="y_field"],[data-k="geom_field"]').forEach(i => {
     i.addEventListener('input', doInspect)
     i.addEventListener('change', doInspect)
   })
@@ -220,7 +235,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
-  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info } })
+  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw } })
   return c
 }
 
@@ -314,7 +329,31 @@ function createInspectors(
   toggleTabularGeomSub: () => void,
 ) {
   let inspectTimer = 0
+  let inspectSeq = 0
+  let pendingText: string | null = null
+  let lastSource: Source | null = null  // what the last inspect sent, for "refresh"
   let fileTimer = 0
+
+  // "refresh" on the download note: download again in the background, then re-inspect —
+  // which shows the progress and, once done, re-runs the preview (syncFn).
+  const refreshBtn = c.querySelector<HTMLButtonElement>('[data-refresh-download]')!
+  refreshBtn.addEventListener('click', async e => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!lastSource) return
+    // Busy until the next inspect answers (updateDownloadNote resets it).
+    refreshBtn.disabled = true
+    refreshBtn.querySelector('svg')?.classList.add('spin-animation')
+    refreshBtn.querySelector('span')!.textContent = 'refreshing…'
+    const d = await refreshSource(lastSource)
+    if (!d.ok && !d.pending && d.error) {
+      updateSourceBadge(c, { ok: false, error: d.error })
+      updateDownloadNote(c, null)
+      return
+    }
+    if (d.pending && d.progress) pendingText = formatSourceProgress(d.progress)
+    doInspect()
+  })
 
   const doInspect = () => {
     clearTimeout(inspectTimer)
@@ -325,6 +364,7 @@ function createInspectors(
       const layer = val(c, 'layer')
       const crs = val(c, 'crs')
       const headerRow = val(c, 'header_row')
+      const records = format === 'json' ? val(c, 'records') : ''
       const xField = val(c, 'x_field')
       const yField = val(c, 'y_field')
       const geomField = val(c, 'geom_field')
@@ -355,18 +395,32 @@ function createInspectors(
         ...(layer ? { layer } : {}),
         ...(crs ? { crs } : {}),
         ...(headerRow ? { header_row: headerRow === 'true' } : {}),
+        ...(records ? { records } : {}),
         ...(xField ? { x_field: xField } : {}),
         ...(yField ? { y_field: yField } : {}),
         ...(geomField ? { geom_field: geomField } : {}),
       } as Source
-      updateSourceBadge(c, { loading: true })
+      lastSource = srcObj
+      // Keep showing the last progress text while asking again, not a flash of "inspecting…".
+      updateSourceBadge(c, { loading: true, loadingText: pendingText })
+      const seq = ++inspectSeq
       try {
         const d = await inspectSource(srcObj)
+        if (seq !== inspectSeq) return  // a newer inspect owns the badge now
+        if (d.pending && d.progress) {
+          // Downloading / converting in the background: show what, and ask again.
+          pendingText = formatSourceProgress(d.progress)
+          updateSourceBadge(c, { loading: true, loadingText: pendingText })
+          window.setTimeout(() => { if (seq === inspectSeq) doInspect() }, PENDING_RETRY_MS)
+          return
+        }
+        pendingText = null
         if (d.ok && d.columns) {
           SOURCE_SCHEMAS[id] = d.columns
           updateSourceBadge(c, { ok: true, columns: d.columns })
           updateCrsWarning(c, d.crs_warning)
           updateReaderNote(c, d.reader_note)
+          updateDownloadNote(c, d.download)
           // Offer the just-inspected columns as suggestions for the geometry-column
           // pickers below — same idea as doInspectFile populating the `layer` combo.
           if (TABULAR_GEOM_FORMATS.includes(format)) {
@@ -433,7 +487,7 @@ function createInspectors(
       if (!uri || !format) return
       // Remote sources (wfs, arcgis_rest) are a full round trip; without a badge this
       // looked like nothing was happening.
-      updateSourceBadge(c, { loading: true })
+      updateSourceBadge(c, { loading: true, loadingText: pendingText })
       let inspectUri = uri
       if (format === 'wfs') {
         try {
@@ -445,6 +499,15 @@ function createInspectors(
       }
       try {
         const d = await inspectFile(inspectUri, format)
+        if (d.pending && d.progress) {
+          // A remote file still downloading in the background: show it, and ask again.
+          pendingText = formatSourceProgress(d.progress)
+          updateSourceBadge(c, { loading: true, loadingText: pendingText })
+          window.setTimeout(() => {
+            if (val(c, 'uri') === uri && val(c, 'format') === format) doInspectFile()
+          }, PENDING_RETRY_MS)
+          return
+        }
         if (d.ok) {
           if (layerSel && d.layers && d.layers.length > 0) {
             const current = layerSel.value
@@ -494,6 +557,30 @@ function updateReaderNote(c: HTMLElement, note: string | null | undefined): void
   updateCardHint(c, '[data-reader-note]', note)
 }
 
+const ago = (seconds: number): string => {
+  if (seconds < 60) return 'just now'
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`
+  return `${Math.round(seconds / 86400)} d ago`
+}
+
+// /api/inspect's download: previews of a remote file source read an earlier download until
+// refreshed (runs always fetch fresh) — say when it was made, with a "refresh" link.
+function updateDownloadNote(c: HTMLElement, dl: { bytes: number; age: number; parquet: boolean } | null | undefined): void {
+  const box = c.querySelector<HTMLElement>('[data-download-note]')
+  if (!box) return
+  const btn = box.querySelector<HTMLButtonElement>('[data-refresh-download]')!
+  btn.disabled = false
+  btn.querySelector('svg')?.classList.remove('spin-animation')
+  btn.querySelector('span')!.textContent = 'refresh'
+  box.hidden = !dl
+  if (!dl) return
+  // The facts only; what they mean for previews vs runs is the note's tooltip.
+  const parts = [`Downloaded ${ago(dl.age)}`, `${(dl.bytes / 1e6).toFixed(1)} MB`]
+  if (dl.parquet) parts.push('read via Parquet')
+  box.querySelector('.download-note-text')!.textContent = parts.join(' · ')
+}
+
 function updateCardHint(c: HTMLElement, sel: string, text: string | null | undefined): void {
   const box = c.querySelector<HTMLElement>(sel)
   if (!box) return
@@ -515,6 +602,7 @@ const URI_PLACEHOLDERS: Record<string, string> = {
   shp: 'data/places.shp',
   xlsx: 'data/places.xlsx',
   csv: 'data/places.csv',
+  json: 'https://api.example.com/places.json',
   postgres: 'postgresql://user:pass@host:5432/dbname',
 }
 
@@ -548,21 +636,30 @@ function wireFormatToggles(
   fmt.addEventListener('change', toggleOapif)
   fmt.addEventListener('input', togglePostgres)
   fmt.addEventListener('change', togglePostgres)
+  // json: the hint plus the records-path row.
+  const toggleJson = () => {
+    const show = fmt.value === 'json'
+    c.querySelector<HTMLElement>('[data-json]')!.style.display = show ? 'block' : 'none'
+    c.querySelector<HTMLElement>('[data-json-records]')!.style.display = show ? 'flex' : 'none'
+  }
+  fmt.addEventListener('input', toggleJson)
+  fmt.addEventListener('change', toggleJson)
   toggleArcgis()
   toggleOapif()
   togglePostgres()
+  toggleJson()
   updateUriPlaceholder()
 
   // Header-row override: xlsx/csv only (GDAL's HEADERS open option exists for both drivers).
   const toggleHeaderRow = () => {
     const row = c.querySelector<HTMLElement>('[data-header-row]')!
-    row.style.display = TABULAR_GEOM_FORMATS.includes(fmt.value) ? 'flex' : 'none'
+    row.style.display = HEADER_ROW_FORMATS.includes(fmt.value) ? 'flex' : 'none'
   }
-  // Geometry-from-columns: xlsx/csv only. Not a GDAL feature either driver provides — the
-  // XLSX driver has no geometry support at all, and even the CSV driver's own
-  // X_POSSIBLE_NAMES/GEOM_POSSIBLE_NAMES open options came with real sharp edges (see
-  // sources.py's _apply_tabular_geometry) — so the engine builds the geometry itself in SQL,
-  // identically for both formats.
+  // Geometry-from-columns: xlsx/csv/json only. Not a GDAL feature any of these readers
+  // provides — the XLSX driver has no geometry support at all, the CSV driver's own
+  // X_POSSIBLE_NAMES/GEOM_POSSIBLE_NAMES open options came with real sharp edges, and json
+  // isn't read through GDAL at all (see sources.py's _apply_tabular_geometry) — so the
+  // engine builds the geometry itself in SQL, identically for every tabular format.
   const geomModeSel = c.querySelector<HTMLSelectElement>('[data-geom-mode]')!
   const toggleTabularGeom = () => {
     const row = c.querySelector<HTMLElement>('[data-tabular-geom]')!

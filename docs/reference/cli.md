@@ -21,7 +21,7 @@ On failure it prints the validation error, including the path to the bad field
 ## `duck-soup run`
 
 ```bash
-duck-soup run quickstart.yaml
+duck-soup run quickstart.yaml [--history-dir DIR] [--no-history]
 ```
 
 Runs every pipeline in the file and writes the output (GeoPackage or GeoParquet), logging each stage as it goes:
@@ -36,6 +36,18 @@ Wrote output/quickstart.gpkg
 ```
 
 Relative paths in the YAML resolve against the directory you run the command from.
+
+Each run, failed or not, is recorded in the project's run history, which the editor shows in
+its [History tab](../editor/preview-and-run.md#run-history): one JSON file per run in
+`runs/<config file name>/` (`runs/quickstart/` above), with the start time, duration, result,
+rows per layer and the log.
+
+| Option | Meaning |
+|---|---|
+| `--history-dir DIR` | Record the run in `DIR/runs/`. Without it: `$DUCK_SOUP_ROOT/runs/` when `DUCK_SOUP_ROOT` is set, otherwise `runs/` in the current folder. |
+| `--no-history` | Don't record this run. |
+
+Recording never fails a run: if the history can't be written, a warning goes to stderr.
 
 ## `duck-soup tutorial`
 
@@ -67,7 +79,7 @@ Starts the web editor.
 
 | Environment variable | Default | Meaning |
 |---|---|---|
-| `DUCK_SOUP_ROOT` | `~/duck-soup` (`/data` in Docker) | Project folder. Saved configs go in `<root>/pipelines/`, and the file browser starts here. |
+| `DUCK_SOUP_ROOT` | `~/duck-soup` (`/data` in Docker) | Project folder. Saved configs go in `<root>/pipelines/`, run history in `<root>/runs/`, and the file browser starts here. |
 
 !!! danger "Don't expose the editor to untrusted networks"
     The editor can read and browse files on the server and run arbitrary SQL expressions. It

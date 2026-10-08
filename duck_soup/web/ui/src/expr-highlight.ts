@@ -14,7 +14,8 @@ const TOKEN_RE = /('(?:[^']|'')*')|(\d+\.?\d*)|([A-Za-z_][A-Za-z0-9_]*)/g
 // calls (identifier immediately followed by "("), strings, and numbers — everything else
 // (columns, punctuation) stays unstyled. Rendered into a <pre> sitting behind the editable
 // textarea; a trailing newline keeps it the same line-count as the textarea for scroll sync.
-export function highlightExpr(src: string): string {
+// `extraKeywords` (lower case) widens the keyword set, e.g. to whole statements (sql-plan.ts).
+export function highlightExpr(src: string, extraKeywords?: Set<string>): string {
   let out = ''
   let lastIndex = 0
   TOKEN_RE.lastIndex = 0
@@ -29,7 +30,7 @@ export function highlightExpr(src: string): string {
     } else if (ident !== undefined) {
       const lower = ident.toLowerCase()
       const after = src.slice(m.index + full.length)
-      if (KEYWORDS.has(lower)) {
+      if (KEYWORDS.has(lower) || extraKeywords?.has(lower)) {
         out += `<span class="expr-tok-keyword">${esc(ident)}</span>`
       } else if (/^\s*\(/.test(after)) {
         out += `<span class="expr-tok-func">${esc(ident)}</span>`

@@ -10,6 +10,7 @@ with DuckDB's own native read_parquet() instead (see read_expr's `parquet` branc
 postgres is a third exception, for the same reason: it's read via DuckDB's own
 postgres extension (ATTACH ... TYPE postgres) rather than GDAL's PG driver, which
 isn't part of the bundled spatial-extension GDAL build either.
+Plain (non-GeoJSON) JSON is read with DuckDB's native read_json() — see `_json_read_expr`.
 Finally, on Windows a local file of 2 GiB or more is read through pyogrio instead of
 ST_Read, which segfaults on such files there — see `_read_via_pyogrio`.
 """
@@ -25,6 +26,8 @@ import tempfile
 import threading
 import time
 import warnings
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable
 
@@ -49,6 +52,11 @@ _CURVE_MARKERS = ("curve", "surface")
 # every single preview/run) and keyed by the source file's mtime+size, so an
 # edited source file invalidates its own cache entry automatically.
 _LINEARIZE_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_linearize_cache"
+
+# Large csv/xlsx files are read from a cached Parquet copy — see `_tabular_parquet_cache`.
+# Below this size GDAL opens them fast enough that the copy isn't worth it.
+_TABULAR_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_tabular_cache"
+_TABULAR_CACHE_MIN_BYTES = 5 * 2**20
 
 # On Windows, DuckDB's spatial extension (confirmed through duckdb 1.5.6) segfaults —
 # taking the whole process down, web server included — once ST_Read gets past the 2 GiB
@@ -79,6 +87,210 @@ _PYOGRIO_FORMATS = ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf")
 _OAPIF_FETCH_CACHE: dict[tuple, tuple[float, list[dict], bool]] = {}
 _OAPIF_CACHE_LOCK = threading.Lock()
 _OAPIF_CACHE_TTL = 20.0  # seconds
+
+
+# Remote file sources (an http(s) uri on a gpkg/geojson/csv/... source) are downloaded once
+# to a local file instead of being handed to ST_Read as a URL. GDAL reads URLs through
+# /vsicurl/, which does a HEAD and then many small Range requests — fine against a static
+# file host, but an export endpoint that builds the file per request (no Content-Length, no
+# Range support, e.g. NVDB's segmentert.csv) answers every one of those with the whole
+# body, so a single ST_Read turns into dozens of full downloads and times out.
+#
+# Downloads are kept in the temp dir until replaced. Previews (the editor's inspect /
+# preview / counts) read the newest download of a URL on disk, whichever process made it and
+# across editor restarts, until the user refreshes it (prepare_source(refresh=True), the
+# source card's "refresh" link): a dataset rarely changes between two previews, and fetching
+# it again costs as long as the download takes. A run (run_config: `duck-soup run`, the
+# editor's Run) downloads fresh instead, see fresh_downloads, so its output reflects the
+# current data.
+_REMOTE_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_remote_cache"
+_REMOTE_CACHE_LOCK = threading.Lock()
+
+# How old a superseded download (or its Parquet copy) must be before it's deleted. Every
+# read looks up the newest download, but a query already running against an older one (a
+# long run in another process) re-opens its file as it goes, so it mustn't disappear at once.
+_SUPERSEDED_GRACE = 3600.0  # seconds
+
+# Set by fresh_downloads() for the duration of a run: a download made before this time is
+# fetched again.
+_FRESH_AFTER: ContextVar[float | None] = ContextVar("duck_soup_fresh_after", default=None)
+
+
+@contextmanager
+def fresh_downloads():
+    """Within this block (a run), remote file sources are downloaded again instead of reusing
+    an earlier download, once per URL: a download made inside the block is reused, so a URL
+    read by several pipelines is still only fetched once."""
+    token = _FRESH_AFTER.set(time.time())
+    try:
+        yield
+    finally:
+        _FRESH_AFTER.reset(token)
+
+
+def _superseded_long_enough(path: Path) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime > _SUPERSEDED_GRACE
+    except OSError:
+        return False
+
+
+# What a slow source is busy with right now (downloading, converting to Parquet), keyed by
+# the source's uri as configured. Reported back by prepare_source, which the editor's
+# endpoints call before reading. Each stage removes its own entry when it ends.
+_PROGRESS: dict[str, dict] = {}
+_PROGRESS_LOCK = threading.Lock()
+
+
+def _set_progress(key: str | None, stage: str, **fields) -> None:
+    if not key:
+        return
+    with _PROGRESS_LOCK:
+        prev = _PROGRESS.get(key)
+        started = prev["_started"] if prev and prev["stage"] == stage else time.monotonic()
+        _PROGRESS[key] = {"stage": stage, "_started": started, **fields}
+
+
+def _clear_progress(key: str | None, stage: str) -> None:
+    with _PROGRESS_LOCK:
+        if key and _PROGRESS.get(key, {}).get("stage") == stage:
+            del _PROGRESS[key]
+
+
+def _clear_all_progress(key: str) -> None:
+    with _PROGRESS_LOCK:
+        _PROGRESS.pop(key, None)
+
+
+def source_progress(key: str) -> dict | None:
+    """The current slow stage for a source uri, or None: {"stage": "download", "bytes": n,
+    "total": n or None (no Content-Length), "elapsed": s} or {"stage": "convert", ...}."""
+    with _PROGRESS_LOCK:
+        p = _PROGRESS.get(key)
+        if p is None:
+            return None
+        out = {k: v for k, v in p.items() if not k.startswith("_")}
+        out["elapsed"] = round(time.monotonic() - p["_started"], 1)
+        return out
+
+
+def is_remote_uri(uri: str) -> bool:
+    return uri.lower().startswith(("http://", "https://"))
+
+
+def should_download(uri: str, fmt: str) -> bool:
+    """Whether read_expr downloads this remote uri first (fetch_remote_file). Not a bare
+    .shp, whose .shx/.dbf sidecars only GDAL's own /vsicurl/ reader fetches alongside it."""
+    from urllib.parse import urlparse
+
+    if not is_remote_uri(uri):
+        return False
+    return not (fmt == "shp" and urlparse(uri).path.lower().endswith(".shp"))
+
+
+def remote_file_name(uri: str, fmt: str) -> str:
+    """The local file name fetch_remote_file gives a download of `uri`: the URL's own name
+    (query string dropped), plus the format's extension when it has none."""
+    from urllib.parse import unquote, urlparse
+
+    name = re.sub(r'[<>:"/\\|?*]', "_", unquote(Path(urlparse(uri).path).name)) or fmt
+    return name if Path(name).suffix else f"{name}.{fmt}"
+
+
+def _url_dir(uri: str) -> Path:
+    return _REMOTE_CACHE_DIR / hashlib.sha1(uri.encode()).hexdigest()[:16]
+
+
+def latest_download(uri: str, fmt: str) -> Path | None:
+    """The newest complete download of `uri` on disk (by any process), or None. Downloads sit
+    at <url hash>/<download time, ns>/<name>; one still in progress has no <name> yet."""
+    name = remote_file_name(uri, fmt)
+    try:
+        folders = [f for f in _url_dir(uri).iterdir() if f.is_dir() and f.name.isdigit()]
+    except OSError:
+        return None
+    for folder in sorted(folders, key=lambda f: int(f.name), reverse=True):
+        if (folder / name).is_file():
+            return folder / name
+    return None
+
+
+def download_time(path: Path) -> float:
+    """When a download (a latest_download path) was made, as a Unix timestamp."""
+    return int(Path(path).parent.name) / 1e9
+
+
+def fetch_remote_file(
+    uri: str,
+    fmt: str,
+    log: Callable[[str], None] | None = None,
+    progress_key: str | None = None,
+    fresh: bool = False,
+) -> str:
+    """Download a remote file source to a local cache file (see _REMOTE_CACHE_DIR) and return
+    its path, or the newest earlier download of it unless `fresh` or inside fresh_downloads(). The file keeps the URL's own name, since GDAL derives a csv/geojson layer name
+    from it and picks drivers from compound suffixes like `.gdb.zip`; a name without an
+    extension gets the format's (`fmt`).
+
+    Each download goes into its own folder, `<url hash>/<download time>/<name>`, rather than
+    overwriting the previous one: on Windows a file another process still has open (the
+    editor server while a CLI run re-downloads, or the reverse) can't be replaced. Older
+    downloads of the same URL are removed after _SUPERSEDED_GRACE.
+
+    Progress is published under `progress_key` (default: `uri`), see source_progress."""
+    with _REMOTE_CACHE_LOCK:
+        latest = latest_download(uri, fmt)
+        fresh_after = _FRESH_AFTER.get()
+        if latest and not fresh and (fresh_after is None or download_time(latest) >= fresh_after):
+            return str(latest)
+
+        name = remote_file_name(uri, fmt)
+        url_dir = _url_dir(uri)
+        # The download time names the folder (latest_download picks the highest). Windows'
+        # clock ticks every few ms, so step past a name another download already took.
+        url_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.time_ns()
+        while True:
+            folder = url_dir / str(stamp)
+            try:
+                folder.mkdir()
+                break
+            except FileExistsError:
+                stamp += 1
+        out = folder / name
+        tmp = out.with_name(out.name + ".part")
+        if log:
+            log(f"Downloading {uri}")
+        start = time.monotonic()
+        key = progress_key or uri
+        _set_progress(key, "download", bytes=0, total=None)
+        try:
+            # (connect, read) timeouts: the read timeout is per socket read, not the whole
+            # body, so a slow-to-start export that then streams steadily still gets through.
+            with requests.get(uri, stream=True, timeout=(30, 300)) as resp:
+                resp.raise_for_status()
+                length = getattr(resp, "headers", {}).get("Content-Length")
+                # A per-request export (chunked, or a bogus `Content-Length: 0`) has no size.
+                total = int(length) if length and length.isdigit() and int(length) > 0 else None
+                done = 0
+                with open(tmp, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=1 << 18):
+                        f.write(chunk)
+                        done += len(chunk)
+                        _set_progress(key, "download", bytes=done, total=total)
+        finally:
+            _clear_progress(key, "download")
+        os.replace(tmp, out)
+        if log:
+            log(f"Downloaded {out.stat().st_size / 2**20:.1f} MiB in {time.monotonic() - start:.1f}s")
+        for old in url_dir.iterdir():
+            if old == folder or not _superseded_long_enough(old):
+                continue
+            try:  # still open elsewhere (Windows) → left for the next download to remove
+                shutil.rmtree(old) if old.is_dir() else old.unlink()
+            except OSError:
+                pass
+        return str(out)
 
 
 def _st_read(uri: str, layer: str | None = None, extra: str = "") -> str:
@@ -720,6 +932,45 @@ def needs_pyogrio_reader(uri: str) -> bool:
     return _ST_READ_MAX_BYTES is not None and _local_file_size(uri) >= _ST_READ_MAX_BYTES
 
 
+def _mb(n: int) -> str:
+    return f"{n / 1e6:.1f} MB"
+
+
+def _read_as_parquet(src: Source, local: str) -> bool:
+    return (
+        src.format in ("csv", "xlsx")
+        and _local_file_size(local) >= _TABULAR_CACHE_MIN_BYTES
+        and not Path(local).is_dir()
+    )
+
+
+def download_info(src: Source) -> dict | None:
+    """For a remote file source previews read from a download: {"bytes", "age" (seconds since
+    it was downloaded), "parquet" (also read via a Parquet copy)}, for the source card's
+    "downloaded 2 h ago · refresh" note. None when it isn't downloaded (yet)."""
+    if not should_download(src.uri, src.format):
+        return None
+    latest = latest_download(src.uri, src.format)
+    if latest is None:
+        return None
+    return {
+        "bytes": latest.stat().st_size,
+        "age": max(0.0, round(time.time() - download_time(latest), 1)),
+        "parquet": _read_as_parquet(src, str(latest)),
+    }
+
+
+def cached_read_note(src: Source) -> str | None:
+    """User-facing note when a local `src` is read from a Parquet copy (see
+    _tabular_parquet_cache). Remote sources get download_info instead."""
+    if is_remote_uri(src.uri) or not _read_as_parquet(src, src.uri):
+        return None
+    return (
+        f"Large {src.format} file ({_mb(_local_file_size(src.uri))}): read from a Parquet "
+        f"copy for fast previews, rebuilt when the file changes."
+    )
+
+
 def large_file_reader_note(src: Source) -> str | None:
     """User-facing explanation when `src` will be read via pyogrio, else None."""
     if src.format not in _PYOGRIO_FORMATS or not needs_pyogrio_reader(src.uri):
@@ -833,9 +1084,11 @@ def _header_open_option(fmt: str, header_row: bool) -> str:
     return "HEADERS=YES" if header_row else "HEADERS=NO"
 
 
-def _apply_tabular_geometry(base: str, src: Source) -> str:
-    """Wrap a plain tabular read (xlsx/csv, no native geometry) with a computed `geom`
-    column, for a source naming x/y or WKT/WKB columns via Source.x_field/y_field/geom_field.
+def _apply_tabular_geometry(
+    base: str, src: Source, column_types: dict[str, str] | None = None
+) -> str:
+    """Wrap a plain tabular read (xlsx/csv/json, no native geometry) with a computed `geom`
+    column, for a source naming x/y or geometry columns via Source.x_field/y_field/geom_field.
 
     This is deliberately *not* done via GDAL open options (X_POSSIBLE_NAMES/Y_POSSIBLE_NAMES/
     GEOM_POSSIBLE_NAMES): those only exist on the CSV driver — XLSX's driver has no
@@ -845,27 +1098,239 @@ def _apply_tabular_geometry(base: str, src: Source) -> str:
     GDAL's KEEP_GEOM_COLUMNS default duplicates the matched column under the same name as
     the geometry field it derives, which DuckDB then refuses to `SELECT *` at all
     ("duplicate column name") — confirmed empirically. Building the geometry directly in SQL
-    sidesteps all of that and works identically for both formats.
+    sidesteps all of that and works identically for every tabular format.
+
+    `column_types` (column name → DuckDB type, from a DESCRIBE of `base`) matters for json:
+    read_json() types a field holding mixed values (`10.7` in one record, `"5.3"` in the
+    next) as JSON, and a nested GeoJSON geometry object as a STRUCT or JSON — neither of
+    which the plain text/number handling below can take.
     """
+    types = {k: v.upper() for k, v in (column_types or {}).items()}
+
+    def _number(col: str) -> str:
+        c = _sql_ident(col)
+        if types.get(col) == "JSON":
+            c = f"json_extract_string({c}, '$')"
+        return f"TRY_CAST({c} AS DOUBLE)"
+
     if src.x_field and src.y_field:
         x, y = _sql_ident(src.x_field), _sql_ident(src.y_field)
-        geom = f"ST_Point(TRY_CAST({x} AS DOUBLE), TRY_CAST({y} AS DOUBLE))"
+        geom = f"ST_Point({_number(src.x_field)}, {_number(src.y_field)})"
         exclude = f"{x}, {y}"
     elif src.geom_field:
         g = _sql_ident(src.geom_field)
-        # A hex-WKB string (e.g. PostGIS's extended WKB) and WKT text look nothing alike, so
-        # branch on whether it's pure hex digits — mirrors what GDAL's own GEOM_POSSIBLE_NAMES
-        # auto-detection distinguishes between (minus its GeoJSON-text branch: a single "one
-        # geometry column" xlsx/csv export is WKT or WKB in practice, not GeoJSON).
-        geom = (
-            f"CASE WHEN {g} IS NULL OR trim({g}) = '' THEN NULL "
-            f"WHEN regexp_matches({g}, '^[0-9A-Fa-f]+$') THEN ST_GeomFromHEXWKB({g}) "
-            f"ELSE CAST({g} AS GEOMETRY) END"
-        )
+        gtype = types.get(src.geom_field, "VARCHAR")
+        if gtype == "JSON" or gtype.startswith(("STRUCT", "MAP")):
+            # A GeoJSON geometry object nested in the record (json sources).
+            geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE ST_GeomFromGeoJSON(to_json({g})) END"
+        else:
+            # Hex WKB (e.g. PostGIS's extended WKB), GeoJSON text and WKT look nothing alike,
+            # so branch on the text: pure hex digits → WKB, a leading `{` → GeoJSON, else WKT
+            # — the same distinctions GDAL's own GEOM_POSSIBLE_NAMES auto-detection makes.
+            geom = (
+                f"CASE WHEN {g} IS NULL OR trim({g}) = '' THEN NULL "
+                f"WHEN regexp_matches({g}, '^[0-9A-Fa-f]+$') THEN ST_GeomFromHEXWKB({g}) "
+                f"WHEN starts_with(ltrim({g}), '{{') THEN ST_GeomFromGeoJSON({g}) "
+                f"ELSE CAST({g} AS GEOMETRY) END"
+            )
         exclude = g
     else:
         return base
     return f"(SELECT * EXCLUDE ({exclude}), {geom} AS geom FROM {base})"
+
+
+def _tabular_open_extra(src: Source) -> str:
+    """The ST_Read open-options clause for a csv/xlsx source (just header_row today)."""
+    if src.format in ("xlsx", "csv") and src.header_row is not None:
+        return _open_options_arg([_header_open_option(src.format, src.header_row)])
+    return ""
+
+
+def _tabular_cache_path(uri: str, layer: str | None, extra: str) -> tuple[Path, str] | None:
+    """(Parquet copy path, per-file key) for a csv/xlsx file big enough to be read via a
+    copy (see _tabular_parquet_cache), else None. Doesn't create anything."""
+    if _local_file_size(uri) < _TABULAR_CACHE_MIN_BYTES or Path(uri).is_dir():
+        return None
+    p = Path(uri).resolve()
+    st = p.stat()
+    # A download (fetch_remote_file) sits at <url hash>/<download time>/<name>: key on the
+    # url hash so a re-download replaces that URL's copy instead of orphaning it.
+    try:
+        key_path = p.parent.parent if p.is_relative_to(_REMOTE_CACHE_DIR.resolve()) else p
+    except OSError:
+        key_path = p
+    path_key = hashlib.sha1(str(key_path).encode()).hexdigest()[:16]
+    # A csv has exactly one layer, so picking it (empty → "segmentert") changes nothing read
+    # and mustn't mean a new conversion. xlsx sheets do differ.
+    if p.suffix.lower() == ".csv":
+        layer = None
+    version = hashlib.sha1(
+        f"{st.st_mtime_ns}|{st.st_size}|{layer}|{extra}".encode()
+    ).hexdigest()[:12]
+    return _TABULAR_CACHE_DIR / f"{path_key}_{version}.parquet", path_key
+
+
+def _is_download(path: Path) -> bool:
+    try:
+        return Path(path).resolve().is_relative_to(_REMOTE_CACHE_DIR.resolve())
+    except OSError:
+        return False
+
+
+# ---- background preparation (editor) ----
+# The editor must not block a request on a download or a Parquet conversion: browsers keep
+# only ~6 connections open per server, and inspect + layer listing + preview + counts all
+# waiting on one slow source starve everything else (validation, other sources). So its
+# endpoints call prepare_source first, which does that work in a background thread and
+# answers "not ready yet, here's the progress" straight away. The CLI never calls it:
+# read_expr does the same work inline, sharing the same caches.
+_PREPARE_JOBS: dict[str, threading.Thread] = {}
+_PREPARE_ERRORS: dict[str, str] = {}
+_PREPARE_LOCK = threading.Lock()
+
+
+def _needs_preparing(src: Source) -> bool:
+    """Whether reading `src` right now would mean a download or a Parquet conversion."""
+    if src.format not in ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv", "json"):
+        return False
+    local = src.uri
+    if should_download(src.uri, src.format):
+        latest = latest_download(src.uri, src.format)
+        if latest is None:
+            return True
+        local = str(latest)
+    if src.format in ("csv", "xlsx"):
+        target = _tabular_cache_path(local, src.layer, _tabular_open_extra(src))
+        if target is not None and not target[0].exists():
+            return True
+    return False
+
+
+def _prepare_job(src: Source, refresh: bool) -> None:
+    from .derive import DUCKDB_LOCK, load_extensions
+
+    key = src.uri
+    try:
+        local = src.uri
+        if should_download(src.uri, src.format):
+            local = fetch_remote_file(src.uri, src.format, progress_key=key, fresh=refresh)
+        if src.format in ("csv", "xlsx"):
+            extra = _tabular_open_extra(src)
+            target = _tabular_cache_path(local, src.layer, extra)
+            if target is not None and not target[0].exists():
+                # Shown while waiting for the lock too: it's the next thing that happens.
+                _set_progress(key, "convert", bytes=_local_file_size(local))
+                with DUCKDB_LOCK:
+                    con = duckdb.connect()
+                    try:
+                        load_extensions(con)
+                        _tabular_parquet_cache(con, local, src.layer, extra, None, progress_key=key)
+                    finally:
+                        con.close()
+    except Exception as e:
+        with _PREPARE_LOCK:
+            _PREPARE_ERRORS[key] = f"{type(e).__name__}: {e}" if not str(e) else str(e)
+    finally:
+        _clear_all_progress(key)
+        with _PREPARE_LOCK:
+            _PREPARE_JOBS.pop(key, None)
+
+
+def prepare_source(src: Source, refresh: bool = False) -> dict | None:
+    """None when `src` can be read right away. Otherwise makes sure a background job is
+    downloading / converting it (one per uri) and returns what it's doing — see
+    source_progress — or {"stage": "error", "error": ...} once if the last job failed.
+    `refresh` downloads a remote file source again even when it's already downloaded."""
+    key = src.uri
+    with _PREPARE_LOCK:
+        error = _PREPARE_ERRORS.pop(key, None)
+        if error is not None:
+            return {"stage": "error", "error": error}
+        if key not in _PREPARE_JOBS:
+            refresh = refresh and should_download(src.uri, src.format)
+            if not refresh and not _needs_preparing(src):
+                return None
+            job = threading.Thread(target=_prepare_job, args=(src, refresh), daemon=True)
+            _PREPARE_JOBS[key] = job
+            job.start()
+    return source_progress(key) or {"stage": "queued", "elapsed": 0.0}
+
+
+def _tabular_parquet_cache(
+    con: duckdb.DuckDBPyConnection,
+    uri: str,
+    layer: str | None,
+    extra: str,
+    log: Callable[[str], None] | None,
+    progress_key: str | None = None,
+) -> str | None:
+    """read_parquet() over a cached Parquet copy of a large local csv/xlsx file, or None to
+    read it with ST_Read as usual.
+
+    GDAL's CSV driver scans the whole file every time it opens one — a 44 MB csv costs ~8.5s
+    per open, for a LIMIT 50 or a DESCRIBE just the same — and the editor opens a source many
+    times per edit (inspect, preview, counts, plus the ST_Read_Meta inside
+    _read_expr_normalized). Converting once to Parquet (same columns and types, it's just
+    ST_Read's output) makes every later read near-instant. Keyed by path + mtime + size +
+    layer + open options, so an edited file or a changed header_row gets a fresh copy; a
+    file's older copies are deleted when a new one is written."""
+    target = _tabular_cache_path(uri, layer, extra)
+    if target is None:
+        return None
+    out, path_key = target
+    st = Path(uri).stat()
+    if not out.exists():
+        _TABULAR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        if log:
+            log(f"Caching {Path(uri).name} as Parquet for faster reads")
+        tmp = out.with_name(f"{out.stem}.{threading.get_ident()}.part")
+        # Raw ST_Read, not _read_expr_normalized: its ST_Read_Meta lookup is one more full
+        # GDAL scan of the file. The geometry column is found from the Parquet copy below.
+        read = _st_read(uri, layer=layer, extra=extra)
+        start = time.monotonic()
+        _set_progress(progress_key, "convert", bytes=st.st_size)
+        try:
+            con.execute(f"COPY (SELECT * FROM {read}) TO {_sql_str(str(tmp))} (FORMAT PARQUET)")
+        finally:
+            _clear_progress(progress_key, "convert")
+        os.replace(tmp, out)
+        if log:
+            log(f"Converted to Parquet in {time.monotonic() - start:.1f}s")
+        # A local file's older copies are simply superseded (every process derives the same
+        # new version from the file itself), but a download's copies can be another process's
+        # current one: only remove those once stale for everyone.
+        remote = _is_download(Path(uri))
+        for old in _TABULAR_CACHE_DIR.glob(f"{path_key}_*.parquet"):
+            if old == out or (remote and not _superseded_long_enough(old)):
+                continue
+            try:  # still open elsewhere (Windows) → left for the next rewrite to remove
+                old.unlink()
+            except OSError:
+                pass
+    base = f"read_parquet({_sql_str(str(out).replace(chr(92), '/'))})"
+    name = _geometry_column_via_describe(con, base)
+    if not name or name == "geom":
+        return base
+    return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
+
+
+def _json_read_expr(path: str, records: str | None) -> str:
+    """read_json() over a plain JSON file: an array of objects, newline-delimited objects,
+    or (with `records`, a dot path like `data.items`) one document holding that array.
+
+    `sample_size = -1` types each column from the whole file rather than the first ~20k
+    records, so a field that only turns mixed-type further down can't fail the read halfway.
+    `maximum_object_size` lifts the 16 MB per-object cap, which a `records` document (the
+    whole file is one object) passes easily."""
+    base = f"read_json({_sql_str(path)}, sample_size = -1, maximum_object_size = 2147483647)"
+    if not records:
+        return base
+    path_expr = ".".join(_sql_ident(part) for part in records.split("."))
+    # Inner unnest: the list into one row per record; outer: the record's fields into columns.
+    return (
+        f"(SELECT unnest(__rec, max_depth := 1) FROM "
+        f"(SELECT unnest({path_expr}) AS __rec FROM {base}))"
+    )
 
 
 def read_expr(
@@ -931,18 +1396,37 @@ def read_expr(
         geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE ST_GeomFromHEXWKB({g}) END"
         return f"(SELECT * EXCLUDE ({g}), {geom} AS geom FROM {base})"
 
+    if fmt == "json":
+        # Native read_json(), not GDAL: its GeoJSON driver only takes FeatureCollections.
+        uri = src.uri
+        if con is not None and should_download(uri, fmt):
+            uri = fetch_remote_file(uri, fmt, log, progress_key=src.uri)
+        base = _json_read_expr(uri, src.records)
+        if not (src.x_field or src.geom_field):
+            return base
+        column_types = None
+        if con is not None:
+            column_types = {
+                r[0]: str(r[1]) for r in con.execute(f"DESCRIBE SELECT * FROM {base}").fetchall()
+            }
+        return _apply_tabular_geometry(base, src, column_types)
+
     if fmt in ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv"):
         # GDAL picks the driver from the path/extension; layer/sheet is optional.
         uri, layer = src.uri, src.layer
+        if con is not None and should_download(uri, fmt):
+            uri = fetch_remote_file(uri, fmt, log, progress_key=src.uri)
         if fmt in ("gpkg", "fgdb", "gml"):
             uri, layer = _maybe_linearize(uri, layer, workdir, src.id, con, log)
         if con is not None and fmt in _PYOGRIO_FORMATS and needs_pyogrio_reader(uri):
             limit = _PYOGRIO_SAMPLE_ROWS if sample and max_features is None else max_features
             return _read_via_pyogrio(con, uri, layer, src.id, bbox, limit, log)
-        extra = ""
-        if fmt in ("xlsx", "csv") and src.header_row is not None:
-            extra = _open_options_arg([_header_open_option(fmt, src.header_row)])
-        base = _read_expr_normalized(uri, layer, con, extra=extra)
+        extra = _tabular_open_extra(src)
+        base = None
+        if con is not None and fmt in ("xlsx", "csv"):
+            base = _tabular_parquet_cache(con, uri, layer, extra, log, progress_key=src.uri)
+        if base is None:
+            base = _read_expr_normalized(uri, layer, con, extra=extra)
         if fmt in ("xlsx", "csv") and (src.x_field or src.geom_field):
             base = _apply_tabular_geometry(base, src)
         return base

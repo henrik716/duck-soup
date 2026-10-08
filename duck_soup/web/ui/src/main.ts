@@ -7,7 +7,8 @@ import {
   ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
   Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
   Filter as FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown
+  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown,
+  Code, History, Hash
 } from 'lucide'
 
 const appIcons = {
@@ -17,15 +18,19 @@ const appIcons = {
   ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
   Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
   Filter: FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown
+  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown,
+  Code, History, Hash
 }
 import {
   fetchMeta, fetchPipelineNames, fetchPipeline, savePipeline,
-  validateConfig, previewConfig, runConfig, exportScript,
+  validateConfig, previewConfig, runConfig, exportScript, fetchPlan, fetchCounts,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange } from './map'
 import { initLayout } from './layout'
-import { updateLineageDiagram } from './lineage'
+import { updateLineageDiagram, setLineageCounts, clearLineageCounts } from './lineage'
+import { closeFlowEditor, syncFlowEditor } from './flow-editor'
+import { renderSqlPlan, renderSqlPlanError, revealPlanStep, sqlPlanText } from './sql-plan'
+import { renderRunHistory } from './run-history'
 import { qs, mkEl, esc, wireCollapse } from './dom'
 import { META } from './state'
 import { pipelineCard } from './cards/pipeline-card'
@@ -38,7 +43,8 @@ import { setPreviewBusy, resetPreviewBusy, setRunBusy } from './busy'
 import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from './history'
 import { openPasteYamlModal } from './paste-yaml'
 import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
-import type { Config, PreviewRow } from './types'
+import type { Config, CountsResponse, PreviewRow, SourceProgress, WrittenLayer } from './types'
+import { formatSourceProgress, PENDING_RETRY_MS } from './schema'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
 
@@ -68,6 +74,8 @@ let syncTimer = 0
 let validateSeq = 0
 let previewSeq = 0
 let previewLimit = 1000
+// Above this many preview features, warn that the map/table may get slow (the limit itself is uncapped).
+const PREVIEW_WARN_LIMIT = 20000
 let bboxMode = false
 let bboxMoveTimer = 0
 let lastErrorDetail = ''
@@ -77,7 +85,8 @@ let loadedConfigName = ''
 // Global active preview state. This is the single source of truth for what the table and
 // map are showing; the map toolbar's "view" dropdown writes into it rather than
 // short-circuiting the preview path, which is what used to make the target unpredictable.
-let activePreview: { type: 'output' | 'source' | 'step'; id?: string; stepIdx?: number; pipelineIdx?: number } = { type: 'output' }
+// 'rejects' previews the rejects of step `stepIdx` (a step with a `rejects` layer).
+let activePreview: { type: 'output' | 'source' | 'step' | 'rejects'; id?: string; stepIdx?: number; pipelineIdx?: number } = { type: 'output' }
 
 // ---- dirty tracking ----
 function currentJson(): string {
@@ -126,7 +135,7 @@ function highlightPreviewingStep(): void {
       ?.classList.add('is-previewing')
     return
   }
-  if (activePreview.type !== 'step' || activePreview.stepIdx === undefined) return
+  if ((activePreview.type !== 'step' && activePreview.type !== 'rejects') || activePreview.stepIdx === undefined) return
 
   const target = activePreview.stepIdx === 0
     ? findBaseSourceCard(plCard)
@@ -146,6 +155,11 @@ function previewLabel(): string | null {
   if (activePreview.type === 'step') {
     const step = activePreview.stepIdx === 0 ? 'Base source' : `Step ${activePreview.stepIdx}`
     return `${step}${multi && plName ? ` of ${plName}` : ''} — intermediate rows, output mapping is bypassed`
+  }
+  if (activePreview.type === 'rejects') {
+    const st = cfg.pipelines[activePreview.pipelineIdx ?? 0]?.steps?.[(activePreview.stepIdx ?? 1) - 1]
+    const layer = st && 'rejects' in st ? st.rejects : ''
+    return `Rejects of step ${activePreview.stepIdx}${multi && plName ? ` of ${plName}` : ''}${layer ? ` — written to layer <strong>${esc(layer)}</strong>` : ''}`
   }
   if (activePreview.type === 'source') {
     return `Source <strong>${esc(activePreview.id ?? '')}</strong> — raw features, no steps or mapping applied`
@@ -229,6 +243,7 @@ function updateMapLayerSelect(): void {
 function sync(): void {
   updateMapLayerSelect()
   const cfg = collectConfig()
+  syncFlowEditor()
   updateLineageDiagram(cfg)
   updateDirtyIndicator()
   clearTimeout(syncTimer)
@@ -254,6 +269,7 @@ async function validate(): Promise<void> {
       qs<HTMLElement>('#yaml')!.innerHTML = numbered
       setStatus('ok', 'valid')
       runPreview()
+      refreshSqlPlan(cfg)
     } else {
       setStatus('bad', (d.error || 'invalid').split('\n')[0], d.error || 'invalid')
     }
@@ -388,6 +404,27 @@ function renderProblems(): void {
 }
 
 // ---- preview ----
+/** Re-issue `request` while the backend answers that a source is still being downloaded /
+ * converted to Parquet in the background (`pending`, see web/app.py's _pending_response),
+ * reporting what it's doing through `onProgress`. Null once `stale()` (a newer request took
+ * over), so callers just return. */
+async function awaitPrepared<T extends { pending?: boolean; progress?: SourceProgress }>(
+  request: () => Promise<T>,
+  onProgress: (text: string) => void,
+  stale: () => boolean,
+): Promise<T | null> {
+  let d = await request()
+  while (d.pending && d.progress) {
+    if (stale()) return null
+    const who = d.progress.source ? `${d.progress.source}: ` : ''
+    onProgress(`${who}${formatSourceProgress(d.progress)}`)
+    await new Promise(resolve => setTimeout(resolve, PENDING_RETRY_MS))
+    if (stale()) return null
+    d = await request()
+  }
+  return stale() ? null : d
+}
+
 async function runPreview(): Promise<void> {
   const cfg = collectConfig()
   if (!cfg.pipelines.length) return
@@ -398,7 +435,8 @@ async function runPreview(): Promise<void> {
 
   const seq = ++previewSeq
   const pipelineIdx = Math.min(activePreview.pipelineIdx ?? 0, cfg.pipelines.length - 1)
-  const preview_until_step = activePreview.type === 'step' ? activePreview.stepIdx : undefined
+  const rejects = activePreview.type === 'rejects'
+  const preview_until_step = activePreview.type === 'step' || rejects ? activePreview.stepIdx : undefined
 
   // The nearest-neighbour search-radius overlay needs the step being previewed.
   let activeStep: unknown = null
@@ -410,8 +448,14 @@ async function runPreview(): Promise<void> {
 
   setPreviewBusy(true)
   try {
-    const d = await previewConfig(cfg, pipelineIdx, previewLimit, preview_until_step, bbox)
-    if (seq !== previewSeq) return // a newer edit superseded this request
+    let waited = false
+    const d = await awaitPrepared(
+      () => previewConfig(cfg, pipelineIdx, previewLimit, preview_until_step, bbox, rejects),
+      text => { waited = true; setStatus('busy', text) },
+      () => seq !== previewSeq, // a newer edit superseded this request
+    )
+    if (!d) return
+    if (waited) setStatus('ok', 'valid')
     if (d.ok && d.rows) {
       updateMap(d.rows, activeStep, { fitBounds: !bboxMode })
       updateTable(d.rows as Record<string, unknown>[], previewLimit)
@@ -451,8 +495,14 @@ async function previewSource(sourceId: string, cfg: Config): Promise<void> {
 
     setPreviewBusy(true)
     try {
-      const d = await previewConfig(fakeCfg, 0, previewLimit, undefined, bbox)
-      if (seq !== previewSeq) return
+      let waited = false
+      const d = await awaitPrepared(
+        () => previewConfig(fakeCfg, 0, previewLimit, undefined, bbox),
+        text => { waited = true; setStatus('busy', text) },
+        () => seq !== previewSeq,
+      )
+      if (!d) return
+      if (waited) setStatus('ok', 'valid')
       if (d.ok && d.rows) {
         updateMap(d.rows as PreviewRow[], undefined, { fitBounds: !bboxMode })
         updateTable(d.rows as Record<string, unknown>[], previewLimit)
@@ -493,6 +543,7 @@ async function save(): Promise<void> {
     const sel = qs<HTMLSelectElement>('#loadSelect')!
     sel.value = name
     markSaved()
+    refreshRunHistory()
   } else {
     const d = await r.json()
     setStatus('bad', d.detail?.split('\n')[0] || 'save failed', d.detail || 'save failed')
@@ -601,14 +652,17 @@ async function run(): Promise<void> {
   add('running…', 'log-pulse', 'log-pulse-line')
 
   try {
-    const d = await runConfig(cfg)
+    const d = await runConfig(cfg, historyName())
     document.getElementById('log-pulse-line')?.remove()
     ;(d.log || []).forEach(l => add(l))
     const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
     if (d.ok) {
+      ;(d.layers || []).forEach(l =>
+        add(`  ${l.kind === 'rejects' ? 'rejects ' : ''}layer '${l.layer}': ${l.rows.toLocaleString()} rows`, l.kind === 'rejects' ? '' : 'ok'))
       add(`→ wrote ${d.output} [${elapsed}s]`, 'ok')
       setStatus('ok', 'run complete')
       showToast('Run completed!', 'ok')
+      showRunCounts(cfg, d.layers || [])
     } else {
       add(`ERROR: ${d.error}`, 'bad')
       if (d.trace) add(d.trace.split('\n').slice(-4).join('\n'), 'bad')
@@ -626,7 +680,114 @@ async function run(): Promise<void> {
     runBtn.innerHTML = originalHtml
     setRunBusy(false)
     createIcons({ icons: appIcons })
+    refreshRunHistory()
   }
+}
+
+// ---- SQL plan ----
+let planSeq = 0
+async function refreshSqlPlan(cfg: Config = collectConfig()): Promise<void> {
+  const container = qs<HTMLElement>('#sqlPlan')
+  if (!container || !cfg.pipelines.length) return
+  const seq = ++planSeq
+  const pipelineIdx = Math.min(activePreview.pipelineIdx ?? 0, cfg.pipelines.length - 1)
+  const scope = qs<HTMLElement>('#sqlPlanScope')
+  if (scope) scope.textContent = cfg.pipelines.length > 1 ? `· ${cfg.pipelines[pipelineIdx].name}` : ''
+  try {
+    const d = await fetchPlan(cfg, pipelineIdx)
+    if (seq !== planSeq) return
+    if (d.ok && d.plan) renderSqlPlan(container, d.plan)
+    else renderSqlPlanError(container, d.error || 'no plan')
+  } catch (e) {
+    if (seq === planSeq) renderSqlPlanError(container, String(e))
+  }
+}
+
+// ---- row counts on the lineage diagram ----
+let countSeq = 0
+function setCountStatus(text: string, title = '', bad = false): void {
+  const el = qs<HTMLElement>('#lineageCountStatus')
+  if (!el) return
+  el.textContent = text
+  el.title = title
+  el.classList.toggle('is-bad', bad)
+}
+
+/** Counts every pipeline's rows after each step: over the first `limit` base features, or
+ *  (null) over all the data. Pipelines go one at a time — the server runs one query at once. */
+async function countRows(limit: number | null): Promise<void> {
+  const cfg = collectConfig()
+  if (!cfg.pipelines.length) return
+  const seq = ++countSeq
+  const bbox = bboxMode ? getMapBounds() ?? undefined : undefined
+  const scope = limit == null ? 'all data' : `first ${limit.toLocaleString()} base features${bbox ? ' in view' : ''}`
+  setCountStatus(`counting… (${scope})`)
+  const buttons = [qs<HTMLButtonElement>('#countSampleBtn'), qs<HTMLButtonElement>('#countAllBtn')]
+  buttons.forEach(b => { if (b) b.disabled = true })
+  try {
+    for (let i = 0; i < cfg.pipelines.length; i++) {
+      const d = await awaitPrepared(
+        () => fetchCounts(cfg, i, limit, bbox),
+        text => setCountStatus(`waiting for ${text}`),
+        () => seq !== countSeq,
+      )
+      if (!d) return
+      if (!d.ok) {
+        setCountStatus('count failed', d.error || '', true)
+        showToast(`Counting rows failed: ${(d.error || 'unknown error').split('\n')[0]}`, 'bad')
+        return
+      }
+      setLineageCounts(i, d, JSON.stringify(cfg.pipelines[i]))
+    }
+    setCountStatus(`rows: ${scope}`, limit == null
+      ? 'Rows after every step, over all the data'
+      : `Rows after every step, over the first ${limit.toLocaleString()} base features (the preview limit). Source counts need "all data".`)
+    updateLineageDiagram(collectConfig())
+  } catch (e) {
+    if (seq === countSeq) setCountStatus('count failed', String(e), true)
+  } finally {
+    if (seq === countSeq) buttons.forEach(b => { if (b) b.disabled = false })
+  }
+}
+
+/** After a run, the written layers' row counts (all the data) go on the diagram too. */
+function showRunCounts(cfg: Config, written: WrittenLayer[]): void {
+  cfg.pipelines.forEach((pdef, i) => {
+    const mine = written.filter(w => w.pipeline === pdef.name)
+    if (!mine.length) return
+    const layers = pdef.layers.map(l => mine.find(w => w.kind === 'layer' && w.layer === l.layer)?.rows ?? 0)
+    const rejects: Record<string, number> = {}
+    pdef.steps.forEach((st, idx) => {
+      const hit = 'rejects' in st && st.rejects ? mine.find(w => w.kind === 'rejects' && w.layer === st.rejects) : undefined
+      if (hit) rejects[String(idx + 1)] = hit.rows
+    })
+    const run: CountsResponse = { ok: true, limit: null, layers, rejects, steps: {}, sources: {} }
+    setLineageCounts(i, run, JSON.stringify(pdef))
+  })
+  setCountStatus('rows: written by the last run', 'Rows written to each layer by the last run. Count rows for the steps in between.')
+  updateLineageDiagram(collectConfig())
+}
+
+// ---- run history ----
+/** The name run history is kept under: the saved config's name (its YAML file's stem). */
+function historyName(): string {
+  return loadedConfigName || qs<HTMLInputElement>('#saveName')?.value.trim() || ''
+}
+
+function refreshRunHistory(): void {
+  const container = qs<HTMLElement>('#runsList')
+  if (!container) return
+  const name = historyName()
+  const scope = qs<HTMLElement>('#runsScope')
+  if (scope) scope.textContent = name ? `· ${name}` : ''
+  renderRunHistory(container, name)
+}
+
+/** Forget everything tied to the previously open config. */
+function resetForNewConfig(): void {
+  closeFlowEditor({ restoreFocus: false })
+  clearLineageCounts()
+  setCountStatus('')
 }
 
 // ---- load pipeline list ----
@@ -650,10 +811,12 @@ async function loadPipelineConfig(name: string): Promise<void> {
   clearStepHighlights()
   resetPreviewBusy()
   clearHistory()
+  resetForNewConfig()
   hydrate(d.config, sync)
   updatePreviewBanner()
 
   loadedConfigName = name
+  refreshRunHistory()
   try { localStorage.setItem(LAST_CONFIG_KEY, name) } catch { /* private mode */ }
   const saveNameEl = qs<HTMLInputElement>('#saveName')
   if (saveNameEl) saveNameEl.value = name
@@ -669,9 +832,11 @@ function newConfig(): void {
   clearStepHighlights()
   resetPreviewBusy()
   clearHistory()
+  resetForNewConfig()
   hydrate(structuredClone(BLANK_CONFIG), sync)
   updatePreviewBanner()
   loadedConfigName = ''
+  refreshRunHistory()
   const saveNameEl = qs<HTMLInputElement>('#saveName')
   if (saveNameEl) saveNameEl.value = ''
   markSaved()
@@ -684,9 +849,11 @@ function importConfig(cfg: Config): void {
   clearStepHighlights()
   resetPreviewBusy()
   clearHistory()
+  resetForNewConfig()
   hydrate(cfg, sync)
   updatePreviewBanner()
   loadedConfigName = ''
+  refreshRunHistory()
   const loadSel = qs<HTMLSelectElement>('#loadSelect')
   if (loadSel) loadSel.value = ''
   const saveNameEl = qs<HTMLInputElement>('#saveName')
@@ -792,6 +959,7 @@ function wireFocusTracking(): void {
       activePreview.pipelineIdx = idx
       updatePreviewBanner()
       runPreview()
+      refreshSqlPlan()
     }
   })
 }
@@ -808,8 +976,12 @@ function wireMapLayerSelect(): void {
 function wirePreviewControls(): void {
   const limitInput = qs<HTMLInputElement>('#previewLimit')
   limitInput?.addEventListener('change', () => {
-    const n = Math.max(1, Math.min(20000, Math.round(Number(limitInput.value)) || 1000))
+    const n = Math.max(1, Math.round(Number(limitInput.value)) || 1000)
     limitInput.value = String(n)
+    if (n > PREVIEW_WARN_LIMIT && previewLimit <= PREVIEW_WARN_LIMIT) {
+      showToast(`Previewing more than ${PREVIEW_WARN_LIMIT.toLocaleString()} features can make the editor slow or unresponsive`, 'bad')
+    }
+    limitInput.classList.toggle('limit-warn', n > PREVIEW_WARN_LIMIT)
     previewLimit = n
     runPreview()
   })
@@ -892,6 +1064,16 @@ function wireHeaderActions(): void {
     } catch { showToast('Failed to copy YAML', 'bad') }
   })
 
+  qs('#copySqlBtn')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(sqlPlanText())
+      showToast('Copied the SQL plan to the clipboard', 'ok')
+    } catch { showToast('Failed to copy the SQL', 'bad') }
+  })
+  qs('#refreshRunsBtn')?.addEventListener('click', refreshRunHistory)
+  qs('#countSampleBtn')?.addEventListener('click', () => countRows(previewLimit))
+  qs('#countAllBtn')?.addEventListener('click', () => countRows(null))
+
   qs('#clearLogBtn')?.addEventListener('click', () => {
     qs<HTMLElement>('#log')!.innerHTML = '<span class="log-line">log cleared</span>'
     showToast('Logs cleared', 'info')
@@ -944,6 +1126,27 @@ function wirePreviewStepEvent(): void {
     const sel = qs<HTMLSelectElement>('#map-layer-select')
     if (sel) sel.value = ''
     setActivePreview({ type: 'step', stepIdx: ce.detail.stepIdx, pipelineIdx: ce.detail.pipelineIdx })
+  })
+  // A rejects node in the lineage diagram: preview what that step rejects.
+  document.addEventListener('preview-rejects', (e: Event) => {
+    const ce = e as CustomEvent<{ stepIdx: number; pipelineIdx: number }>
+    const sel = qs<HTMLSelectElement>('#map-layer-select')
+    if (sel) sel.value = ''
+    switchTab('table-tab')
+    setActivePreview({ type: 'rejects', stepIdx: ce.detail.stepIdx, pipelineIdx: ce.detail.pipelineIdx })
+  })
+  // A step card's code button: show that step in the SQL tab.
+  document.addEventListener('show-step-sql', async (e: Event) => {
+    const ce = e as CustomEvent<{ stepIdx: number; pipelineIdx: number }>
+    switchTab('sql-tab')
+    if ((activePreview.pipelineIdx ?? 0) !== ce.detail.pipelineIdx) {
+      activePreview = { type: 'output', pipelineIdx: ce.detail.pipelineIdx }
+      updatePreviewBanner()
+      runPreview()
+    }
+    await refreshSqlPlan()
+    const container = qs<HTMLElement>('#sqlPlan')
+    if (container) revealPlanStep(container, ce.detail.stepIdx)
   })
   // A source card's eye button: same preview as picking the source in the map's
   // "what to preview" dropdown, which is kept in sync.

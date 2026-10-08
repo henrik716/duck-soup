@@ -278,6 +278,20 @@ The YAML has no variable substitution. Anything in a `uri` is stored in plain te
 - Make the pipeline folder readable only by the account that runs the job.
 - Don't commit a YAML file that contains a password.
 
+### Run history
+
+Every `duck-soup run` records itself in `runs/<config name>/` in the project folder: when it
+ran, whether it worked, the error if it didn't, and how many rows each layer got. The editor
+shows these in its [History tab](editor/preview-and-run.md#run-history), next to the runs
+started from the editor, so you can check last night's run without opening a log file.
+
+For scheduled runs to show up there, they have to record into the editor's project folder.
+The recipes above `cd` into it (or set it as the working directory), which is enough. If the
+job runs from somewhere else, set `DUCK_SOUP_ROOT` to the project folder, or pass
+`--history-dir /srv/gis`. The run's own log, as captured by your scheduler, is unaffected.
+
+The newest 200 runs per config are kept. `--no-history` turns recording off for a job.
+
 ### Validate in CI
 
 `duck-soup check` reads no data, so it's cheap to run on every commit. It catches a broken

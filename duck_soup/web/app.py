@@ -12,6 +12,7 @@ import tempfile
 import time
 import traceback
 from contextlib import redirect_stdout
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 
@@ -31,10 +32,19 @@ from ..config import (
     load_config,
     load_config_dict,
 )
-from ..engine import run_config, preview_config_pipeline
+from .. import history
+from ..engine import (
+    count_config_pipeline, plan_config_pipeline, preview_config_pipeline, run_config,
+)
 from ..sources import (
+    cached_read_note,
+    download_info,
     crs_extent_warning,
+    fetch_remote_file,
     large_file_reader_note,
+    prepare_source,
+    remote_file_name,
+    should_download,
     list_arcgis_rest_layers,
     list_gdal_layers,
     list_oapif_collections,
@@ -48,6 +58,9 @@ from ..derive import DUCKDB_LOCK, init_duckdb, load_extensions
 ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
 PIPELINE_DIR = ROOT / "pipelines"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+# Run history lives in <RUNS_ROOT>/runs/ (see history.py): the same place `duck-soup run`
+# records scheduled runs when run from this project folder or with DUCK_SOUP_ROOT set.
+RUNS_ROOT = ROOT
 
 PIPELINE_DIR.mkdir(parents=True, exist_ok=True)
 print(f"Using {ROOT} for pipelines/data/output (override with DUCK_SOUP_ROOT)")
@@ -119,6 +132,43 @@ class InspectRequest(BaseModel):
     source: dict
 
 
+class RefreshSourceRequest(BaseModel):
+    source: dict
+
+
+@app.post("/api/refresh_source")
+def refresh_source(req: RefreshSourceRequest) -> dict:
+    """Download a remote file source again (previews otherwise keep reusing its download, see
+    sources.py's _REMOTE_CACHE_DIR). Runs in the background like any download: answers
+    pending, and the editor re-inspects until it's done."""
+    try:
+        src = Source.model_validate(req.source)
+    except Exception as e:
+        return {"ok": False, "error": f"Invalid source config: {e}"}
+    prog = prepare_source(src, refresh=True)
+    if prog is None:
+        return {"ok": True}  # not a downloaded source: nothing to refresh
+    if prog["stage"] == "error":
+        return {"ok": False, "error": prog["error"]}
+    return {"ok": False, "pending": True, "progress": {**prog, "source": src.id}}
+
+
+def _pending_response(sources: list[Source]) -> dict | None:
+    """A response for when one of `sources` still needs downloading / converting to Parquet
+    (see sources.prepare_source): `{"ok": False, "pending": True, "progress": {...}}`, which
+    the editor shows and then retries. Starts every source that needs it, not just the first.
+    None when all of them can be read right away."""
+    first = None
+    for src in sources:
+        prog = prepare_source(src)
+        if prog is None:
+            continue
+        if prog["stage"] == "error":
+            return {"ok": False, "error": f"source '{src.id}': {prog['error']}"}
+        first = first or {**prog, "source": src.id}
+    return {"ok": False, "pending": True, "progress": first} if first else None
+
+
 @app.post("/api/inspect")
 def inspect_source(req: InspectRequest) -> dict:
     try:
@@ -126,6 +176,9 @@ def inspect_source(req: InspectRequest) -> dict:
     except Exception as e:
         return {"ok": False, "error": f"Invalid source config: {e}"}
 
+    pending = _pending_response([src])
+    if pending:
+        return pending
     try:
         with DUCKDB_LOCK:
             con = duckdb.connect()
@@ -160,7 +213,8 @@ def inspect_source(req: InspectRequest) -> dict:
                             pass
                     return {
                         "ok": True, "columns": columns, "crs_warning": crs_warning,
-                        "reader_note": large_file_reader_note(src),
+                        "reader_note": large_file_reader_note(src) or cached_read_note(src),
+                        "download": download_info(src),
                     }
             finally:
                 con.close()
@@ -204,6 +258,8 @@ def validate(req: ValidateRequest) -> dict:
 
 class RunRequest(BaseModel):
     config: dict
+    # The saved config's name, which keys its run history; defaults to the config's own name.
+    name: str | None = None
 
 
 @app.post("/api/run")
@@ -214,23 +270,51 @@ async def run(req: RunRequest) -> dict:
         raise HTTPException(422, f"invalid config: {e}")
 
     log_lines: list[str] = []
+    written: list[dict] = []
     buf = io.StringIO()
+    started = datetime.now(timezone.utc)
+
+    def record(**result) -> None:
+        history.record_run(
+            RUNS_ROOT, (req.name or "").strip() or cfg.name, trigger="editor",
+            started=started, finished=datetime.now(timezone.utc),
+            layers=written, log=log_lines, yaml_text=dump_config_yaml(cfg), **result,
+        )
+
     try:
         with redirect_stdout(buf):
-            out_path = await asyncio.to_thread(run_config, cfg, log_lines.append)
+            out_path = await asyncio.to_thread(run_config, cfg, log_lines.append, written)
+        record(ok=True, output=out_path)
         return {
             "ok": True,
             "output": out_path,
             "log": log_lines,
+            "layers": written,
             "stdout": buf.getvalue(),
         }
     except Exception as e:
+        record(ok=False, error=str(e))
         return {
             "ok": False,
             "error": str(e),
             "log": log_lines,
+            "layers": written,
             "trace": traceback.format_exc(),
         }
+
+
+@app.get("/api/runs/{name}")
+def list_runs(name: str, limit: int = 50) -> dict:
+    """The newest runs of a config, newest first: editor runs and scheduled CLI runs."""
+    return {"runs": history.list_runs(RUNS_ROOT, name, limit=max(1, min(limit, history.MAX_RUNS)))}
+
+
+@app.get("/api/runs/{name}/{run_id}")
+def get_run(name: str, run_id: str) -> dict:
+    record = history.get_run(RUNS_ROOT, name, run_id)
+    if record is None:
+        raise HTTPException(404, f"no run '{run_id}' for '{name}'")
+    return record
 
 
 class ExportScriptRequest(BaseModel):
@@ -291,13 +375,15 @@ def export_script(req: ExportScriptRequest) -> dict:
 class PreviewRequest(BaseModel):
     config: dict
     pipeline_idx: int = 0
-    # Capped server-side (not just the frontend default) so a source with millions
-    # of features can't be asked to ship an unbounded GeoJSON payload to the browser.
-    limit: int = Field(default=1000, ge=1, le=20000)
+    # No upper bound: the editor warns above 20 000 features that a big GeoJSON
+    # payload may make the browser slow or unresponsive, but lets the user go ahead.
+    limit: int = Field(default=1000, ge=1)
     preview_until_step: int | None = None
     # Optional WGS84 bbox (west, south, east, north) — e.g. the current map viewport —
     # to restrict the preview to, instead of an arbitrary first-N-rows slice.
     bbox: tuple[float, float, float, float] | None = None
+    # With preview_until_step: show that step's rejects instead of the rows it passes on.
+    rejects: bool = False
 
 
 @app.post("/api/preview")
@@ -307,10 +393,13 @@ def preview(req: PreviewRequest) -> dict:
     except Exception as e:
         raise HTTPException(422, f"invalid config: {e}")
 
+    pending = _pending_response(cfg.pipelines[min(req.pipeline_idx, len(cfg.pipelines) - 1)].sources)
+    if pending:
+        return pending
     try:
         rows = preview_config_pipeline(
             cfg, pipeline_idx=req.pipeline_idx, limit=req.limit,
-            preview_until_step=req.preview_until_step, bbox=req.bbox,
+            preview_until_step=req.preview_until_step, bbox=req.bbox, rejects=req.rejects,
         )
         # Sanitize values to ensure JSON serializability (handles non-UTF-8 strings, bytes, etc.)
         safe_rows = []
@@ -333,6 +422,45 @@ def preview(req: PreviewRequest) -> dict:
         }
 
 
+class PlanRequest(BaseModel):
+    config: dict
+    pipeline_idx: int = 0
+
+
+@app.post("/api/plan")
+def plan(req: PlanRequest) -> dict:
+    """The SQL behind each view of one pipeline, for the editor's SQL tab. Reads no data."""
+    try:
+        cfg = load_config_dict(req.config)
+        return {"ok": True, "plan": plan_config_pipeline(cfg, pipeline_idx=req.pipeline_idx)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+class CountsRequest(BaseModel):
+    config: dict
+    pipeline_idx: int = 0
+    # Count over the first N base features only; None counts all the data (about a run's cost).
+    limit: int | None = Field(default=1000, ge=1, le=1_000_000)
+    bbox: tuple[float, float, float, float] | None = None
+
+
+@app.post("/api/counts")
+def counts(req: CountsRequest) -> dict:
+    """Row counts after each step of one pipeline, for the lineage diagram's connections."""
+    try:
+        cfg = load_config_dict(req.config)
+    except Exception as e:
+        raise HTTPException(422, f"invalid config: {e}")
+    pending = _pending_response(cfg.pipelines[min(req.pipeline_idx, len(cfg.pipelines) - 1)].sources)
+    if pending:
+        return pending
+    try:
+        return {"ok": True, **count_config_pipeline(
+            cfg, pipeline_idx=req.pipeline_idx, limit=req.limit, bbox=req.bbox,
+        )}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ---- file browser ----
@@ -528,6 +656,15 @@ def inspect_file(req: InspectFileRequest) -> dict:
                 return {"ok": True, "layers": layers, "default_crs": default_crs}
 
             fwd_path = str(resolved_path).replace("\\", "/")
+            if fmt == "csv":
+                # A csv has exactly one layer, named after the file; skip ST_Read_Meta, which
+                # makes GDAL scan the whole file (seconds for a large one).
+                # A remote one is named after its download (see sources.remote_file_name).
+                local = remote_file_name(uri, fmt) if should_download(uri, fmt) else fwd_path
+                return {"ok": True, "layers": [Path(local).stem], "default_crs": None}
+            if fmt == "json":
+                # Read with DuckDB's read_json (see sources.py), not GDAL: no layers, no CRS.
+                return {"ok": True, "layers": [], "default_crs": None}
             if fmt == "parquet":
                 # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
                 # bundled GDAL build — see sources.py's module docstring). No layer concept
@@ -544,7 +681,15 @@ def inspect_file(req: InspectFileRequest) -> dict:
                 # fetch_arcgis_rest() always forces outSR=4326.
                 return {"ok": True, "layers": list_arcgis_rest_layers(uri), "default_crs": "EPSG:4326"}
 
-            target = uri if uri.startswith(("http://", "https://")) else fwd_path
+            if should_download(uri, fmt):
+                pending = _pending_response([Source(id="inspect", format=fmt, uri=uri)])
+                if pending:
+                    return {**pending, "layers": [], "default_crs": None}
+                target = fetch_remote_file(uri, fmt)  # ready: a cache hit, no download
+            elif uri.startswith(("http://", "https://")):
+                target = uri
+            else:
+                target = fwd_path
             layers, default_crs = list_gdal_layers(con, target)
             return {"ok": True, "layers": layers, "default_crs": default_crs}
         except Exception as e:

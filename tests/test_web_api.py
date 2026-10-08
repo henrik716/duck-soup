@@ -429,3 +429,50 @@ def test_inspect_reports_reader_note_only_for_large_files(client, monkeypatch):
     assert body["ok"] is True
     assert "pyogrio" in body["reader_note"]
     assert {"name", "category"} <= {c["name"] for c in body["columns"]}
+
+
+def test_inspect_answers_pending_while_a_remote_source_downloads(client, monkeypatch, tmp_path):
+    import threading
+    import duck_soup.sources as sources_mod
+
+    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    release = threading.Event()
+
+    class _Resp:
+        headers = {}
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def raise_for_status(self): pass
+        def iter_content(self, chunk_size=1):
+            release.wait(5)
+            yield b"id,name\n1,A\n"
+
+    monkeypatch.setattr("duck_soup.sources.requests.get", lambda url, **kw: _Resp())
+    src = {"id": "r", "format": "csv", "uri": "https://example.com/slow.csv"}
+    d = client.post("/api/inspect", json={"source": src}).json()
+    assert d["ok"] is False and d["pending"] is True
+    assert d["progress"]["source"] == "r"
+
+    # The layer name comes from the URL, without waiting for the download.
+    f = client.post("/api/inspect_file", json={"uri": src["uri"], "format": "csv"}).json()
+    assert f["layers"] == ["slow"]
+
+    release.set()
+    import time
+    for _ in range(100):
+        d = client.post("/api/inspect", json={"source": src}).json()
+        if not d.get("pending"):
+            break
+        time.sleep(0.05)
+    assert d["ok"] is True and [c["name"] for c in d["columns"]][-2:] == ["id", "name"]
+    assert d["download"]["bytes"] == 12 and d["download"]["age"] < 60
+
+    # Refresh: answers pending at once, then the source is ready again.
+    r = client.post("/api/refresh_source", json={"source": src}).json()
+    assert r.get("pending") is True or r.get("ok") is True
+    for _ in range(100):
+        d = client.post("/api/inspect", json={"source": src}).json()
+        if not d.get("pending"):
+            break
+        time.sleep(0.05)
+    assert d["ok"] is True

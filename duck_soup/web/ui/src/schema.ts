@@ -4,9 +4,28 @@ import { SOURCE_SCHEMAS } from './state'
 import { setComboOptions, ensureComboOption, type ComboOptionDef } from './combo'
 import { mapRow } from './cards/map-row'
 import { showToast } from './toast'
+import type { SourceProgress } from './types'
+
+// ---- slow-source progress (download / Parquet conversion) ----
+const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`
+
+export function formatSourceProgress(p: SourceProgress): string {
+  if (p.stage === 'queued') return 'preparing…'
+  if (p.stage === 'convert') {
+    return `converting to Parquet for fast previews… ${Math.round(p.elapsed)} s`
+  }
+  const bytes = p.bytes ?? 0
+  if (p.total) return `downloading… ${mb(bytes)} / ${mb(p.total)} (${Math.round((100 * bytes) / p.total)}%)`
+  // No Content-Length (a per-request export): size so far and speed, no percentage.
+  const speed = p.elapsed > 0.5 ? ` · ${mb(bytes / p.elapsed)}/s` : ''
+  return `downloading… ${mb(bytes)}${speed}`
+}
+
+/** How long to wait before asking again about a source that's still being prepared. */
+export const PENDING_RETRY_MS = 700
 
 // ---- schema badge ----
-export function updateSourceBadge(card: Element, status: null | { loading?: boolean; ok?: boolean; columns?: { name: string; type: string }[]; error?: string }): void {
+export function updateSourceBadge(card: Element, status: null | { loading?: boolean; loadingText?: string | null; ok?: boolean; columns?: { name: string; type: string }[]; error?: string }): void {
   const badge = card.querySelector<HTMLElement>('.schema-badge')
   const schemaList = card.querySelector<HTMLElement>('.schema-list')
   if (!badge || !schemaList) return
@@ -19,8 +38,13 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
   }
 
   if (status.loading) {
+    const text = status.loadingText || 'inspecting…'
+    // Already showing the spinner (a progress update): swap the text only, so the spinner
+    // animation doesn't restart on every poll.
+    const existing = badge.querySelector<HTMLElement>('[data-loading-text]')
+    if (existing) { existing.textContent = text; return }
     badge.innerHTML = `<span style="font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:4px">
-      <i data-lucide="loader" class="spin-animation" style="width:11px;height:11px"></i> inspecting…</span>`
+      <i data-lucide="loader" class="spin-animation" style="width:11px;height:11px"></i> <span data-loading-text>${esc(text)}</span></span>`
     createIcons({ icons: { Loader } })
     return
   }

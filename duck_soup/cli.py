@@ -14,6 +14,12 @@ def main(argv: list[str] | None = None) -> int:
 
     run = sub.add_parser("run", help="Run a pipeline YAML")
     run.add_argument("pipeline", help="Path to a pipeline .yaml file")
+    run.add_argument(
+        "--history-dir",
+        help="Project folder whose runs/ keeps this run's record (default: $DUCK_SOUP_ROOT "
+        "if set, else the current folder)",
+    )
+    run.add_argument("--no-history", action="store_true", help="Don't record this run")
 
     check = sub.add_parser("check", help="Validate a pipeline YAML without running")
     check.add_argument("pipeline")
@@ -46,11 +52,49 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "run":
-        out_path = run_config(cfg, log=lambda m: print(f"  {m}", flush=True))
-        print(f"\nWrote {out_path}")
-        return 0
+        return _run(cfg, args)
 
     return 1
+
+
+def _run(cfg, args) -> int:
+    from datetime import datetime, timezone
+
+    log: list[str] = []
+
+    def echo(m: str) -> None:
+        log.append(m)
+        print(f"  {m}", flush=True)
+
+    written: list[dict] = []
+    started = datetime.now(timezone.utc)
+    try:
+        out_path = run_config(cfg, log=echo, written=written)
+    except Exception as e:
+        # Recorded, then re-raised: the exit code and traceback stay what schedulers expect.
+        if not args.no_history:
+            _record(args, cfg, started, written, log, ok=False, error=str(e))
+        raise
+    print(f"\nWrote {out_path}")
+    if not args.no_history:
+        _record(args, cfg, started, written, log, ok=True, output=out_path)
+    return 0
+
+
+def _record(args, cfg, started, written, log, *, ok, output=None, error=None) -> None:
+    """Record this run in the project's run history (see history.py), for the editor."""
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from . import history
+    from .config import dump_config_yaml
+
+    root = Path(args.history_dir).resolve() if args.history_dir else history.default_root()
+    history.record_run(
+        root, Path(args.pipeline).stem, trigger="cli",
+        started=started, finished=datetime.now(timezone.utc), ok=ok,
+        output=output, error=error, layers=written, log=log, yaml_text=dump_config_yaml(cfg),
+    )
 
 
 def _tutorial(folder: str, force: bool) -> int:

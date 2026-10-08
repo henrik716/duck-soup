@@ -106,12 +106,23 @@
 <div class="wrap">
   <main class="builder">
 
-    <!-- ETL Lineage Diagram -->
+    <!-- "Ducks in a row": the pipeline flow diagram (src/lineage.ts) -->
     <div id="lineage-diagram-container" class="card" style="margin-bottom:24px;padding:14px 18px;border-color:rgb(var(--accent-rgb) / 0.25);">
       <div class="lineage-header" style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;display:flex;justify-content:space-between;align-items:center;">
-        <span>ETL Pipeline Lineage</span>
-        <span style="display:flex;align-items:center;gap:10px;">
-          <span style="color:var(--accent);font-size:10px;">interactive flow</span>
+        <span class="lineage-title" title="Getting your ducks in a row: the base's features waddle through every step, in order, and file into the output. Click a duck to edit it, or a + to add one.">ducks in a row <span class="lineage-title-sub">· pipeline flow</span></span>
+        <span class="lineage-header-tools">
+          <span id="lineageCountStatus" class="lineage-count-status" aria-live="polite"></span>
+          <span class="lineage-count-btns lineage-zoom" role="group" aria-label="Zoom the diagram">
+            <button type="button" id="zoomOutBtn" title="Zoom out (Ctrl+wheel, or pinch)" aria-label="Zoom out">−</button>
+            <button type="button" id="zoomResetBtn" title="Zoom to 100%" aria-label="Zoom to 100%">100%</button>
+            <button type="button" id="zoomInBtn" title="Zoom in (Ctrl+wheel, or pinch)" aria-label="Zoom in">+</button>
+            <button type="button" id="zoomFitBtn" title="Fit the whole flow in the panel" aria-pressed="true">fit</button>
+          </span>
+          <span class="lineage-count-btns" role="group" aria-label="Count the rows after every step">
+            <span class="lineage-count-label"><i data-lucide="hash" style="width:11px;height:11px"></i> count rows</span>
+            <button type="button" id="countSampleBtn" title="Count the rows after every step, over the first N base features (N is the preview limit) — quick">sample</button>
+            <button type="button" id="countAllBtn" title="Count the rows after every step over all the data — takes about as long as a run">all data</button>
+          </span>
           <i data-lucide="chevron-down" class="card-chevron" style="width:14px;height:14px;color:var(--muted);transition:transform 0.2s;"></i>
         </span>
       </div>
@@ -163,7 +174,7 @@
         </select>
         <span style="width:1px;height:16px;background:var(--line);"></span>
         <span style="font-size:10px;color:var(--muted);font-family:var(--mono);">limit</span>
-        <input id="previewLimit" type="number" min="1" max="20000" step="100" value="1000" title="Max features to preview" aria-label="Maximum features to preview"
+        <input id="previewLimit" type="number" min="1" step="100" value="1000" title="Max features to preview" aria-label="Maximum features to preview"
           style="width:64px;background:var(--panel-solid);border:1px solid var(--line);border-radius:4px;color:var(--ink);font-family:var(--mono);font-size:11px;padding:2px 4px;outline:none;">
         <button id="bboxToggleBtn" type="button" class="ghost mini" aria-pressed="false" title="Only preview features within the current map view, instead of an arbitrary slice"
           style="display:flex;align-items:center;gap:4px;padding:3px 7px;font-size:11px;height:22px;white-space:nowrap;flex-shrink:0;">
@@ -186,7 +197,9 @@
         <div class="tabs-list">
           <button id="tab-btn-table" class="tab-btn active" role="tab" aria-selected="true" aria-controls="table-tab" data-tab="table-tab"><i data-lucide="table" style="width:13px;height:13px"></i> Data Table</button>
           <button id="tab-btn-yaml" class="tab-btn" role="tab" aria-selected="false" aria-controls="yaml-tab" tabindex="-1" data-tab="yaml-tab"><i data-lucide="file-code" style="width:13px;height:13px"></i> YAML Config</button>
+          <button id="tab-btn-sql" class="tab-btn" role="tab" aria-selected="false" aria-controls="sql-tab" tabindex="-1" data-tab="sql-tab"><i data-lucide="code" style="width:13px;height:13px"></i> SQL</button>
           <button id="tab-btn-log" class="tab-btn" role="tab" aria-selected="false" aria-controls="log-tab" tabindex="-1" data-tab="log-tab"><i data-lucide="terminal" style="width:13px;height:13px"></i> Run Logs</button>
+          <button id="tab-btn-runs" class="tab-btn" role="tab" aria-selected="false" aria-controls="runs-tab" tabindex="-1" data-tab="runs-tab"><i data-lucide="history" style="width:13px;height:13px"></i> History</button>
           <button id="tab-btn-problems" class="tab-btn" role="tab" aria-selected="false" aria-controls="problems-tab" tabindex="-1" data-tab="problems-tab"><i data-lucide="alert-circle" style="width:13px;height:13px"></i> Problems<span class="tab-badge" id="problemsBadge" hidden></span></button>
         </div>
         <div class="tabs-meta">
@@ -222,12 +235,29 @@
         <pre id="yaml" style="flex:1;margin:0;">—</pre>
       </div>
 
+      <div id="sql-tab" class="tab-content sql-wrap" role="tabpanel" aria-labelledby="tab-btn-sql" style="flex:1;overflow:auto;padding:12px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+          <h3 style="margin:0;font-size:10px;">sql plan <span id="sqlPlanScope" class="sql-plan-scope"></span></h3>
+          <button class="mini ghost" id="copySqlBtn" aria-label="Copy the whole SQL plan to the clipboard" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="copy" style="width:11px;height:11px"></i> copy all</button>
+        </div>
+        <p class="hint" style="margin:0 0 10px">The views DuckDB builds for this pipeline, in order: each source, every step, and the SELECT written for each output layer.</p>
+        <div id="sqlPlan" class="sql-plan"><span class="log-line">—</span></div>
+      </div>
+
       <div id="log-tab" class="tab-content log-wrap" role="tabpanel" aria-labelledby="tab-btn-log" style="flex:1;overflow:auto;padding:12px 16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <h3 style="margin:0;font-size:10px;">run log</h3>
           <button class="mini ghost" id="clearLogBtn" aria-label="Clear the run log" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="trash-2" style="width:11px;height:11px"></i> clear</button>
         </div>
         <div id="log" style="flex:1;background:var(--void);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto"><span class="log-line">no run yet</span></div>
+      </div>
+
+      <div id="runs-tab" class="tab-content runs-wrap" role="tabpanel" aria-labelledby="tab-btn-runs" style="flex:1;overflow:auto;padding:12px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0;font-size:10px;">run history <span id="runsScope" class="sql-plan-scope"></span></h3>
+          <button class="mini ghost" id="refreshRunsBtn" aria-label="Reload the run history" style="padding:4px 8px;font-size:10px;height:22px;"><i data-lucide="history" style="width:11px;height:11px"></i> refresh</button>
+        </div>
+        <div id="runsList" class="runs-list"><span class="log-line">—</span></div>
       </div>
 
       <div id="problems-tab" class="tab-content problems-wrap" role="tabpanel" aria-labelledby="tab-btn-problems" style="flex:1;overflow:auto;padding:12px 16px;">

@@ -22,6 +22,7 @@ previewed on their own:
 | one source, raw | pick it in the **view** dropdown |
 | the base before any steps | the eye button in the **sources** tab |
 | the rows after a given step | the eye button on that step card |
+| the rows a step rejects | its red rejects node in the [pipeline flow](overview.md#ducks-in-a-row-the-pipeline-flow) |
 
 A banner above the table says what you're looking at, with a **Show pipeline output** button
 to go back.
@@ -32,7 +33,8 @@ to go back.
 ![Map and Data Table showing the pipeline output](../assets/screenshots/map-preview-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 - **view**: pipeline output, or any single source.
-- **limit**: how many features to fetch (1–20 000, default 1 000). The table shows
+- **limit**: how many features to fetch (default 1 000, no upper bound). Above 20 000 the
+  editor warns that the map and table may get slow or unresponsive. The table shows
   *limit reached* when there may be more.
 - **in view**: preview only features inside the current map extent, rather than the first N.
   While it's on, panning or zooming re-runs the preview. Use it to inspect one area of a big
@@ -78,6 +80,7 @@ output. While it runs, the button shows elapsed seconds. When it finishes, the
 **Run Logs** tab shows:
 
 - each source being read and each step being built, with timings,
+- the rows written to each layer, rejects layers included,
 - `→ wrote output/xyz.gpkg [12.3s]` on success,
 - the error and the last lines of the traceback on failure.
 
@@ -89,6 +92,38 @@ New runs are appended under a divider so you can compare them. **clear** empties
 !!! warning "Runs are synchronous"
     A run is a single request: the log fills in when it completes, and there's no cancel
     button. For long jobs, consider the command line or an exported script.
+
+## Run history
+
+The **History** tab lists the config's past runs, newest first: when each ran, whether it
+was started from the editor or from `duck-soup run` (**cli**), how many layers and rows it
+wrote, and how long it took. A failed run shows its error. Click a run to see the rows per
+layer, the output path, a fingerprint of the config version that ran, and its log.
+
+![The History tab with one run expanded](../assets/screenshots/run-history-light.png#only-light){ .screenshot .narrow loading=lazy }
+![The History tab with one run expanded](../assets/screenshots/run-history-dark.png#only-dark){ .screenshot .narrow loading=lazy }
+
+Each run is recorded as a JSON file in `runs/<config name>/` in the
+[project folder](../getting-started/install.md#where-the-editor-keeps-your-files), and the
+newest 200 runs per config are kept. Runs from the command line are recorded there too, so a
+scheduled run shows up in the editor; see [Scheduling](../scheduling.md#run-history). A config
+needs a name, so save it before its first run to keep its history.
+
+## SQL tab
+
+The **SQL** tab shows what the engine does with the current pipeline: the view it creates
+for each source (reprojected to the working CRS), each derived source, the base and each step,
+and the SELECT written for each output layer. A step with a rejects layer has three views: all
+its rows, the rows that pass, and the rejects. Nothing is read to show it, so it updates with
+every change. Services (WFS, OGC API, ArcGIS REST) show a placeholder for the file they're
+downloaded to, and a postgres source shows the table but not its connection string.
+
+![The SQL tab](../assets/screenshots/sql-tab-light.png#only-light){ .screenshot .narrow loading=lazy }
+![The SQL tab](../assets/screenshots/sql-tab-dark.png#only-dark){ .screenshot .narrow loading=lazy }
+
+The **<>** button on a step card opens this tab at that step. **copy all** copies the whole
+plan as one SQL script, which you can run in a DuckDB shell (with the spatial extension
+loaded) to dig into a step.
 
 ## YAML Config tab
 

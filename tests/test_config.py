@@ -313,3 +313,19 @@ def test_x_field_without_y_field_rejected():
 def test_geom_field_combined_with_x_y_fields_rejected():
     with pytest.raises(ValidationError, match="not both"):
         Source(id="a", format="csv", uri="data/test_xy.csv", x_field="lon", y_field="lat", geom_field="wkt")
+
+
+def test_records_only_on_json():
+    with pytest.raises(ValidationError, match="only applies to json"):
+        Source(id="a", format="csv", uri="data/x.csv", records="data.items")
+
+
+def test_records_rejects_empty_path_segment():
+    with pytest.raises(ValidationError, match="dot path"):
+        Source(id="a", format="json", uri="x.json", records="data..items")
+
+
+def test_json_geometry_fields_allowed_and_imply_geometry():
+    src = Source(id="a", format="json", uri="x.json", x_field="lon", y_field="lat")
+    assert src.has_geometry
+    assert Source(id="b", format="json", uri="x.json").has_geometry is False

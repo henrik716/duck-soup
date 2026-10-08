@@ -13,11 +13,21 @@ Spatial joins, nearest-neighbor joins and clips keep a single best match per bas
 feature (see Engine._best_match_select), so each base feature stays a single row
 even when it matches several polygons (this mirrors what the FME SpatialFilter
 + first-match behaviour did).
+
+A step with `rejects` splits its rows like an FME transformer's Passed/Failed ports: its
+SELECT carries an extra `__matched` column, a `step_<i>__split` view holds both halves,
+`step_<i>` the passed rows and `step_<i>__rejects` the rest, which run() writes as an extra
+output layer.
+
+Every view goes through Engine._emit, which also records it in `Engine.plan`, so the same
+chain serves three callers: run/preview (views), plan() (no connection: the SQL only, for
+the editor's SQL tab) and counts() (tables, so each step is computed once and counted).
 """
 from __future__ import annotations
 
 import sqlite3
 import tempfile
+import textwrap
 from pathlib import Path
 from typing import Callable
 
@@ -27,7 +37,7 @@ from . import sources as src_readers
 from .config import (
     AttributeJoin, Buffer, Centroid, Clip, CodeCase, CodeList, Config,
     Dissolve, Erase, Filter, IntersectOverlay, LineOverlay, MapItem, Merge, NearestNeighbor,
-    OutputLayer, Pipeline, Snapshot, SpatialJoin, is_parquet_path,
+    OutputLayer, Pipeline, Snapshot, SpatialJoin, is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .sql_util import quote_ident as _ident, quote_literal as _lit
@@ -162,27 +172,66 @@ class Engine:
         self.working_crs = pipeline.effective_working_crs
         self.log = log or (lambda m: None)
         self.parquet_multi = parquet_multi
+        # Filled by _prepare: every view it created, in order (see _emit), and the view
+        # holding each step's output and rejects, keyed by 1-based step number.
+        self.plan: list[dict] = []
+        self.step_views: dict[int, str] = {}
+        self.reject_views: dict[int, str] = {}
+        # Filled by run(): one {"layer", "rows", "kind", "path"} per layer written.
+        self.written: list[dict] = []
+        # counts() sets this so steps become tables, each computed once (see _emit).
+        self._materialize = False
+
+    def _emit(self, con: duckdb.DuckDBPyConnection | None, view: str, select: str, kind: str, **meta) -> None:
+        """CREATE `view` AS `select` and record it in self.plan.
+
+        Steps are TEMP VIEWs, so DuckDB plans the whole chain as one query, except while
+        counting rows (counts()), where they're TEMP TABLEs: counting N views would compute
+        the chain up to each of them again, N times in total. Source views always stay views,
+        since a table would read every source in full. Without a connection (plan()) the
+        view is only recorded.
+        """
+        self.plan.append({"kind": kind, "view": view, "sql": textwrap.dedent(select).strip(), **meta})
+        if con is None:
+            return
+        obj = "TABLE" if self._materialize and kind not in ("source", "derived", "branch") else "VIEW"
+        con.execute(f"CREATE OR REPLACE TEMP {obj} {_ident(view)} AS {select}")
 
     # -- source views -------------------------------------------------------
+    def _plan_read_expr(self, s) -> str:
+        """read_expr for plan(), which mustn't fetch anything: services and databases get a
+        placeholder instead of being downloaded or attached just to show the SQL."""
+        if s.format in ("arcgis_rest", "oapif", "wfs"):
+            what = f"{s.uri} ({s.layer})" if s.layer else s.uri
+            return f"ST_Read('<{s.format}: {what}, downloaded to a temp file at run time>')"
+        if s.format == "postgres":
+            # Not the uri: a connection string usually holds the password.
+            schema, table = src_readers._split_pg_layer(s.layer)
+            return f"{_ident(s.id)}.{_ident(schema)}.{_ident(table)}"
+        return src_readers.read_expr(s, Path(tempfile.gettempdir()), con=None)
+
     def _create_source_views(
         self,
-        con: duckdb.DuckDBPyConnection,
+        con: duckdb.DuckDBPyConnection | None,
         workdir: Path,
         bbox: tuple[float, float, float, float] | None = None,
         max_features: int | None = None,
     ) -> None:
         for s in self.p.sources:
-            # The bbox is only ever applied (via _bbox_filter) to the base source's rows, so
-            # only push it down to the base source's own fetch — a join/nearest-neighbor
-            # partner just outside the viewport can still be a valid match and must still be
-            # fetched in full. Same reasoning for max_features: only the base source's row
-            # count is bounded by the preview limit, a join partner still needs its full data.
-            src_bbox = bbox if s.id == self.p.base else None
-            src_max_features = max_features if s.id == self.p.base else None
-            read = src_readers.read_expr(
-                s, workdir, con=con, log=self.log, bbox=src_bbox, max_features=src_max_features
-            )
-            view = _ident(f"src_{s.id}")
+            if con is None:
+                read = self._plan_read_expr(s)
+            else:
+                # The bbox is only ever applied (via _bbox_filter) to the base source's rows, so
+                # only push it down to the base source's own fetch — a join/nearest-neighbor
+                # partner just outside the viewport can still be a valid match and must still be
+                # fetched in full. Same reasoning for max_features: only the base source's row
+                # count is bounded by the preview limit, a join partner still needs its full data.
+                src_bbox = bbox if s.id == self.p.base else None
+                src_max_features = max_features if s.id == self.p.base else None
+                read = src_readers.read_expr(
+                    s, workdir, con=con, log=self.log, bbox=src_bbox, max_features=src_max_features
+                )
+            view = f"src_{s.id}"
             if s.has_geometry:
                 crs = "EPSG:4326" if s.format == "arcgis_rest" else (s.crs or self.working_crs)
                 # Source geometry is reprojected to working_crs exactly once, here. Every
@@ -192,15 +241,14 @@ class Engine:
                 geom = _transform("geom", crs, self.working_crs)
                 if s.make_valid:
                     geom = f"ST_MakeValid({geom})"
-                sql = (
-                    f"CREATE OR REPLACE TEMP VIEW {view} AS "
+                select = (
                     f"SELECT * EXCLUDE (geom), {geom} AS geom, "
                     f"row_number() OVER () AS __src_row FROM {read}"
                 )
             else:
-                sql = f"CREATE OR REPLACE TEMP VIEW {view} AS SELECT * FROM {read}"
-            self.log(f"source '{s.id}' ({s.format}) -> {view}")
-            con.execute(sql)
+                select = f"SELECT * FROM {read}"
+            self.log(f"source '{s.id}' ({s.format}) -> {_ident(view)}")
+            self._emit(con, view, select, "source", id=s.id, title=f"source '{s.id}' ({s.format})")
 
     def _resolve_has_geometry(self, sid: str) -> bool:
         for ds in self.p.derived_sources:
@@ -208,10 +256,9 @@ class Engine:
                 return self._resolve_has_geometry(ds.from_)
         return self.p.source(sid).has_geometry
 
-    def _create_derived_source_views(self, con: duckdb.DuckDBPyConnection) -> None:
+    def _create_derived_source_views(self, con: duckdb.DuckDBPyConnection | None) -> None:
         for ds in self.p.derived_sources:
             from_view = _ident(f"src_{ds.from_}")
-            view = _ident(f"src_{ds.id}")
             where_clause = f"WHERE {ds.where}" if ds.where else ""
             if self._resolve_has_geometry(ds.from_):
                 geom = "geom"
@@ -219,17 +266,20 @@ class Engine:
                     geom = f"ST_Buffer({geom}, {ds.buffer})"
                 if ds.make_valid:
                     geom = f"ST_MakeValid({geom})"
-                sql = (
-                    f"CREATE OR REPLACE TEMP VIEW {view} AS "
-                    f"SELECT * EXCLUDE (geom), {geom} AS geom FROM {from_view} {where_clause}"
-                )
+                select = f"SELECT * EXCLUDE (geom), {geom} AS geom FROM {from_view} {where_clause}"
             else:
-                sql = f"CREATE OR REPLACE TEMP VIEW {view} AS SELECT * FROM {from_view} {where_clause}"
+                select = f"SELECT * FROM {from_view} {where_clause}"
             self.log(f"derived_source '{ds.id}' <- {ds.from_}")
-            con.execute(sql)
+            self._emit(
+                con, f"src_{ds.id}", select, "derived",
+                id=ds.id, title=f"derived source '{ds.id}' (from '{ds.from_}')",
+            )
 
     # -- steps --------------------------------------------------------------
-    def _apply_spatial_join(self, prev: str, step: SpatialJoin, idx: int) -> str:
+    # Each _apply_* returns (SELECT, view name) for its step; _build_step_views creates the
+    # view. With `step.rejects` set, the SELECT carries a boolean `__matched` column that
+    # _build_step_views splits on (see the module docstring).
+    def _apply_spatial_join(self, prev: str, step: SpatialJoin, idx: int) -> tuple[str, str]:
         pred = _PREDICATE_SQL[step.predicate]
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
@@ -238,9 +288,10 @@ class Engine:
             b_fields = ", ".join(
                 f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()
             )
+            # A matching source row always has a geometry, an unmatched base row gets NULL.
+            matched = ", b.geom IS NOT NULL AS __matched" if step.rejects else ""
             sql = f"""
-            CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-            SELECT a.*{(', ' + b_fields) if b_fields else ''}
+            SELECT a.*{(', ' + b_fields) if b_fields else ''}{matched}
             FROM {_ident(prev)} a
             LEFT JOIN {src_view} b ON {pred}(a.geom, b.geom)
             """
@@ -257,12 +308,13 @@ class Engine:
             rank = ["-ST_Area(ST_Intersection(a.geom, b.geom))", "b.__src_row"]
         else:
             rank = ["b.__src_row"]
-        select = self._best_match_select(prev, src_view, f"{pred}(a.geom, b.geom)", rank, fields)
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
+        select = self._best_match_select(
+            prev, src_view, f"{pred}(a.geom, b.geom)", rank, fields, flag=bool(step.rejects)
+        )
         self.log(f"step {idx}: spatial_join {step.predicate} {step.source} (on_multiple={step.on_multiple})")
-        return sql, out_view
+        return select, out_view
 
-    def _apply_nearest_neighbor(self, prev: str, step: NearestNeighbor, idx: int) -> str:
+    def _apply_nearest_neighbor(self, prev: str, step: NearestNeighbor, idx: int) -> tuple[str, str]:
         src_view = _ident(f"src_{step.source}")
         dist_expr = "ST_Distance(a.geom, b.geom)"
         fields = {out: f"b.{_ident(col)}" for out, col in step.fields.items()}
@@ -276,11 +328,12 @@ class Engine:
             if step.max_distance is not None else "true"
         )
         out_view = f"step_{idx}"
-        select = self._best_match_select(prev, src_view, on, [dist_expr, "b.__src_row"], fields)
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
+        select = self._best_match_select(
+            prev, src_view, on, [dist_expr, "b.__src_row"], fields, flag=bool(step.rejects)
+        )
         suffix = f" (max_distance={step.max_distance})" if step.max_distance is not None else ""
         self.log(f"step {idx}: nearest_neighbor {step.source}{suffix}")
-        return sql, out_view
+        return select, out_view
 
     @staticmethod
     def _per_row_match_select(
@@ -327,38 +380,45 @@ class Engine:
         on: str,
         rank: list[str],
         fields: dict[str, str],
+        flag: bool = False,
     ) -> str:
         """SELECT of every `prev` row (`a`) plus `fields` taken from its single best-ranked
         match in `src_view` (`b`): the match with the lowest `rank` tuple among those
         satisfying `on`, or NULL fields when nothing matches. arg_min keeps one running
         best per base row, so memory stays bounded even when `on` is `true`
-        (nearest_neighbor without max_distance).
+        (nearest_neighbor without max_distance). `flag` adds `__matched`.
         """
-        if not fields:
+        if not fields and not flag:
             return f"SELECT * FROM {_ident(prev)}"
-        best = ", ".join(f"{_lit(out)}: {expr}" for out, expr in fields.items())
-        pulled = ", ".join(
-            f"struct_extract(m.__agg, {_lit(out)}) AS {_ident(out)}" for out in fields
-        )
+        if fields:
+            best = ", ".join(f"{_lit(out)}: {expr}" for out, expr in fields.items())
+            agg = f"arg_min({{{best}}}, row({', '.join(rank)}))"
+            pulled = "".join(
+                f", struct_extract(m.__agg, {_lit(out)}) AS {_ident(out)}" for out in fields
+            )
+        else:
+            # Nothing to pull: only whether there's a match matters.
+            agg, pulled = "count(*)", ""
+        matched = ", m.__a_row IS NOT NULL AS __matched" if flag else ""
         return cls._per_row_match_select(
-            prev, src_view, on,
-            agg=f"arg_min({{{best}}}, row({', '.join(rank)}))",
-            columns=f"a.* EXCLUDE (__a_row), {pulled}",
+            prev, src_view, on, agg=agg,
+            columns=f"a.* EXCLUDE (__a_row){pulled}{matched}",
         )
 
-    def _apply_attribute_join(self, prev: str, step: AttributeJoin, idx: int) -> str:
+    def _apply_attribute_join(self, prev: str, step: AttributeJoin, idx: int) -> tuple[str, str]:
         src_view = _ident(f"src_{step.source}")
         pulled = ", ".join(f"j.{_ident(out)}" for out in step.fields)
-        inner = ", ".join(
-            f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()
-        )
+        inner = [f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()]
+        matched = ""
+        if step.rejects:
+            inner.append("1 AS __hit")
+            matched = ", j.__hit IS NOT NULL AS __matched"
         out_view = f"step_{idx}"
         sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-        SELECT a.*{(', ' + pulled) if pulled else ''}
+        SELECT a.*{(', ' + pulled) if pulled else ''}{matched}
         FROM {_ident(prev)} a
         LEFT JOIN LATERAL (
-            SELECT {inner if inner else '1'}
+            SELECT {', '.join(inner) if inner else '1'}
             FROM {src_view} b
             WHERE b.{_ident(step.right)} = ({step.left})
             LIMIT 1
@@ -370,7 +430,6 @@ class Engine:
     def _apply_buffer(self, prev: str, step: Buffer, idx: int) -> tuple[str, str]:
         out_view = f"step_{idx}"
         sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
         SELECT * EXCLUDE (geom), ST_Buffer(geom, {step.distance}) AS geom
         FROM {_ident(prev)}
         """
@@ -380,7 +439,6 @@ class Engine:
     def _apply_centroid(self, prev: str, _step: Centroid, idx: int) -> tuple[str, str]:
         out_view = f"step_{idx}"
         sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
         SELECT * EXCLUDE (geom), ST_Centroid(geom) AS geom
         FROM {_ident(prev)}
         """
@@ -391,27 +449,42 @@ class Engine:
         pred = _PREDICATE_SQL[step.predicate]
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
+        on = f"{pred}(a.geom, b.geom)"
         # Clipped by the first match (in source row order); unmatched features, and ones
         # that only touch the mask, are dropped.
         clipped = _same_dimension("ST_Intersection(a.geom, m.__agg)", "a.geom")
-        select = _drop_empty(self._per_row_match_select(
-            prev, src_view, f"{pred}(a.geom, b.geom)",
-            agg="arg_min(b.geom, b.__src_row)",
-            columns=f"a.* EXCLUDE (__a_row, geom), {clipped} AS geom",
-            inner=True,
-        ))
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
+        agg = "arg_min(b.geom, b.__src_row)"
         self.log(f"step {idx}: clip {step.predicate} {step.source}")
-        return sql, out_view
+        if not step.rejects:
+            select = _drop_empty(self._per_row_match_select(
+                prev, src_view, on, agg=agg,
+                columns=f"a.* EXCLUDE (__a_row, geom), {clipped} AS geom",
+                inner=True,
+            ))
+            return select, out_view
+        # The same rows as above pass; every other feature is a reject and keeps its
+        # unclipped geometry.
+        per_row = self._per_row_match_select(
+            prev, src_view, on, agg=agg,
+            columns=f"a.* EXCLUDE (__a_row), {clipped} AS __clipped, m.__agg IS NOT NULL AS __hit",
+        )
+        select = f"""
+        SELECT * EXCLUDE (geom, __clipped, __hit, __matched),
+               CASE WHEN __matched THEN __clipped ELSE geom END AS geom, __matched
+        FROM (
+            SELECT *, COALESCE(__hit AND NOT ST_IsEmpty(__clipped), false) AS __matched
+            FROM ({per_row})
+        )
+        """
+        return select, out_view
 
     def _apply_erase(self, prev: str, step: Erase, idx: int) -> tuple[str, str]:
         pred = _PREDICATE_SQL[step.predicate]
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
         select = self._erase_select(prev, src_view, f"{pred}(a.geom, b.geom)")
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
         self.log(f"step {idx}: erase {step.predicate} {step.source}")
-        return sql, out_view
+        return select, out_view
 
     @classmethod
     def _erase_select(cls, prev: str, src_view: str, on: str) -> str:
@@ -435,7 +508,6 @@ class Engine:
         if step.by:
             by_cols = ", ".join(_ident(c) for c in step.by)
             sql = f"""
-            CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
             SELECT *, row_number() OVER () AS __src_row FROM (
                 SELECT {by_cols}, ST_Union_Agg(geom) AS geom
                 FROM {_ident(prev)}
@@ -444,7 +516,6 @@ class Engine:
             """
         else:
             sql = f"""
-            CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
             SELECT ST_Union_Agg(geom) AS geom, 1 AS __src_row
             FROM {_ident(prev)}
             """
@@ -466,9 +537,8 @@ class Engine:
         FROM {_ident(prev)} a
         JOIN {src_view} b ON ST_Intersects(a.geom, b.geom)
         """
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {_drop_empty(pairs)}"
         self.log(f"step {idx}: intersect_overlay {step.source}")
-        return sql, out_view
+        return _drop_empty(pairs), out_view
 
     # line_overlay without a `tolerance`: lines must lie on each other to within this many
     # working-CRS units (a micrometre in a metric CRS), which is "exactly" for real data.
@@ -572,18 +642,19 @@ class Engine:
         -- anything that isn't a line (or has no geometry) passes through untouched
         SELECT * FROM {_ident(prev)} WHERE geom IS NULL OR NOT {is_line}
         """
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
         suffix = f" (tolerance={step.tolerance})" if step.tolerance is not None else ""
         self.log(f"step {idx}: line_overlay {step.source}{suffix}")
-        return sql, out_view
+        return select, out_view
 
     def _apply_filter(self, prev: str, step: Filter, idx: int) -> tuple[str, str]:
         out_view = f"step_{idx}"
-        sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
-        SELECT * FROM {_ident(prev)}
-        WHERE {step.where}
-        """
+        if step.rejects:
+            sql = f"SELECT *, ({step.where}) IS TRUE AS __matched FROM {_ident(prev)}"
+        else:
+            sql = f"""
+            SELECT * FROM {_ident(prev)}
+            WHERE {step.where}
+            """
         self.log(f"step {idx}: filter {step.where}")
         return sql, out_view
 
@@ -591,7 +662,6 @@ class Engine:
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
         sql = f"""
-        CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS
         SELECT * FROM {_ident(prev)}
         UNION ALL BY NAME
         SELECT * FROM {src_view}
@@ -601,17 +671,47 @@ class Engine:
 
     _MAIN_BRANCH = "__main__"
 
-    def _sync_branch_view(self, con: duckdb.DuckDBPyConnection, chains: dict[str, str], name: str) -> None:
+    def _sync_branch_view(
+        self, con: duckdb.DuckDBPyConnection | None, chains: dict[str, str], name: str, step: int,
+    ) -> None:
         # Any branch a later step's source: might reference needs a src_<id>
         # view kept up to date; the main chain isn't referenced that way.
         if name == self._MAIN_BRANCH:
             return
-        con.execute(
-            f"CREATE OR REPLACE TEMP VIEW {_ident(f'src_{name}')} AS "
-            f"SELECT * FROM {_ident(chains[name])}"
+        self._emit(
+            con, f"src_{name}", f"SELECT * FROM {_ident(chains[name])}", "branch",
+            id=name, step=step, title=f"branch '{name}' after step {step}",
         )
 
-    def _build_step_views(self, con: duckdb.DuckDBPyConnection, prev: str, limit_steps: int | None = None) -> str:
+    @staticmethod
+    def _pulled_columns(step) -> list[str]:
+        """Columns a join step adds, which are always NULL on its rejects."""
+        cols = list(getattr(step, "fields", {}) or {})
+        if isinstance(step, NearestNeighbor) and step.distance_field:
+            cols.append(step.distance_field)
+        return cols
+
+    def _emit_step(self, con: duckdb.DuckDBPyConnection | None, step, i: int, select: str, view: str) -> None:
+        """Create step `i`'s view; with `rejects`, split it into passed and rejected rows."""
+        title = f"step {i}: {step.type}"
+        if not getattr(step, "rejects", None):
+            self._emit(con, view, select, "step", step=i, title=title)
+            return
+        split = f"{view}__split"
+        self._emit(con, split, select, "split", step=i, title=f"{title} (passed and rejected rows)")
+        self._emit(
+            con, view, f"SELECT * EXCLUDE (__matched) FROM {_ident(split)} WHERE __matched",
+            "step", step=i, title=title,
+        )
+        drop = ", ".join(_ident(c) for c in ["__matched", *self._pulled_columns(step)])
+        rejects = f"{view}__rejects"
+        self._emit(
+            con, rejects, f"SELECT * EXCLUDE ({drop}) FROM {_ident(split)} WHERE NOT __matched",
+            "rejects", step=i, layer=step.rejects, title=f"step {i}: rejects → layer '{step.rejects}'",
+        )
+        self.reject_views[i] = rejects
+
+    def _build_step_views(self, con: duckdb.DuckDBPyConnection | None, prev: str, limit_steps: int | None = None) -> str:
         """Build the step views; returns the main chain's final view.
 
         With `limit_steps` (previewing up to a given step) it instead returns the view of
@@ -629,7 +729,8 @@ class Engine:
                 # "operate on this branch" — no new view needed, just an alias.
                 source_branch = step.branch or self._MAIN_BRANCH
                 chains[step.id] = chains[source_branch]
-                self._sync_branch_view(con, chains, step.id)
+                self._sync_branch_view(con, chains, step.id, i)
+                self.step_views[i] = chains[step.id]
                 self.log(f"step {i}: snapshot '{step.id}' <- {source_branch}")
                 last_branch = step.id
                 continue
@@ -662,9 +763,10 @@ class Engine:
                 sql, new_view = self._apply_merge(cur, step, i)
             else:  # pragma: no cover
                 raise ValueError(f"unknown step type: {step}")
-            con.execute(sql)
+            self._emit_step(con, step, i, sql, new_view)
             chains[target] = new_view
-            self._sync_branch_view(con, chains, target)
+            self.step_views[i] = new_view
+            self._sync_branch_view(con, chains, target, i)
             last_branch = target
 
         return chains[last_branch if limit_steps is not None else self._MAIN_BRANCH]
@@ -778,9 +880,12 @@ class Engine:
             return "(ST_Length(geom) + ST_Perimeter(geom))"
         raise ValueError(f"unknown func: {func}")
 
-    def _final_select(self, prev: str, layer: OutputLayer) -> str:
+    def _final_select(self, prev: str, layer: OutputLayer, raw: bool = False) -> str:
+        """The SELECT written for `layer`. `raw` skips the mapping (every column as-is), for
+        a rejects layer: its rows leave the chain mid-way, before columns the mapping may
+        use exist."""
         has_geom = self.p.base_source.has_geometry
-        mapping = layer.mapping or self.p.mapping
+        mapping = [] if raw else (layer.mapping or self.p.mapping)
         geom_funcs = {"lon", "lat", "mgrs", "wkb", "area", "length"}
         used = {m.func for m in mapping if m.func}
         if not has_geom and (used & geom_funcs):
@@ -875,6 +980,7 @@ class Engine:
         bbox: tuple[float, float, float, float] | None = None,
         max_features: int | None = None,
         limit_steps: int | None = None,
+        base_limit: int | None = None,
     ) -> str:
         """Build the source → step_0 → step_N view chain; returns the final view name.
 
@@ -885,16 +991,34 @@ class Engine:
         between an instant "in view" preview and a very slow one. Callers that filter by
         bbox must still re-apply it to the final SELECT, since a geometry-mutating step
         (buffer, dissolve, ...) can move a feature relative to it.
+
+        `base_limit` keeps only the first N base features (counts() on a sample). With no
+        `con` (plan()), nothing is read or executed.
         """
-        self._check_working_crs_units()
+        self.plan, self.step_views, self.reject_views = [], {}, {}
+        if con is not None:
+            self._check_working_crs_units()
         self._create_source_views(con, workdir, bbox=bbox, max_features=max_features)
         self._create_derived_source_views(con)
-        con.execute(
-            f"CREATE OR REPLACE TEMP VIEW {_ident('step_0')} AS "
-            f"SELECT * FROM {_ident('src_' + self.p.base)} "
-            f"{self._bbox_filter(bbox, self.working_crs) if self.p.base_source.has_geometry else ''}"
+        where = self._bbox_filter(bbox, self.working_crs) if self.p.base_source.has_geometry else ""
+        limit = f"LIMIT {int(base_limit)}" if base_limit is not None else ""
+        self._emit(
+            con, "step_0", f"SELECT * FROM {_ident('src_' + self.p.base)} {where}{limit}",
+            "base", id=self.p.base, title=f"base: '{self.p.base}'",
         )
         return self._build_step_views(con, "step_0", limit_steps=limit_steps)
+
+    def _layer_writes(self, prev: str, out_index: int) -> list[tuple[OutputLayer, str, str]]:
+        """(layer, SELECT, kind) for each layer written to output `out_index`. The steps'
+        rejects layers go into the first output, in the first layer's CRS."""
+        out = self.p.outputs[out_index]
+        writes = [(layer, self._final_select(prev, layer), "layer") for layer in out.layers]
+        if out_index == 0:
+            crs = out.layers[0].crs
+            for i, view in sorted(self.reject_views.items()):
+                layer = OutputLayer(layer=self.p.steps[i - 1].rejects, crs=crs)
+                writes.append((layer, self._final_select(view, layer, raw=True), "rejects"))
+        return writes
 
     def run(self) -> str:
         with DUCKDB_LOCK:
@@ -907,19 +1031,20 @@ class Engine:
 
                 deleted_paths: set[Path] = set()
                 out_paths: list[str] = []
-                for out in self.p.outputs:
+                self.written = []
+                for out_index, out in enumerate(self.p.outputs):
                     out_path = Path(out.path)
                     out_path.parent.mkdir(parents=True, exist_ok=True)
+                    writes = self._layer_writes(prev, out_index)
                     if is_parquet_path(out_path):
                         multi = self._parquet_multi(out_path)
                         if out.overwrite and out_path not in deleted_paths:
                             _clear_parquet_output(out_path, multi)
                             deleted_paths.add(out_path)
-                        for layer in out.layers:
-                            self._write_parquet_layer(
-                                con, self._final_select(prev, layer), layer,
-                                parquet_layer_path(out_path, layer.layer, multi),
-                            )
+                        for layer, final_sql, kind in writes:
+                            target = parquet_layer_path(out_path, layer.layer, multi)
+                            rows = self._write_parquet_layer(con, final_sql, layer, target)
+                            self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
                         root = str(parquet_output_root(out_path, multi))
                         if root not in out_paths:
                             out_paths.append(root)
@@ -928,8 +1053,7 @@ class Engine:
                         if out_path.exists():
                             out_path.unlink()
                         deleted_paths.add(out_path)
-                    for i, layer in enumerate(out.layers):
-                        final_sql = self._final_select(prev, layer)
+                    for i, (layer, final_sql, kind) in enumerate(writes):
                         # The GDAL writer recreates out_path on every call, so
                         # only the very first layer written to a not-yet-existing
                         # file can go straight there; every layer after that
@@ -944,7 +1068,8 @@ class Engine:
                             f"SRS {_lit(layer.crs)})"
                         )
                         self.log(f"writing {out_path} layer '{layer.layer}' ({layer.crs})")
-                        con.execute(copy_sql)
+                        (rows,) = con.execute(copy_sql).fetchone()
+                        self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
                         if not write_direct:
                             _merge_gpkg_layer(out_path, target)
                     if str(out_path) not in out_paths:
@@ -954,9 +1079,12 @@ class Engine:
     def _parquet_multi(self, out_path: Path) -> bool:
         if self.parquet_multi is not None:
             return self.parquet_multi
-        return sum(len(o.layers) for o in self.p.outputs if Path(o.path) == out_path) > 1
+        n = sum(len(o.layers) for o in self.p.outputs if Path(o.path) == out_path)
+        if Path(self.p.outputs[0].path) == out_path:
+            n += len(reject_layer_names(self.p.steps))
+        return n > 1
 
-    def _write_parquet_layer(self, con, final_sql: str, layer: OutputLayer, target: Path) -> None:
+    def _write_parquet_layer(self, con, final_sql: str, layer: OutputLayer, target: Path) -> int:
         """Write one layer as GeoParquet via DuckDB's native Parquet writer.
 
         The spatial extension adds GeoParquet's `geo` metadata for any GEOMETRY column,
@@ -975,7 +1103,10 @@ class Engine:
                 f"FROM ({final_sql})"
             )
         self.log(f"writing {target} ({layer.crs})")
-        con.execute(f"COPY ({sql}) TO {_lit(str(target))} (FORMAT PARQUET, COMPRESSION ZSTD)")
+        (rows,) = con.execute(
+            f"COPY ({sql}) TO {_lit(str(target))} (FORMAT PARQUET, COMPRESSION ZSTD)"
+        ).fetchone()
+        return rows
 
     @staticmethod
     def _bbox_filter(bbox: tuple[float, float, float, float] | None, crs: str) -> str:
@@ -1015,7 +1146,10 @@ class Engine:
         limit: int = 50,
         preview_until_step: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
+        rejects: bool = False,
     ) -> list[dict]:
+        """Up to `limit` rows of the output's first layer, or of the step
+        `preview_until_step` (0: the base source), or with `rejects` of that step's rejects."""
         with DUCKDB_LOCK:
             con = duckdb.connect()
             init_duckdb(con)
@@ -1026,6 +1160,10 @@ class Engine:
                     con, workdir, bbox=bbox, max_features=limit,
                     limit_steps=preview_until_step,
                 )
+                if rejects:
+                    if preview_until_step not in self.reject_views:
+                        raise ValueError(f"step {preview_until_step} has no rejects layer")
+                    prev = self.reject_views[preview_until_step]
 
                 if preview_until_step is not None:
                     try:
@@ -1050,6 +1188,64 @@ class Engine:
                 rows = res.fetchall()
                 return [dict(zip(cols, r)) for r in rows]
 
+    def sql_plan(self) -> list[dict]:
+        """Every view the pipeline builds, in order, with its SQL, plus the SELECT written
+        for each output layer, without reading any data (see _plan_read_expr)."""
+        prev = self._prepare(None, Path(tempfile.gettempdir()))
+        plan = list(self.plan)
+        for layer in self.p.outputs[0].layers:
+            plan.append({
+                "kind": "layer", "layer": layer.layer,
+                "title": f"layer '{layer.layer}' ({layer.crs})",
+                "view": None, "sql": textwrap.dedent(self._final_select(prev, layer)).strip(),
+            })
+        return plan
+
+    def counts(
+        self,
+        limit: int | None = None,
+        bbox: tuple[float, float, float, float] | None = None,
+    ) -> dict:
+        """Row counts after every step, like the feature counts FME shows on its connections.
+
+        With `limit`, the chain runs on the first `limit` base features only (a sample, quick
+        to count); without it, on all the data, which costs about as much as a run. Each step
+        is materialized once (see _emit), so counting N steps doesn't compute the chain N
+        times. Source counts are only part of the full count: on a sample they'd still mean
+        reading every source in full.
+        """
+        self._materialize = True
+        with DUCKDB_LOCK:
+            con = duckdb.connect()
+            try:
+                init_duckdb(con)
+                with tempfile.TemporaryDirectory() as tmp:
+                    prev = self._prepare(
+                        con, Path(tmp), bbox=bbox, max_features=limit, base_limit=limit,
+                    )
+
+                    def count(rel: str) -> int:
+                        return con.execute(f"SELECT count(*) FROM {rel}").fetchone()[0]
+
+                    result = {
+                        "limit": limit,
+                        "base": count(_ident("step_0")),
+                        "steps": {i: count(_ident(v)) for i, v in self.step_views.items()},
+                        "rejects": {i: count(_ident(v)) for i, v in self.reject_views.items()},
+                        "layers": [
+                            count(f"({self._final_select(prev, layer)})")
+                            for layer in self.p.outputs[0].layers
+                        ],
+                        "sources": {},
+                    }
+                    if limit is None:
+                        ids = [s.id for s in self.p.sources] + [ds.id for ds in self.p.derived_sources]
+                        result["sources"] = {sid: count(_ident(f"src_{sid}")) for sid in ids}
+                    return result
+            finally:
+                con.close()
+                self._materialize = False
+
 
 def run_pipeline(pipeline: Pipeline, log: Callable[[str], None] | None = None) -> list[str]:
     engine = Engine(pipeline, log=log)
@@ -1061,16 +1257,25 @@ def preview_pipeline(
     limit: int = 50,
     preview_until_step: int | None = None,
     bbox: tuple[float, float, float, float] | None = None,
+    rejects: bool = False,
 ) -> list[dict]:
     engine = Engine(pipeline)
-    return engine.preview(limit=limit, preview_until_step=preview_until_step, bbox=bbox)
+    return engine.preview(
+        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
+    )
 
 
-def run_config(config: Config, log: Callable[[str], None] | None = None) -> str:
+def run_config(
+    config: Config,
+    log: Callable[[str], None] | None = None,
+    written: list[dict] | None = None,
+) -> str:
     """Run all pipelines in a Config, appending each one's layers to the shared output.
 
     Returns the GeoPackage path, or for GeoParquet the file (one layer in total) or the
-    folder of per-layer files (several).
+    folder of per-layer files (several). When `written` is given, one entry per layer
+    written is appended to it: {"pipeline", "layer", "rows", "kind", "path"}, `kind` being
+    "layer" or "rejects".
     """
     out_path = Path(config.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1081,11 +1286,23 @@ def run_config(config: Config, log: Callable[[str], None] | None = None) -> str:
             _clear_parquet_output(out_path, multi)
     elif config.overwrite and out_path.exists():
         out_path.unlink()
-    for pdef in config.pipelines:
-        Engine(pdef.to_pipeline(config.output), log=log, parquet_multi=multi).run()
+    # A run reads current data: remote file sources are downloaded again (once per URL)
+    # rather than reusing a preview's download — see sources.fresh_downloads.
+    with src_readers.fresh_downloads():
+        for pdef in config.pipelines:
+            engine = Engine(pdef.to_pipeline(config.output), log=log, parquet_multi=multi)
+            engine.run()
+            if written is not None:
+                written.extend({"pipeline": pdef.name, **w} for w in engine.written)
     if multi is not None:
         return str(parquet_output_root(out_path, multi))
     return str(out_path)
+
+
+def _config_pipeline(config: Config, pipeline_idx: int) -> Pipeline:
+    if not 0 <= pipeline_idx < len(config.pipelines):
+        raise ValueError(f"no pipeline at index {pipeline_idx}")
+    return config.pipelines[pipeline_idx].to_pipeline(config.output)
 
 
 def preview_config_pipeline(
@@ -1094,15 +1311,26 @@ def preview_config_pipeline(
     limit: int = 50,
     preview_until_step: int | None = None,
     bbox: tuple[float, float, float, float] | None = None,
+    rejects: bool = False,
 ) -> list[dict]:
     """Preview one pipeline from a Config (defaults to the first)."""
-    if pipeline_idx >= len(config.pipelines):
-        raise ValueError(f"no pipeline at index {pipeline_idx}")
     return preview_pipeline(
-        config.pipelines[pipeline_idx].to_pipeline(config.output),
-        limit=limit, preview_until_step=preview_until_step, bbox=bbox,
+        _config_pipeline(config, pipeline_idx),
+        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
     )
 
 
+def plan_config_pipeline(config: Config, pipeline_idx: int = 0) -> list[dict]:
+    """The SQL of one pipeline's views (see Engine.sql_plan)."""
+    return Engine(_config_pipeline(config, pipeline_idx)).sql_plan()
 
+
+def count_config_pipeline(
+    config: Config,
+    pipeline_idx: int = 0,
+    limit: int | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> dict:
+    """Row counts after each step of one pipeline (see Engine.counts)."""
+    return Engine(_config_pipeline(config, pipeline_idx)).counts(limit=limit, bbox=bbox)
 

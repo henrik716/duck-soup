@@ -1380,8 +1380,9 @@ th.sortable.sorted-desc .sort-indicator {
 }
 
 /* ---- Lineage Diagram Branch and Derived Styling ---- */
+/* Raised clear of the main chain, which runs on underneath to the layers. */
 .lineage-column.is-branch-col {
-  transform: translateY(-30px);
+  transform: translateY(-58px);
 }
 .lineage-node.is-derived {
   border-style: dashed;
@@ -1497,6 +1498,16 @@ button.status:hover { filter: brightness(1.25); }
   background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent);
 }
 
+/* "Downloaded 44 min ago · 93.2 MB" + refresh, on a remote source's card. */
+.download-note-text { flex: 1; min-width: 0; }
+button.download-refresh {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  background: var(--panel-solid); border: 1px solid var(--accent-soft-border); color: var(--accent);
+  padding: 3px 9px;
+}
+button.download-refresh:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.download-refresh:disabled { opacity: 0.7; cursor: progress; }
+
 /* Value the editor filled in for you, rather than one you typed. */
 .auto-chip {
   display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
@@ -1587,3 +1598,235 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.7; }
 .theme-toggle .theme-icon-moon { display: none; }
 :root[data-theme="light"] .theme-toggle .theme-icon-sun { display: none; }
 :root[data-theme="light"] .theme-toggle .theme-icon-moon { display: inline-block; }
+
+/* ============================================================================
+   Flow editing: lineage counts, inserts, rejects, drag; flow editor panel;
+   SQL plan and run history tabs
+   ========================================================================= */
+
+/* ---- lineage rows (lineage.ts) ---- */
+.lineage-row { display: flex; align-items: flex-end; gap: 52px; position: relative; padding: 30px 0 10px; }
+/* Room for steps raised onto a branch, and rejects hanging below. */
+.lineage-row.has-branches { padding-top: 76px; }
+.lineage-row.has-rejects { padding-bottom: 62px; }
+.lineage-row.has-branch-rejects { padding-top: 104px; }
+.lineage-column.is-branch-col .lineage-reject-slot { top: auto; bottom: 100%; padding-top: 0; padding-bottom: 20px; }
+.lineage-row + .lineage-row { border-top: 1px dashed var(--line); }
+/* The row's header: pipeline name and "+ source". */
+.lineage-row-head { position: absolute; top: 6px; left: 0; display: flex; align-items: center; gap: 10px; }
+.lineage-row-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; color: var(--muted); white-space: nowrap; }
+.lineage-add-source {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; height: 18px;
+  font-family: var(--mono); font-size: 10px; text-transform: none; letter-spacing: 0;
+  color: var(--muted); background: transparent; border: 1px dashed var(--line-glow); border-radius: 9px;
+  opacity: 0.6; transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.lineage-row:hover .lineage-add-source, .lineage-add-source:focus-visible { opacity: 1; }
+.lineage-add-source:hover { color: var(--accent); border-color: var(--accent); }
+.lineage-node.lineage-gpkg { cursor: text; }
+.lineage-rename {
+  font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 2px 6px; height: auto;
+  width: auto; min-width: 0; border: 1px solid var(--ok); border-radius: 4px; background: var(--panel-solid); color: var(--ink);
+}
+.lineage-base-tag {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent);
+  padding: 0 5px; border-radius: 4px; background: rgb(var(--accent-rgb) / 0.12); margin-left: 2px;
+}
+.lineage-node.is-missing { border-style: dashed; color: var(--muted); }
+.lineage-column { position: relative; }
+/* Pushed right, so every pipeline's layers line up in one column before the output. */
+.lineage-layer-col { gap: 8px; margin-left: auto; }
+.lineage-reject-slot {
+  position: absolute; top: 100%; left: -30px; right: -30px;
+  display: flex; justify-content: center; padding-top: 24px;
+}
+.lineage-node.lineage-reject-node {
+  padding: 5px 10px; font-size: 10px; border-style: dashed;
+  border-color: rgb(var(--warn-rgb) / 0.5); background: rgb(var(--warn-rgb) / 0.06);
+}
+.lineage-node.lineage-reject-node:hover, .lineage-node.lineage-reject-node.highlighted {
+  border-color: var(--warn); box-shadow: 0 0 14px rgb(var(--warn-rgb) / 0.3);
+}
+.lineage-node.lineage-step-node { cursor: grab; }
+.lineage-node.is-editing { border-color: var(--accent); box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.45); }
+.lineage-node.is-dragging { z-index: 6; opacity: 0.9; cursor: grabbing; transition: none; }
+.lineage-drop-marker {
+  position: absolute; width: 2px; z-index: 5; border-radius: 1px; pointer-events: none;
+  background: var(--accent); box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6);
+}
+
+/* Count labels and "+" buttons sit on the connections' midpoints. */
+.lineage-edge-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.lineage-edge-ctl {
+  position: absolute; width: 0; height: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.25s ease;
+}
+.lineage-edge-ctl.dimmed { opacity: 0.2; }
+.lineage-count {
+  position: absolute; bottom: 5px; white-space: nowrap; pointer-events: auto; cursor: help;
+  font-family: var(--mono); font-size: 10px; font-weight: 500; line-height: 15px; color: var(--ink);
+  padding: 0 5px; border-radius: 8px;
+  background: var(--panel-solid); border: 1px solid var(--line-glow);
+}
+/* Vertical connections: the label goes beside the line, not on it. */
+.lineage-edge-ctl.is-vertical .lineage-count { bottom: auto; left: 6px; }
+.lineage-edge-ctl.is-stale .lineage-count {
+  color: var(--muted); border-style: dashed;
+  text-decoration: line-through; text-decoration-color: rgb(var(--muted-rgb) / 0.6);
+}
+.lineage-insert {
+  pointer-events: auto; width: 18px; height: 18px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-solid); border: 1px solid var(--accent); color: var(--accent);
+  opacity: 0; transform: scale(0.85); transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.lineage-outer:hover .lineage-insert, .lineage-insert:focus-visible { opacity: 0.85; transform: scale(1); }
+.lineage-insert:hover { opacity: 1; background: var(--accent); color: var(--on-accent); }
+
+.lineage-count-status { font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.lineage-count-status:empty { display: none; }
+.lineage-count-status.is-bad { color: var(--warn); }
+/* "count rows: sample | all data", one segmented control. */
+.lineage-count-btns {
+  display: inline-flex; align-items: stretch; border: 1px solid var(--line-glow);
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--panel-solid);
+}
+.lineage-count-label {
+  display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 10px;
+  color: var(--muted); border-right: 1px solid var(--line);
+}
+.lineage-count-btns button {
+  border: none; border-radius: 0; margin: 0; padding: 4px 10px; height: auto; font-size: 11px;
+  text-transform: none; letter-spacing: 0; color: var(--ink); background: transparent;
+}
+.lineage-count-btns button + button { border-left: 1px solid var(--line); }
+.lineage-count-btns button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.lineage-count-btns button:disabled { opacity: 0.5; cursor: progress; }
+.lineage-zoom button { min-width: 28px; padding: 4px 8px; font-variant-numeric: tabular-nums; }
+.lineage-zoom #zoomResetBtn { min-width: 46px; }
+.lineage-zoom button:disabled { cursor: default; }
+.lineage-zoom button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+/* Taller than this (zoomed in, or many pipelines), the diagram scrolls and pans vertically
+   too, instead of pushing the rest of the builder down. "fit" fits this height as well. */
+#lineage-diagram { max-height: 60vh; overflow: auto !important; }
+
+/* ---- flow editor panel (flow-editor.ts) ---- */
+.flow-editor {
+  position: fixed; z-index: 900; display: flex; flex-direction: column;
+  background: var(--panel-solid); border: 1px solid var(--line-glow); border-radius: var(--radius-lg);
+  box-shadow: -8px 12px 40px rgb(var(--shadow-rgb) / calc(0.5 * var(--shadow-k)));
+}
+.flow-editor[hidden] { display: none; }
+/* While the panel is open, the diagram keeps clear of it (flow-editor.ts). */
+#lineage-diagram-container.fe-open #lineage-diagram { margin-right: var(--fe-reserve, 0px); }
+.flow-editor-head {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.flow-editor-kicker { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.flow-editor-title { font-family: var(--display); font-size: 13px; font-weight: 600; color: var(--ink); }
+.flow-editor-head button { font-size: 11px; }
+/* The card itself, displayed inside the panel (it stays in its list in the DOM). */
+.card.flow-popped {
+  position: fixed; z-index: 901; margin: 0;
+  top: var(--fe-top); left: var(--fe-left); width: var(--fe-width); max-height: var(--fe-height);
+  overflow: visible; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+  border-color: transparent; box-shadow: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 14px 18px 16px;
+}
+/* Only a card taller than the panel scrolls (flow-editor.ts): a scroll box clips dropdowns. */
+.card.flow-popped.fe-scroll { overflow-y: auto; }
+/* The panel is narrower than the list: let the mapping grid's flexible columns (output
+   name, value) shrink instead of the fixed ones squeezing them to nothing. */
+.card.flow-popped .map-grid { grid-template-columns: 14px minmax(0, 1fr) 88px minmax(0, 1.25fr) 118px 24px; gap: 6px; }
+.card.flow-popped .map-grid > * { min-width: 0; }
+.card.flow-popped:hover { border-color: transparent; box-shadow: none; }
+.card.flow-popped:focus { outline: none; }
+/* The card's own reorder handle (its list is out of sight); mapping rows keep theirs. */
+.card.flow-popped > .item-head > .drag-handle { display: none; }
+/* Keep the popped card's section rendered when another tab is picked or the pipeline is
+   collapsed: a fixed element inside a display:none parent isn't shown either. Zero height
+   instead, which a fixed element ignores. */
+.pl-panel:not(.active):has(.flow-popped),
+.pipeline-card.collapsed .pipeline-card-body:has(.flow-popped) {
+  display: block; height: 0; padding: 0; overflow: hidden;
+}
+
+/* ---- tab strip: six tabs don't fit a narrow column, so it scrolls ---- */
+.tabs-list { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tabs-list::-webkit-scrollbar { display: none; }
+
+/* ---- SQL plan tab (sql-plan.ts) ---- */
+.sql-wrap, .runs-wrap { padding: 18px 24px; height: 100%; }
+.sql-wrap h3, .runs-wrap h3 {
+  font-family: var(--display); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+}
+.sql-plan-scope { text-transform: none; letter-spacing: 0; color: var(--accent); }
+.sql-entry, .run-entry {
+  border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 6px;
+  background: var(--panel2); flex-shrink: 0;
+}
+.sql-entry > summary, .run-entry > summary {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; color: var(--ink); list-style: none;
+}
+.sql-entry > summary::-webkit-details-marker, .run-entry > summary::-webkit-details-marker { display: none; }
+.sql-entry > summary::before, .run-entry > summary::before {
+  content: "\25B8"; color: var(--muted); transition: transform 0.15s ease; display: inline-block;
+}
+.sql-entry[open] > summary::before, .run-entry[open] > summary::before { transform: rotate(90deg); }
+.sql-kind {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; padding: 1px 6px; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent); flex-shrink: 0;
+}
+.sql-entry.kind-source .sql-kind, .sql-entry.kind-derived .sql-kind { background: rgb(var(--hi-rgb) / 0.05); color: var(--muted); }
+.sql-entry.kind-rejects .sql-kind { background: var(--warn-soft); color: var(--warn); }
+.sql-entry.kind-layer .sql-kind { background: var(--ok-soft); color: var(--ok); }
+.sql-entry.kind-split .sql-kind, .sql-entry.kind-branch .sql-kind { background: var(--spatial-soft); color: var(--spatial); }
+.sql-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sql-view { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.sql-code {
+  margin: 0; border: none; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  font-size: 11px; line-height: 1.5; overflow-x: auto;
+}
+
+/* ---- run history tab (run-history.ts) ---- */
+.runs-list code, .runs-wrap .hint code { font-family: var(--mono); color: var(--ink); }
+.run-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--ok); }
+.run-entry.bad .run-dot { background: var(--warn); }
+.run-entry.bad { border-color: rgb(var(--warn-rgb) / 0.3); }
+.run-when { white-space: nowrap; }
+.run-tag {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; padding: 1px 6px; border-radius: 4px;
+  background: rgb(var(--hi-rgb) / 0.05); color: var(--muted); flex-shrink: 0;
+}
+.run-summary { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.run-entry.bad .run-summary { color: var(--warn); }
+.run-duration { color: var(--muted); white-space: nowrap; }
+.run-body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.run-error { color: var(--warn); font-size: 11px; }
+.run-layers { border-collapse: collapse; font-family: var(--mono); font-size: 11px; width: 100%; }
+.run-layers th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.run-layers td { padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.run-layers .num { text-align: right; font-variant-numeric: tabular-nums; }
+.run-layers tr.is-rejects td { color: var(--warn); }
+.run-meta { display: flex; flex-wrap: wrap; gap: 14px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.run-log { max-height: 240px; overflow: auto; background: var(--void); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; }
+
+/* The lineage header's tools stay on one line each and wrap as whole controls when the
+   builder is narrow. */
+.lineage-header { flex-wrap: wrap; gap: 6px 12px; }
+.lineage-header-tools { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+.lineage-header-tools > *, .lineage-count-btns > * { white-space: nowrap; }
+/* "ducks in a row · pipeline flow": the name, with what it is in plain words after it. */
+.lineage-title { color: var(--ink); cursor: help; white-space: nowrap; }
+/* The collapse chevron stays in the header's top-right corner; only the tools wrap. */
+.lineage-header { position: relative; padding-right: 30px; }
+.lineage-header .chevron-btn { position: absolute; top: -2px; right: 0; }
+/* Collapsed, there's no diagram to zoom or count: just the title and the chevron. */
+#lineage-diagram-container.collapsed .lineage-header-tools > span { display: none; }
+.lineage-title-sub { color: var(--muted); }
+
+/* Preview limit above the "may get slow" threshold */
+#previewLimit.limit-warn { border-color: var(--warn); color: var(--warn); }

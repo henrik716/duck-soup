@@ -17,8 +17,9 @@
 | Key | Formats | Default | Meaning |
 |---|---|---|---|
 | `header_row` | `csv`, `xlsx` | auto-detect | `true` = first row is headers, `false` = no header row. See [CSV and Excel](#csv-and-excel). |
-| `x_field`, `y_field` | `csv`, `xlsx` | — | Build point geometry from two numeric columns. |
-| `geom_field` | `csv`, `xlsx` | — | Build geometry from a WKT or hex-WKB column. |
+| `records` | `json` | — | Dot path to the array of records inside the document, e.g. `data.items`. See [JSON](#json). |
+| `x_field`, `y_field` | `csv`, `xlsx`, `json` | — | Build point geometry from two numeric columns. |
+| `geom_field` | `csv`, `xlsx`, `json` | — | Build geometry from a WKT, hex-WKB or GeoJSON column. |
 | `where` | `arcgis_rest` | `1=1` | Filter evaluated by the ArcGIS server. See [ArcGIS REST](#arcgis-rest). |
 | `page_size` | `arcgis_rest`, `oapif` | `2000` | Features per request while paging. |
 
@@ -38,6 +39,7 @@ Other formats ignore these keys.
 | `postgres` | PostgreSQL / PostGIS table | DuckDB `postgres` extension |
 | `csv` | CSV | `ST_Read`, tabular (optional geometry from columns) |
 | `xlsx` | Excel sheet | `ST_Read`, tabular (optional geometry from columns) |
+| `json` | Plain JSON records (not GeoJSON) | DuckDB `read_json()`, tabular (optional geometry from columns) |
 | `wfs` | OGC WFS | HTTP GetFeature → temp GML → `ST_Read` |
 | `oapif` | OGC API - Features | paged HTTP → temp GeoJSON → `ST_Read` |
 | `arcgis_rest` | ArcGIS MapServer/FeatureServer layer | paged HTTP → temp GeoJSON → `ST_Read` |
@@ -92,7 +94,12 @@ Tabular by default, so they're usable in attribute joins without any geometry. E
 | `layer` | Sheet name (Excel). |
 | `header_row` | `true` = first row is headers, `false` = no header row, omit = auto-detect. |
 | `x_field` + `y_field` | Build point geometry from two numeric columns. Set both together. |
-| `geom_field` | Build geometry from a WKT or hex-WKB column (auto-detected). |
+| `geom_field` | Build geometry from a WKT, hex-WKB or GeoJSON-text column (auto-detected). |
+
+CSV and Excel files of 5 MB or more are converted to Parquet the first time they're read (in the
+system temp folder) and read from that copy afterwards, with the same columns and types. GDAL
+re-scans a whole CSV every time it opens one, so without the copy every preview of a large file
+takes seconds. The copy is rebuilt when the file changes.
 
 `x_field`/`y_field` and `geom_field` are mutually exclusive, and need a `crs`:
 
@@ -104,6 +111,72 @@ Tabular by default, so they're usable in attribute joins without any geometry. E
   y_field: lat
   crs: EPSG:4326
 ```
+
+### JSON
+
+For plain JSON records, such as an API response, rather than GeoJSON. A GeoJSON
+FeatureCollection, whatever its file extension, belongs in `geojson`.
+
+```yaml
+- id: feeders
+  format: json
+  uri: https://api.example.org/feeders?pond=12
+  records: data.items        # where the array of records sits in the document
+  geom_field: geometry       # or x_field + y_field
+  crs: EPSG:4326
+```
+
+Read with DuckDB's native `read_json()`, not GDAL. Tabular by default, like CSV and Excel.
+
+| Key | Meaning |
+|---|---|
+| `records` | Dot path to the array of records, e.g. `results` or `data.items`. Omit when the file is the array itself (`[{…}, {…}]`) or has one object per line (newline-delimited JSON). |
+| `x_field` + `y_field` | Build point geometry from two numeric columns. Numbers stored as strings (`"10.7"`) work too. |
+| `geom_field` | Build geometry from a column holding a GeoJSON geometry object (`{"type": "Point", "coordinates": […]}`), or GeoJSON, WKT or hex-WKB text. |
+
+- **Nested objects** become struct columns. Reach into them with an `expr` mapping, e.g.
+  `{to: city, expr: "address.city"}`.
+- **Column types** are worked out from the whole file, so a field that holds a number in one
+  record and a string in another doesn't fail the read.
+- **One request, no paging.** If an API splits its results over several pages, only the page
+  the `uri` points at is read.
+
+### Remote files
+
+A file-based source (`gpkg`, `geojson`, `shp`, `flatgeobuf`, `gml`, `fgdb`, `csv`, `xlsx`,
+`json`) can have an `http(s)://` URL as its `uri`:
+
+```yaml
+- id: roads
+  format: csv
+  uri: https://nvdb-eksport.atlas.vegvesen.no/vegnett/veglenkesekvenser/segmentert.csv?fylke=56
+  geom_field: GEO.WKT
+  crs: EPSG:5973
+```
+
+- The file is **downloaded** into the system temp folder and then read locally. That also
+  makes export endpoints usable, the ones that build the file on every request and don't
+  support partial reads; reading them directly through GDAL times out.
+- **Previews reuse the download.** Inspecting, previewing and counting in the editor read
+  the newest download until you click **refresh** on the source card, including after
+  restarting the editor. Datasets rarely change between two previews, and fetching them
+  again takes as long as the download does.
+- **Runs download fresh data.** `duck-soup run` and the editor's **Run** always download the
+  file again, once per run even if several pipelines read it, so the output reflects the
+  current data.
+- **Layer names** come from the file name in the URL, as they would for a local file
+  (`…/segmentert.csv?fylke=56` → layer `segmentert`).
+- **A plain `.shp` URL** is the one exception: it's read directly, so GDAL can also fetch the
+  `.shx`/`.dbf` next to it. A zipped shapefile (`.shp.zip`/`.zip`) is downloaded.
+- **In the editor**, the download (and, for a large CSV or Excel file, the conversion to
+  Parquet) runs in the background. The source card and the status at the top show what's
+  happening, e.g. *downloading… 23.4 MB · 4.1 MB/s*, then *converting to Parquet for fast
+  previews… 12 s*. The rest of the editor stays usable meanwhile.
+- If a download fails, the read fails. There's no fallback to an older copy.
+- Downloads and Parquet copies are kept in the system temp folder. A copy replaced by a
+  newer download is removed an hour later, so a run that's still reading it, in the editor
+  or in another `duck-soup run`, isn't disrupted.
+- `parquet` URLs are read directly by DuckDB, which handles partial reads itself.
 
 ## Databases
 

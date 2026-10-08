@@ -29,7 +29,7 @@ or visually in a browser-based editor. duck soup runs it inside **DuckDB** with 
 -   :material-database-import: **Read almost anything**
 
     GeoPackage, GeoJSON, Shapefile, FlatGeobuf, GML, File Geodatabase, (Geo)Parquet,
-    CSV/Excel, PostGIS, WFS, OGC API - Features and ArcGIS REST services.
+    CSV/Excel/JSON, PostGIS, WFS, OGC API - Features and ArcGIS REST services.
     [Source formats →](reference/sources.md)
 
 -   :material-vector-intersection: **Join and geoprocess**

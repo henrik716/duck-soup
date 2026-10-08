@@ -59,24 +59,34 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 - `arcgis_rest`: paged HTTP → temp GeoJSON → `ST_Read`
 - `wfs`: HTTP GetFeature (GML/3.2) → temp `.gml` → `ST_Read`
 - `parquet`: DuckDB's native `read_parquet()`, not `ST_Read` — the GDAL build bundled with the `spatial` extension has no Parquet/Arrow driver
+- `json`: DuckDB's native `read_json()` (plain records; `records` dot path, geometry via `x_field`/`y_field`/`geom_field`)
+- any file format with an `http(s)` uri: downloaded to a local file first (`fetch_remote_file`), since GDAL's `/vsicurl/` range reads fail against per-request export endpoints. Previews reuse the newest download on disk (`latest_download`) until refreshed (`/api/refresh_source`); runs download fresh, once per URL (`run_config` wraps itself in `fresh_downloads()`)
+- the editor never blocks a request on that work: `prepare_source` runs the download/conversion in a background thread and the endpoints answer `{"pending": true, "progress": …}` (`_pending_response` in `web/app.py`) until it's ready; the frontend retries (`awaitPrepared` in `main.ts`, the source card's inspect)
+- `csv`/`xlsx` of 5 MB+: read from a cached Parquet copy (`_tabular_parquet_cache`, keyed by path + mtime + size + options), since GDAL's CSV driver scans the whole file on every open
 
-**`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. Spatial joins (first match or largest overlap), nearest-neighbor joins, clip and erase all go through `_per_row_match_select`: a plain `JOIN` on the spatial predicate (so DuckDB plans it as its R-tree `SPATIAL_JOIN`), aggregated per base row — `arg_min` for the single best match, `ST_Union_Agg` for erase. Avoid `LATERAL` subqueries for spatial predicates: they compare every base row against every source row. Nearest-neighbor uses `ST_DWithin` as the join condition when `max_distance` is set; without it, every pair is compared. Attribute joins are 1:1 left joins. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or, when the output path ends in `.parquet`/`.geoparquet`, via native `COPY … (FORMAT PARQUET)` as GeoParquet (`_write_parquet_layer`). The geometry is cast to `GEOMETRY('<layer crs>')` there, since without a CRS-typed column DuckDB omits `crs` from the `geo` metadata and readers assume OGC:CRS84. GeoParquet has no layers: 1 layer in total → that file, more → `<stem>/<layer>.parquet` (`parquet_layer_path`).
+**`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. The `_apply_*` step builders return a SELECT; every view goes through `Engine._emit`, which also records it in `Engine.plan`, so the same chain serves runs/previews (views), `sql_plan()` (no connection, nothing read: the editor's SQL tab) and `counts()` (steps as TEMP TABLEs, each computed once: row counts per step). A step with `rejects` (joins, `clip`, `filter`) gets a `__matched` column and is split into `step_<i>__split` → `step_<i>` (passed) + `step_<i>__rejects`, which `run()` writes as an extra layer in the first output (unmapped, in the first layer's CRS); `Config.layer_count` counts them. `run_config(..., written=[])` reports the rows written per layer (from `COPY`'s returned count). Spatial joins (first match or largest overlap), nearest-neighbor joins, clip and erase all go through `_per_row_match_select`: a plain `JOIN` on the spatial predicate (so DuckDB plans it as its R-tree `SPATIAL_JOIN`), aggregated per base row — `arg_min` for the single best match, `ST_Union_Agg` for erase. Avoid `LATERAL` subqueries for spatial predicates: they compare every base row against every source row. Nearest-neighbor uses `ST_DWithin` as the join condition when `max_distance` is set; without it, every pair is compared. Attribute joins are 1:1 left joins. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or, when the output path ends in `.parquet`/`.geoparquet`, via native `COPY … (FORMAT PARQUET)` as GeoParquet (`_write_parquet_layer`). The geometry is cast to `GEOMETRY('<layer crs>')` there, since without a CRS-typed column DuckDB omits `crs` from the `geo` metadata and readers assume OGC:CRS84. GeoParquet has no layers: 1 layer in total → that file, more → `<stem>/<layer>.parquet` (`parquet_layer_path`).
 
 **`derive.py`** — Registers Python UDFs into DuckDB (`to_mgrs`, backed by the `mgrs` package, a required dependency). Also owns connection bootstrap: `load_extensions()` (spatial + postgres) and `init_duckdb()` (extensions + UDFs) — every DuckDB connection in the codebase goes through one of these.
 
 **`sql_util.py`** — `quote_ident()` / `quote_literal()`, shared by `engine.py` and `sources.py` (imported there under their local `_ident`/`_lit` and `_sql_ident`/`_sql_str` names).
 
-**`cli.py`** — Thin argparse wrapper around `check` (print schema summary) and `run`.
+**`cli.py`** — Thin argparse wrapper around `check` (print schema summary) and `run` (which records the run in the history; `--history-dir`, `--no-history`).
+
+**`history.py`** — Run history: one JSON file per run in `<root>/runs/<config name>/` (newest 200 kept), written by both `duck-soup run` (root: `--history-dir`, else `$DUCK_SOUP_ROOT`, else cwd) and the editor's `/api/run` (`web.app.RUNS_ROOT`). Recording is best effort and never fails a run. Tests redirect both roots to a temp folder (`tests/conftest.py`).
 
 **`web/app.py`** — FastAPI backend. Key endpoints:
 - `POST /api/inspect` — `DESCRIBE SELECT * FROM <read_expr>` to get column schema
 - `POST /api/inspect_file` — WFS uses HTTP GetCapabilities + XML parse, OGC API - Features (`oapif`) lists `/collections` as JSON; everything else uses `ST_Read_Meta()`
 - `POST /api/preview` — runs the pipeline up to the mapped view, returns 50 rows (no geometry)
-- `POST /api/run` — executes the full pipeline async via `asyncio.to_thread`
+- `POST /api/run` — executes the full pipeline async via `asyncio.to_thread`, returns the rows written per layer, and records the run in the history under the request's `name`
+- `POST /api/plan` — the SQL of every view of one pipeline (`Engine.sql_plan`), reads no data
+- `POST /api/counts` — row counts after each step of one pipeline (`Engine.counts`), over the first `limit` base features or (`limit: null`) all the data
+- `GET /api/runs/{name}`, `GET /api/runs/{name}/{id}` — run history summaries / one full record
+- `POST /api/preview` also takes `rejects: true` (with `preview_until_step`) to preview a step's rejects
 
 ### Frontend
 
-Single-page app (TypeScript + Vite + MapLibre GL + Lucide). Source/step/mapping card rendering and config serialisation are split across `cards/*.ts` (one file per card type, plus `collectPipelineDef`) and `config-io.ts` (`collectConfig`/`hydrate`), with shared helpers in `dom.ts`, `state.ts`, `combo.ts`, `schema.ts`, `toast.ts`, `table.ts`, `metadata.ts`, `file-explorer.ts`, `expr-drawer.ts`, and `step-gallery.ts`. `main.ts` orchestrates tabs, validation, preview, and run. `types.ts` mirrors the Python Pydantic schemas exactly — keep them in sync when adding fields. Built assets are committed to `duck_soup/web/static/` and served by FastAPI at `/static/`.
+Single-page app (TypeScript + Vite + MapLibre GL + Lucide). Source/step/mapping card rendering and config serialisation are split across `cards/*.ts` (one file per card type, plus `collectPipelineDef`) and `config-io.ts` (`collectConfig`/`hydrate`), with shared helpers in `dom.ts`, `state.ts`, `combo.ts`, `schema.ts`, `toast.ts`, `table.ts`, `metadata.ts`, `file-explorer.ts`, `expr-drawer.ts`, and `step-gallery.ts`. `main.ts` orchestrates tabs, validation, preview, run, row counts, the SQL plan and run history. `lineage.ts` draws the pipeline flow diagram (titled "ducks in a row · pipeline flow" in the editor; the code keeps the `lineage` name) (and only redraws when what it draws changes — see `drawnSignature`) and is an editor too: node clicks open the card in `flow-editor.ts` (the card itself, displayed as a fixed panel while it stays in its list in the DOM), "+" on a connection inserts a step via the pipeline card's `_insertStep`, step nodes drag/Alt+arrow to reorder via `_moveStep`. `sql-plan.ts` renders the SQL tab, `run-history.ts` the History tab. `types.ts` mirrors the Python Pydantic schemas exactly — keep them in sync when adding fields. Built assets are committed to `duck_soup/web/static/` and served by FastAPI at `/static/`.
 
 ### Pipeline YAML
 
@@ -85,7 +95,7 @@ name: my_pipeline
 working_crs: EPSG:25833      # all joins happen in this CRS
 sources:
   - id: places
-    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv | postgres
+    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv | json | postgres
     uri: data/places.geojson
     layer: places             # layer / typename / sheet name
     crs: EPSG:4326

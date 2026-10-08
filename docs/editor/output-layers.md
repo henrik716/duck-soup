@@ -15,7 +15,9 @@ output (the **output file** set on the config card). The YAML side is covered un
 
 All layers of a pipeline get the same rows, so filters are how you split them. For example, a
 `ducks` layer with no filter and a `ducks_off_pond` layer with `pond IS NULL` (ducks
-that wandered off for a waddle).
+that wandered off for a waddle). To take rows out of the chain at a particular step instead,
+give that step a [`rejects`](../reference/steps.md#rejects) layer. Those don't appear in this
+tab: they're set on the step, and written as they are at that step, without the mapping.
 
 !!! note "Filters use upstream column names"
     A layer filter runs **before** the mapping, so it refers to the column names coming out of

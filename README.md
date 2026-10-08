@@ -115,13 +115,15 @@ has a recipe per scheduler and shows how to swap in the new file only after a go
 - **Web editor:** A visual, browser-based pipeline builder. Everything you can write in YAML can be built and edited there:
   - live validation as you type, with a **Problems** tab that jumps to the card at fault
   - a preview of any source, any intermediate step, or the final output, on a map and in a sortable table
-  - a lineage diagram of sources → steps → layers
+  - **ducks in a row**, an interactive flow of sources → steps → layers: click a node to edit it in a side panel, insert steps with the **+** on a connection, drag steps to reorder them, and count the rows on every connection (on a sample or all the data)
+  - a **SQL** tab with the SQL behind every source, step and output layer
+  - a **History** tab with every past run, editor and scheduled CLI runs alike, and the rows each layer got
   - a SQL expression builder with live checks against sample data
   - import a pasted YAML, or export a pipeline as a standalone `.py` script
   - undo/redo, dark and light mode
   - drag a File Geodatabase folder or a Shapefile onto the sources panel to upload it and add it as a source
 - **Powered by DuckDB Spatial:** Fast columnar execution, GDAL-backed `ST_Read`/`ST_Write`, and R-tree spatial joins.
-- **Many sources:** GeoPackage, GeoJSON, Shapefile, FlatGeobuf, GML, File Geodatabase, (Geo)Parquet, CSV/Excel, PostGIS, WFS, OGC API - Features and ArcGIS REST.
+- **Many sources:** GeoPackage, GeoJSON, Shapefile, FlatGeobuf, GML, File Geodatabase, (Geo)Parquet, CSV/Excel/JSON, PostGIS, WFS, OGC API - Features and ArcGIS REST.
 - **Flexible joins:** Spatial joins (intersects/contains/within; keep the first match, the largest overlap, or all matches), attribute joins, and nearest-neighbour searches with an optional distance cap.
 - **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union), chainable like any join step, with `snapshot` to fork the chain into named branches.
 - **Derived sources:** Build a filtered/buffered view of any source and reuse it as a join source, without a dedicated step.
@@ -280,6 +282,10 @@ Every source also accepts an optional `make_valid: true` to repair invalid geome
 | `filter`             | drop rows where `where` (SQL boolean) is false |
 | `merge`              | append another source's rows via `UNION ALL BY NAME` |
 | `snapshot`           | name the chain's current state (`id:`) so a later step can join back against it or fork a branch |
+
+Joins, `clip` and `filter` also accept `rejects: <layer>`, which, like an FME transformer's
+Failed port, writes the rows the step rejects (no match, outside the mask, condition not true)
+to a layer of their own instead of passing them on or discarding them.
 
 Every step also accepts an optional `branch:` — the name of an earlier `snapshot` to
 run against instead of the main chain, letting a pipeline maintain several parallel

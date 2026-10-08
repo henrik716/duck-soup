@@ -130,6 +130,8 @@ config has **in total**, across all pipelines:
 | 1 | `output/pond_survey.parquet` |
 | 2 or more | `output/pond_survey/<layer>.parquet`, one file per layer |
 
+Steps' [`rejects`](steps.md#rejects) layers count as layers here too.
+
 - Each layer's `crs` is embedded in the file's GeoParquet metadata, so GIS tools read the
   coordinates in the right CRS.
 - Layer names become file names, so they must be unique (ignoring case) and can't contain
@@ -149,6 +151,8 @@ Besides types, `check` enforces:
 - `geom` is reserved for the output geometry and can't be a mapping target.
 - `arcgis_rest` and `oapif` sources must be EPSG:4326 (or leave `crs` out).
 - For a GeoParquet `output`, layer names must be unique, valid file names.
+- A step's [`rejects`](steps.md#rejects) layer name can't be an output layer's name or another
+  step's rejects layer. For GeoParquet, rejects layers count as layers (one file each).
 - At runtime: buffer, nearest-neighbour distances and `area`/`length` require a projected
   working CRS.
 

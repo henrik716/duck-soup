@@ -713,3 +713,320 @@ def test_needs_pyogrio_reader_only_above_threshold(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 11)
     assert not sources_mod.needs_pyogrio_reader(str(f))
+
+
+# ---- json (plain records via read_json) ----
+
+def _write_json(tmp_path: Path, name: str, data) -> str:
+    p = tmp_path / name
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return str(p).replace("\\", "/")
+
+
+def test_read_expr_json_array_of_records(spatial_con, tmp_path):
+    uri = _write_json(tmp_path, "a.json", [{"id": 1, "name": "A"}, {"id": 2, "name": "B"}])
+    read = read_expr(Source(id="j", format="json", uri=uri), tmp_path, con=spatial_con)
+    assert spatial_con.execute(f"SELECT id, name FROM {read} ORDER BY id").fetchall() == [
+        (1, "A"), (2, "B"),
+    ]
+
+
+def test_read_expr_json_records_path_unnests_nested_array(spatial_con, tmp_path):
+    uri = _write_json(tmp_path, "n.json", {"meta": {"count": 2}, "data": {"items": [
+        {"id": 1, "address": {"city": "Oslo"}},
+        {"id": 2, "address": {"city": "Bergen"}},
+    ]}})
+    src = Source(id="j", format="json", uri=uri, records="data.items")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    cols = [c[0] for c in spatial_con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()]
+    assert cols == ["id", "address"]
+    rows = spatial_con.execute(f"SELECT id, address.city FROM {read} ORDER BY id").fetchall()
+    assert rows == [(1, "Oslo"), (2, "Bergen")]
+
+
+def test_read_expr_json_xy_fields_handle_mixed_type_values(spatial_con, tmp_path):
+    # "5.3" as a string in one record and a number in the other makes read_json type the
+    # column JSON, which a plain TRY_CAST(... AS DOUBLE) turns into NULL.
+    uri = _write_json(tmp_path, "xy.json", [
+        {"id": 1, "lon": 10.7, "lat": 59.9},
+        {"id": 2, "lon": "5.3", "lat": 60.4},
+    ])
+    src = Source(id="j", format="json", uri=uri, crs="EPSG:4326", x_field="lon", y_field="lat")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    rows = spatial_con.execute(f"SELECT id, ST_AsText(geom) FROM {read} ORDER BY id").fetchall()
+    assert rows == [(1, "POINT (10.7 59.9)"), (2, "POINT (5.3 60.4)")]
+
+
+def test_read_expr_json_geom_field_nested_geojson_object(spatial_con, tmp_path):
+    uri = _write_json(tmp_path, "g.json", {"items": [
+        {"id": 1, "geometry": {"type": "Point", "coordinates": [10.7, 59.9]}},
+        {"id": 2, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}},
+        {"id": 3, "geometry": None},
+    ]})
+    src = Source(id="j", format="json", uri=uri, records="items", crs="EPSG:4326", geom_field="geometry")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    rows = spatial_con.execute(f"SELECT id, ST_AsText(geom) FROM {read} ORDER BY id").fetchall()
+    assert rows == [(1, "POINT (10.7 59.9)"), (2, "LINESTRING (0 0, 1 1)"), (3, None)]
+
+
+def test_read_expr_json_geom_field_text_wkt_and_geojson(spatial_con, tmp_path):
+    uri = _write_json(tmp_path, "t.json", [
+        {"id": 1, "g": "POINT(1 2)"},
+        {"id": 2, "g": '{"type": "Point", "coordinates": [3, 4]}'},
+    ])
+    src = Source(id="j", format="json", uri=uri, crs="EPSG:4326", geom_field="g")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    rows = spatial_con.execute(f"SELECT id, ST_AsText(geom) FROM {read} ORDER BY id").fetchall()
+    assert rows == [(1, "POINT (1 2)"), (2, "POINT (3 4)")]
+
+
+def test_json_plan_expr_needs_no_connection():
+    src = Source(id="j", format="json", uri="https://example.com/x.json", records="data.items")
+    expr = read_expr(src, REPO_ROOT, con=None)
+    assert "read_json('https://example.com/x.json'" in expr
+    assert '"data"."items"' in expr
+
+
+# ---- remote file download (fetch_remote_file) ----
+
+class _FakeStreamResponse:
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size=1):
+        yield self._body
+
+
+@pytest.fixture()
+def _remote_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+
+
+def test_fetch_remote_file_keeps_url_name_and_caches(monkeypatch, _remote_cache):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return _FakeStreamResponse(b"id;name\n1;A\n")
+
+    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    url = "https://example.com/export/segmentert.csv?fylke=56"
+    path = sources_mod.fetch_remote_file(url, "csv")
+    assert Path(path).name == "segmentert.csv"
+    assert Path(path).read_bytes() == b"id;name\n1;A\n"
+    assert sources_mod.fetch_remote_file(url, "csv") == path
+    assert calls == [url]  # reused: previews keep the download until refreshed
+
+    refreshed = sources_mod.fetch_remote_file(url, "csv", fresh=True)
+    assert len(calls) == 2 and refreshed != path
+    assert sources_mod.fetch_remote_file(url, "csv") == refreshed  # the newest one wins
+
+
+def test_fresh_downloads_fetches_once_per_run(monkeypatch, _remote_cache):
+    calls = []
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get",
+        lambda url, **kw: calls.append(url) or _FakeStreamResponse(b"a\n1\n"),
+    )
+    url = "https://example.com/x.csv"
+    sources_mod.fetch_remote_file(url, "csv")  # an earlier preview's download
+    with sources_mod.fresh_downloads():
+        first = sources_mod.fetch_remote_file(url, "csv")  # a run: fetched again...
+        second = sources_mod.fetch_remote_file(url, "csv")  # ...once, however often it's read
+    assert len(calls) == 2 and first == second
+
+
+def test_fetch_remote_file_adds_format_extension(monkeypatch, _remote_cache):
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(b"[]")
+    )
+    path = sources_mod.fetch_remote_file("https://example.com/api/export?id=5", "json")
+    assert Path(path).name == "export.json"
+
+
+def test_should_download():
+    assert sources_mod.should_download("https://x/a.csv", "csv")
+    assert sources_mod.should_download("https://x/a.shp.zip", "shp")
+    assert not sources_mod.should_download("https://x/a.shp", "shp")  # sidecars need /vsicurl/
+    assert not sources_mod.should_download("data/a.csv", "csv")
+
+
+def test_read_expr_remote_json_is_downloaded(monkeypatch, spatial_con, tmp_path, _remote_cache):
+    body = json.dumps({"results": [{"id": 1}, {"id": 2}]}).encode()
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(body)
+    )
+    src = Source(id="j", format="json", uri="https://example.com/places?x=1", records="results")
+    read = read_expr(src, tmp_path, con=spatial_con)
+    assert spatial_con.execute(f"SELECT count(*) FROM {read}").fetchone() == (2,)
+
+
+def test_fetch_remote_file_new_download_does_not_overwrite_previous(monkeypatch, _remote_cache):
+    # On Windows a file still open elsewhere can't be replaced, so each download gets its
+    # own folder; the older one is removed once nothing can still be using it.
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(b"a\n1\n")
+    )
+    first = Path(sources_mod.fetch_remote_file("https://example.com/x.csv", "csv"))
+    second = Path(sources_mod.fetch_remote_file("https://example.com/x.csv", "csv", fresh=True))
+    assert first != second and first.name == second.name == "x.csv"
+    # A query already running against the first (a long run, in another process) may still
+    # re-open it, so it's kept for _SUPERSEDED_GRACE...
+    assert first.exists() and second.exists()
+    old = first.parent
+    os.utime(old, (old.stat().st_atime - 7200, old.stat().st_mtime - 7200))
+    third = Path(sources_mod.fetch_remote_file("https://example.com/x.csv", "csv", fresh=True))
+    # ...and then removed; the recent second one survives.
+    assert third.exists() and second.exists() and not first.exists()
+
+
+def test_two_processes_do_not_delete_each_others_parquet_copy(
+    monkeypatch, spatial_con, tmp_path, _remote_cache, _tabular_cache
+):
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(b"id\n1\n2\n")
+    )
+    src = Source(id="r", format="csv", uri="https://example.com/r.csv")
+    read_a = read_expr(src, tmp_path, con=spatial_con)  # the editor's preview
+    with sources_mod.fresh_downloads():  # a run, e.g. `duck-soup run` alongside it
+        read_b = read_expr(src, tmp_path, con=spatial_con)
+    assert read_a != read_b
+    # Process A's copy is still there for it to keep reading.
+    assert spatial_con.execute(f"SELECT count(*) FROM {read_a}").fetchone() == (2,)
+    assert len(list((tmp_path / "tabular").glob("*.parquet"))) == 2
+
+
+@pytest.fixture()
+def _tabular_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(sources_mod, "_TABULAR_CACHE_DIR", tmp_path / "tabular")
+    monkeypatch.setattr(sources_mod, "_TABULAR_CACHE_MIN_BYTES", 0)
+
+
+def test_read_expr_large_csv_reads_from_parquet_copy(spatial_con, _tabular_cache):
+    src = Source(id="pts", format="csv", uri="data/test_wkt.csv", crs="EPSG:4326", geom_field="geom_col")
+    read = read_expr(src, REPO_ROOT, con=spatial_con)
+    assert "read_parquet(" in read and "ST_Read(" not in read
+    rows = spatial_con.execute(f"SELECT name, ST_AsText(geom) FROM {read} ORDER BY name").fetchall()
+    assert ("Operahuset", "POINT (10.7527 59.9075)") in rows
+
+
+def test_tabular_parquet_copy_matches_st_read_and_follows_file_changes(
+    spatial_con, tmp_path, _tabular_cache
+):
+    csv = tmp_path / "t.csv"
+    csv.write_text("id,name\n1,A\n2,B\n", encoding="utf-8")
+    uri = str(csv).replace("\\", "/")
+    direct = spatial_con.execute(f"SELECT * FROM ST_Read('{uri}') ORDER BY 1").fetchall()
+    read = read_expr(Source(id="t", format="csv", uri=uri), tmp_path, con=spatial_con)
+    assert spatial_con.execute(f"SELECT * FROM {read} ORDER BY 1").fetchall() == direct
+
+    csv.write_text("id,name\n1,A\n2,B\n3,C\n", encoding="utf-8")
+    os.utime(csv, ns=(csv.stat().st_atime_ns, csv.stat().st_mtime_ns + 10**9))
+    read2 = read_expr(Source(id="t", format="csv", uri=uri), tmp_path, con=spatial_con)
+    assert read2 != read
+    assert spatial_con.execute(f"SELECT count(*) FROM {read2}").fetchone() == (3,)
+    assert len(list((tmp_path / "tabular").glob("*.parquet"))) == 1  # old copy removed
+
+
+# ---- background preparation for the editor (prepare_source) ----
+
+def _wait_prepared(src, timeout=20.0):
+    import time as _t
+    end = _t.monotonic() + timeout
+    while _t.monotonic() < end:
+        prog = sources_mod.prepare_source(src)
+        if prog is None or prog["stage"] == "error":
+            return prog
+        _t.sleep(0.05)
+    raise AssertionError("prepare_source never finished")
+
+
+def test_prepare_source_local_small_file_is_ready():
+    assert sources_mod.prepare_source(Source(id="p", format="csv", uri="data/test_wkt.csv")) is None
+
+
+def test_prepare_source_downloads_and_converts_in_background(
+    monkeypatch, spatial_con, tmp_path, _remote_cache, _tabular_cache
+):
+    import threading as _th
+
+    release = _th.Event()
+
+    class _SlowResponse(_FakeStreamResponse):
+        def iter_content(self, chunk_size=1):
+            release.wait(5)
+            yield self._body
+
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get",
+        lambda url, **kw: _SlowResponse(b"id,name\n1,A\n2,B\n"),
+    )
+    src = Source(id="r", format="csv", uri="https://example.com/r.csv")
+    first = sources_mod.prepare_source(src)
+    assert first is not None and first["stage"] in ("queued", "download")  # answered at once
+    release.set()
+    assert _wait_prepared(src) is None
+
+    # Ready now: read_expr finds both the download and the Parquet copy, no new work.
+    read = read_expr(src, tmp_path, con=spatial_con)
+    assert "read_parquet(" in read
+    assert spatial_con.execute(f"SELECT count(*) FROM {read}").fetchone() == (2,)
+
+
+def test_prepare_source_reports_a_failed_download_once(monkeypatch, _remote_cache):
+    def boom(url, **kw):
+        raise ConnectionError("server unreachable")
+
+    monkeypatch.setattr("duck_soup.sources.requests.get", boom)
+    src = Source(id="r", format="csv", uri="https://example.com/fail.csv")
+    sources_mod.prepare_source(src)
+    prog = _wait_prepared(src)
+    assert prog == {"stage": "error", "error": "server unreachable"}
+    # The error is reported once; the next call starts a fresh attempt.
+    assert sources_mod.prepare_source(src)["stage"] in ("queued", "download", "error")
+
+
+def test_csv_parquet_copy_ignores_layer_and_geometry_settings(spatial_con, tmp_path, _tabular_cache):
+    csv = tmp_path / "pts.csv"
+    csv.write_text("name,wkt\nA,POINT(1 2)\n", encoding="utf-8")
+    uri = str(csv).replace("\\", "/")
+    reads = [
+        read_expr(Source(id="p", format="csv", uri=uri), tmp_path, con=spatial_con),
+        read_expr(Source(id="p", format="csv", uri=uri, layer="pts"), tmp_path, con=spatial_con),
+        read_expr(Source(id="p", format="csv", uri=uri, crs="EPSG:4326", geom_field="wkt"), tmp_path, con=spatial_con),
+    ]
+    assert len(list((tmp_path / "tabular").glob("*.parquet"))) == 1  # one conversion for all three
+    assert spatial_con.execute(f"SELECT ST_AsText(geom) FROM {reads[2]}").fetchone() == ("POINT (1 2)",)
+
+
+def test_refresh_downloads_again_and_converts_in_background(
+    monkeypatch, spatial_con, tmp_path, _remote_cache, _tabular_cache
+):
+    bodies = iter([b"id\n1\n", b"id\n1\n2\n3\n"])
+    monkeypatch.setattr(
+        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(next(bodies))
+    )
+    src = Source(id="r", format="csv", uri="https://example.com/r.csv")
+    assert _wait_prepared(src) is None
+    info = sources_mod.download_info(src)
+    assert info["bytes"] == 5 and info["age"] < 60 and info["parquet"] is True
+
+    assert sources_mod.prepare_source(src) is None  # downloaded: nothing to do
+    assert sources_mod.prepare_source(src, refresh=True) is not None  # refresh: a new job
+    assert _wait_prepared(src) is None
+    read = read_expr(src, tmp_path, con=spatial_con)
+    assert spatial_con.execute(f"SELECT count(*) FROM {read}").fetchone() == (3,)
+
+
+def test_download_info_only_for_downloaded_sources(_remote_cache):
+    assert sources_mod.download_info(Source(id="l", format="csv", uri="data/test_wkt.csv")) is None
+    assert sources_mod.download_info(Source(id="r", format="csv", uri="https://example.com/none.csv")) is None

@@ -25,6 +25,7 @@ SOURCE_FORMATS = [
     "postgres",   # PostgreSQL/PostGIS table, read via DuckDB's postgres extension
     "csv",        # CSV (tabular, no geometry)
     "xlsx",       # Excel sheet (tabular, no geometry)
+    "json",       # plain JSON records (tabular, no geometry), via DuckDB's read_json
     "fgdb",       # Esri File Geodatabase (.gdb folder)
     "shp",        # Shapefile
     "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
@@ -35,6 +36,9 @@ SPATIAL_FORMATS = {
     "gpkg", "geojson", "gml", "fgdb", "wfs", "arcgis_rest", "oapif", "parquet", "flatgeobuf", "shp",
     "postgres",
 }
+
+# Tabular formats whose geometry can be built from columns (x_field/y_field/geom_field).
+TABULAR_GEOM_FORMATS = ("xlsx", "csv", "json")
 
 JOIN_PREDICATES = ["intersects", "contains", "within"]
 
@@ -78,10 +82,17 @@ class Source(BaseModel):
     header_row: Optional[bool] = Field(
         None, description="Treat the first row as column headers (xlsx/csv only); omit to auto-detect"
     )
-    # xlsx/csv-only: build geometry out of otherwise-plain columns
-    x_field: Optional[str] = Field(None, description="Column holding X / longitude (xlsx/csv only, builds point geometry)")
-    y_field: Optional[str] = Field(None, description="Column holding Y / latitude (xlsx/csv only, builds point geometry)")
-    geom_field: Optional[str] = Field(None, description="Column holding WKT/WKB geometry (xlsx/csv only)")
+    # json-only: where the records sit in the document
+    records: Optional[str] = Field(
+        None,
+        description="Dot path to the array of records inside a JSON document, e.g. data.items (json only); omit when the file is the array itself",
+    )
+    # xlsx/csv/json-only: build geometry out of otherwise-plain columns
+    x_field: Optional[str] = Field(None, description="Column holding X / longitude (xlsx/csv/json only, builds point geometry)")
+    y_field: Optional[str] = Field(None, description="Column holding Y / latitude (xlsx/csv/json only, builds point geometry)")
+    geom_field: Optional[str] = Field(
+        None, description="Column holding WKT/WKB/GeoJSON geometry (xlsx/csv/json only)"
+    )
 
     @property
     def has_geometry(self) -> bool:
@@ -124,6 +135,16 @@ class Source(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _check_records_format(self):
+        if self.records is not None and self.format != "json":
+            raise ValueError(f"source '{self.id}': 'records' only applies to json sources")
+        if self.records is not None and not all(self.records.split(".")):
+            raise ValueError(
+                f"source '{self.id}': 'records' must be a dot path like data.items, got '{self.records}'"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _check_header_row_format(self):
         if self.header_row is not None and self.format not in ("xlsx", "csv"):
             raise ValueError(
@@ -133,9 +154,9 @@ class Source(BaseModel):
 
     @model_validator(mode="after")
     def _check_geometry_fields_format(self):
-        if (self.x_field or self.y_field or self.geom_field) and self.format not in ("xlsx", "csv"):
+        if (self.x_field or self.y_field or self.geom_field) and self.format not in TABULAR_GEOM_FORMATS:
             raise ValueError(
-                f"source '{self.id}': 'x_field'/'y_field'/'geom_field' only apply to xlsx/csv sources"
+                f"source '{self.id}': 'x_field'/'y_field'/'geom_field' only apply to xlsx/csv/json sources"
             )
         if (self.x_field is None) != (self.y_field is None):
             raise ValueError(
@@ -164,7 +185,30 @@ class StepBase(BaseModel):
     )
 
 
-class SpatialJoin(StepBase):
+def _rejects_field(what: str):
+    return Field(
+        None,
+        description=f"Output layer to write {what} to. Those rows then leave the chain: only "
+        "the rest continue to the next step",
+    )
+
+
+class RejectsMixin(BaseModel):
+    """For the steps with a `rejects` field: ones that can split their rows into passed and
+    rejected, like an FME transformer's Passed/Failed ports. Without `rejects`, nothing
+    changes: a join keeps unmatched rows (with NULL fields) and a filter or clip drops its
+    rejects. Each step declares the field itself (after its own fields, so it's written last
+    in the YAML); this only treats the editor's blank value as "not set"."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_rejects_to_none(cls, data):
+        if isinstance(data, dict) and isinstance(data.get("rejects"), str) and not data["rejects"].strip():
+            data = {**data, "rejects": None}
+        return data
+
+
+class SpatialJoin(StepBase, RejectsMixin):
     type: Literal["spatial_join"] = "spatial_join"
     source: str = Field(..., description="id of the source to join against")
     predicate: Literal[tuple(JOIN_PREDICATES)] = "intersects"  # type: ignore[valid-type]
@@ -183,17 +227,19 @@ class SpatialJoin(StepBase):
         default_factory=dict,
         description="{output_name: source_column} fields to pull from the match",
     )
+    rejects: Optional[str] = _rejects_field("the features with no match")
 
 
-class AttributeJoin(StepBase):
+class AttributeJoin(StepBase, RejectsMixin):
     type: Literal["attribute_join"] = "attribute_join"
     source: str
     left: str = Field(..., description="SQL expression on the base row (or a literal)")
     right: str = Field(..., description="Column on the joined source to match on")
     fields: dict[str, str] = Field(default_factory=dict)
+    rejects: Optional[str] = _rejects_field("the rows with no match")
 
 
-class NearestNeighbor(StepBase):
+class NearestNeighbor(StepBase, RejectsMixin):
     type: Literal["nearest_neighbor"] = "nearest_neighbor"
     source: str = Field(..., description="id of the source to search for the nearest feature in")
     max_distance: Optional[float] = Field(
@@ -206,6 +252,7 @@ class NearestNeighbor(StepBase):
         default_factory=dict,
         description="{output_name: source_column} fields to pull from the nearest match",
     )
+    rejects: Optional[str] = _rejects_field("the features with no neighbour (within max_distance)")
 
 
 class Buffer(StepBase):
@@ -217,10 +264,13 @@ class Centroid(StepBase):
     type: Literal["centroid"] = "centroid"
 
 
-class Clip(StepBase):
+class Clip(StepBase, RejectsMixin):
     type: Literal["clip"] = "clip"
     source: str = Field(..., description="id of the mask source")
     predicate: Literal[tuple(JOIN_PREDICATES)] = "intersects"  # type: ignore[valid-type]
+    rejects: Optional[str] = _rejects_field(
+        "the features clip would drop (outside the mask, or only touching it), unclipped"
+    )
 
 
 class Erase(StepBase):
@@ -256,11 +306,12 @@ class LineOverlay(StepBase):
     )
 
 
-class Filter(StepBase):
+class Filter(StepBase, RejectsMixin):
     type: Literal["filter"] = "filter"
     where: str = Field(
         ..., description="SQL boolean expression; rows where this is false are dropped"
     )
+    rejects: Optional[str] = _rejects_field("the rows where `where` isn't true")
 
 
 class Merge(StepBase):
@@ -476,6 +527,25 @@ def _check_parquet_layer_names(path: str, names: list[str]) -> None:
         seen.add(name.lower())
 
 
+def reject_layer_names(steps: list) -> list[str]:
+    """Names of the output layers the steps' `rejects` write, in step order."""
+    return [st.rejects for st in steps if getattr(st, "rejects", None)]
+
+
+def _check_reject_names(layer_names: list[str], reject_names: list[str]) -> None:
+    """A rejects layer is an extra layer in the output, so its name can't also be an
+    output layer's or another step's rejects layer: the second write would collide with
+    the first."""
+    seen = {n.lower() for n in layer_names}
+    for name in reject_names:
+        if name.lower() in seen:
+            raise ValueError(
+                f"rejects layer '{name}' is already used as an output layer or by another "
+                f"step's rejects; give it a name of its own"
+            )
+        seen.add(name.lower())
+
+
 def _validate_refs(
     sources: list[Source],
     derived_sources: list[DerivedSource],
@@ -581,6 +651,16 @@ class Pipeline(BaseModel):
         _validate_no_geom_mapping(self.sources, self.base, mappings)
         return self
 
+    @model_validator(mode="after")
+    def _check_rejects(self):
+        # Rejects layers are written into the first output (see Engine.run).
+        rejects = reject_layer_names(self.steps)
+        if rejects:
+            first = self.outputs[0]
+            _check_reject_names([layer.layer for layer in first.layers], rejects)
+            _check_parquet_layer_names(first.path, [layer.layer for layer in first.layers] + rejects)
+        return self
+
     def source(self, sid: str) -> Source:
         src = next((s for s in self.sources if s.id == sid), None)
         if src is None:
@@ -642,6 +722,7 @@ class PipelineDef(BaseModel):
     @model_validator(mode="after")
     def _check_layers(self):
         _require_layers(self.layers)
+        _check_reject_names([layer.layer for layer in self.layers], reject_layer_names(self.steps))
         return self
 
     @model_validator(mode="after")
@@ -702,14 +783,16 @@ class Config(BaseModel):
     def _check(self):
         if not self.pipelines:
             raise ValueError("a config needs at least one pipeline")
-        _check_parquet_layer_names(
-            self.output, [layer.layer for p in self.pipelines for layer in p.layers]
-        )
+        layers = [layer.layer for p in self.pipelines for layer in p.layers]
+        rejects = [name for p in self.pipelines for name in reject_layer_names(p.steps)]
+        _check_reject_names(layers, rejects)
+        _check_parquet_layer_names(self.output, layers + rejects)
         return self
 
     @property
     def layer_count(self) -> int:
-        return sum(len(p.layers) for p in self.pipelines)
+        """Layers written to the output, including the steps' rejects layers."""
+        return sum(len(p.layers) + len(reject_layer_names(p.steps)) for p in self.pipelines)
 
 
 def _pipeline_to_config(p: Pipeline) -> Config:

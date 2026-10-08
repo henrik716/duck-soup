@@ -113,7 +113,7 @@
     instead.
 
 ??? question "`lon`/`lat`/`area` fail with \"base source has no geometry\""
-    The base is tabular (CSV/Excel). Give it geometry with `x_field`/`y_field` or
+    The base is tabular (CSV/Excel/JSON). Give it geometry with `x_field`/`y_field` or
     `geom_field`, or set `geometry: true` if it really is spatial.
 
 ## Performance

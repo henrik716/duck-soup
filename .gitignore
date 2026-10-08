@@ -17,6 +17,9 @@ output/*.parquet
 output/*/
 !output/.gitkeep
 
+# Run history (duck_soup/history.py)
+runs/
+
 # Personal/local data and pipelines (already-tracked test fixtures are unaffected)
 data/*.gpkg
 data/*.geojson

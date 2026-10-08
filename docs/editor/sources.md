@@ -21,7 +21,7 @@ There are three ways to add one:
 === "Template buttons"
 
     Click a format button (**GPKG**, **OAPIF**, **GeoJSON**, **WFS**, **FlatGeobuf**,
-    **Parquet**, **Postgres**, **CSV**, **Excel**, **FileGDB**, **Shapefile**,
+    **Parquet**, **Postgres**, **CSV**, **Excel**, **JSON**, **FileGDB**, **Shapefile**,
     **ArcGIS REST**) to add an empty card preset to that format, then fill in the path or URL.
 
 === "add"
@@ -92,14 +92,37 @@ The card also shows warnings when something looks off:
 - **Postgres**: set the uri to a connection string
   (`postgresql://user:pass@host:5432/dbname`) and pick the table.
 
-### CSV and Excel
+### CSV, Excel and JSON
 
-Tabular sources get two extra controls:
+Tabular sources get extra controls:
 
-- **header row**: auto-detect, *first row is headers*, or *no header row*.
-- **geometry**: *none (tabular only)*, *point from X / Y columns*, or *WKT / WKB column*. When a
-  column has an obvious name (`wkt`, `geom`, `lon`/`lat`, `x`/`y` …) the editor pre-selects it
-  and marks it *detected*.
+- **header row** (CSV and Excel): auto-detect, *first row is headers*, or *no header row*.
+- **records path** (JSON): where the array of records sits in the document, e.g.
+  `data.items`. Leave it empty when the file is the array itself.
+- **geometry**: *none (tabular only)*, *point from X / Y columns*, or *WKT / WKB / GeoJSON
+  column*. When a column has an obvious name (`wkt`, `geom`, `geometry`, `lon`/`lat`, `x`/`y`
+  …) the editor pre-selects it and marks it *detected*.
+
+A dropped `.json` file is set up as GeoJSON. Switch the format to **json** if it holds plain
+records instead. See [JSON](../reference/sources.md#json).
+
+### Downloads and large files
+
+A source with an `http(s)://` URL is downloaded first, and a CSV or Excel file of 5 MB or more
+is converted to Parquet once so previews stay fast. Both run in the background. While they do,
+the card's badge shows the progress in place of *inspecting…*:
+
+- *downloading… 23.4 MB · 4.1 MB/s*, or with a percentage when the server sends the file
+  size.
+- *converting to Parquet for fast previews… 12 s*.
+
+The status at the top of the editor shows the same while a preview waits on the source.
+
+Once it's done, the card shows when the file was downloaded, e.g. *Downloaded 2 h ago ·
+44.6 MB · read via Parquet*. Previews keep using that download, even after you restart the
+editor, until you click **refresh** next to it, which downloads the file again in the
+background and then re-runs the preview. **Run** always downloads fresh data. See
+[Remote files](../reference/sources.md#remote-files).
 
 ## Choosing the base
 

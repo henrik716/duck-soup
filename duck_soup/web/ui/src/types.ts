@@ -1,6 +1,6 @@
 export type SourceFormat =
   | 'gpkg' | 'geojson' | 'gml' | 'fgdb' | 'wfs'
-  | 'arcgis_rest' | 'oapif' | 'parquet' | 'flatgeobuf' | 'shp' | 'xlsx' | 'csv' | 'postgres'
+  | 'arcgis_rest' | 'oapif' | 'parquet' | 'flatgeobuf' | 'shp' | 'xlsx' | 'csv' | 'json' | 'postgres'
 
 export type JoinPredicate = 'intersects' | 'contains' | 'within'
 
@@ -17,6 +17,7 @@ export interface Source {
   where?: string
   page_size?: number
   header_row?: boolean
+  records?: string
   x_field?: string
   y_field?: string
   geom_field?: string
@@ -33,6 +34,10 @@ export interface DerivedSource {
 // `branch` (shared by every step type): apply this step to a named branch
 // (from an earlier snapshot step) instead of the main chain. For `snapshot`
 // itself, `branch` means "snapshot from this branch" rather than "operate on it".
+//
+// `rejects` (spatial_join, attribute_join, nearest_neighbor, clip, filter): an output layer
+// for the rows this step rejects (no match / filtered out / clipped away), which then leave
+// the chain — see RejectsMixin in config.py.
 
 export interface SpatialJoin {
   type: 'spatial_join'
@@ -42,6 +47,7 @@ export interface SpatialJoin {
   on_multiple?: 'first' | 'largest_overlap'
   fields: Record<string, string>
   branch?: string
+  rejects?: string
 }
 
 export interface AttributeJoin {
@@ -51,6 +57,7 @@ export interface AttributeJoin {
   right: string
   fields: Record<string, string>
   branch?: string
+  rejects?: string
 }
 
 export interface NearestNeighbor {
@@ -60,6 +67,7 @@ export interface NearestNeighbor {
   distance_field?: string
   fields: Record<string, string>
   branch?: string
+  rejects?: string
 }
 
 export interface Buffer {
@@ -78,6 +86,7 @@ export interface Clip {
   source: string
   predicate: JoinPredicate
   branch?: string
+  rejects?: string
 }
 
 export interface Erase {
@@ -112,6 +121,7 @@ export interface Filter {
   type: 'filter'
   where: string
   branch?: string
+  rejects?: string
 }
 
 export interface Merge {
@@ -208,8 +218,21 @@ export interface InspectColumn {
   type: string
 }
 
+// What a slow source is busy with (sources.py's prepare_source / source_progress).
+export interface SourceProgress {
+  stage: 'queued' | 'download' | 'convert'
+  source?: string
+  bytes?: number
+  total?: number | null
+  elapsed: number
+}
+
 export interface InspectResponse {
   ok: boolean
+  // A source still being downloaded / converted to Parquet in the background (see
+  // _pending_response in web/app.py): show `progress` and ask again shortly.
+  pending?: boolean
+  progress?: SourceProgress
   columns?: InspectColumn[]
   // A sanity-check hint when the declared crs looks inconsistent with the sampled
   // coordinate magnitudes (e.g. EPSG:4326 but values are clearly meters) — see
@@ -218,11 +241,18 @@ export interface InspectResponse {
   // Set when the source is read via pyogrio instead of ST_Read (a file over 2 GiB on
   // Windows) — see large_file_reader_note in sources.py. Informational, not an error.
   reader_note?: string | null
+  // A remote file source previews read from a download (sources.py's download_info): its
+  // size, age in seconds, and whether it's also read via a Parquet copy. Null otherwise.
+  download?: { bytes: number; age: number; parquet: boolean } | null
   error?: string
 }
 
 export interface InspectFileResponse {
   ok: boolean
+  // A source still being downloaded / converted to Parquet in the background (see
+  // _pending_response in web/app.py): show `progress` and ask again shortly.
+  pending?: boolean
+  progress?: SourceProgress
   layers?: (string | { value: string; label?: string })[]
   default_crs?: string
   // Present whenever ok is false — /api/inspect_file never raises, it reports.
@@ -242,16 +272,80 @@ export interface PreviewRow {
 
 export interface PreviewResponse {
   ok: boolean
+  // A source still being downloaded / converted to Parquet in the background (see
+  // _pending_response in web/app.py): show `progress` and ask again shortly.
+  pending?: boolean
+  progress?: SourceProgress
   rows?: PreviewRow[]
   error?: string
+}
+
+// One layer written by a run (run_config's `written` in engine.py).
+export interface WrittenLayer {
+  pipeline: string
+  layer: string
+  rows: number
+  kind: 'layer' | 'rejects'
+  path: string
 }
 
 export interface RunResponse {
   ok: boolean
   output?: string
   log?: string[]
+  layers?: WrittenLayer[]
   error?: string
   trace?: string
+}
+
+// One view of the SQL plan (Engine.sql_plan in engine.py).
+export interface PlanEntry {
+  kind: 'source' | 'derived' | 'base' | 'step' | 'split' | 'rejects' | 'branch' | 'layer'
+  view: string | null
+  sql: string
+  title?: string
+  id?: string
+  step?: number
+  layer?: string
+}
+
+export interface PlanResponse {
+  ok: boolean
+  plan?: PlanEntry[]
+  error?: string
+}
+
+// Row counts after each step (Engine.counts). Step keys are 1-based step numbers.
+export interface CountsResponse {
+  ok: boolean
+  // A source still being downloaded / converted to Parquet in the background (see
+  // _pending_response in web/app.py): show `progress` and ask again shortly.
+  pending?: boolean
+  progress?: SourceProgress
+  limit?: number | null
+  base?: number
+  steps?: Record<string, number>
+  rejects?: Record<string, number>
+  layers?: number[]
+  sources?: Record<string, number>
+  error?: string
+}
+
+// A run's record (history.py); the list endpoint leaves out `log` and `yaml`.
+export interface RunRecord {
+  id: string
+  config: string
+  trigger: 'cli' | 'editor'
+  started_at: string
+  finished_at?: string
+  duration_s: number
+  ok: boolean
+  error: string | null
+  output: string | null
+  layers: WrittenLayer[]
+  config_hash: string | null
+  log?: string[]
+  yaml?: string
 }
 
 export interface ExportScriptResponse {

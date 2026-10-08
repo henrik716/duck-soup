@@ -2,7 +2,9 @@
 
 Steps run in order, each one transforming the rows produced by the step before it (or by the
 base source, for the first step). Every step type accepts an optional
-[`branch`](#branch) key.
+[`branch`](#branch) key, and the joins, `clip` and `filter` an optional
+[`rejects`](#rejects) key that sends the rows they'd otherwise drop, or leave unmatched, to a
+layer of their own.
 
 !!! tip "See them in action"
     [Steps by example](../tutorials/steps.md) runs every step type on a small sample town, with
@@ -48,6 +50,7 @@ Copies attributes from features in another source that spatially match each base
 | `match` | `first` | `first`: one row per base feature (NULL fields when nothing matches). `all`: one row per matching pair; base features with no match are kept once, with NULL fields. |
 | `on_multiple` | `first` | With `match: first`, which match wins when several do. `first` = the lowest original row order in the source (deterministic). `largest_overlap` = the biggest intersection area (ties fall back to row order). |
 | `fields` | `{}` | Columns to copy. |
+| `rejects` | – | Layer for the base features with no match, which then leave the chain. See [`rejects`](#rejects). |
 
 !!! warning "`match: first` hides multiple matches"
     A duck paddling exactly on the boundary between two overlapping ponds silently gets only
@@ -73,6 +76,7 @@ A left join on a column value, like a VLOOKUP.
 | `left` | A SQL expression evaluated on the current row: usually just a column name, but it can be `upper(code)` or a quoted literal like `'Mallard'`. |
 | `right` | Column on the join source that must equal `left`. |
 | `fields` | Columns to copy. |
+| `rejects` | Layer for the rows with no match, which then leave the chain. See [`rejects`](#rejects). |
 
 Each row picks up at most **one** match. If `right` has duplicate values, which duplicate is
 used isn't defined, so make the key unique.
@@ -91,8 +95,8 @@ Copies attributes from the closest feature in another source, whether or not the
 
 Without `max_distance`, every base feature is compared with every source feature, which is
 slow on big inputs. Set a sensible radius when you can: it lets DuckDB use its spatial index.
-Features with nothing in range get NULL fields. Needs a projected working CRS when
-`max_distance` or `distance_field` is set.
+Features with nothing in range get NULL fields, or go to a [`rejects`](#rejects) layer when
+one is set. Needs a projected working CRS when `max_distance` or `distance_field` is set.
 
 ## `intersect_overlay`
 
@@ -167,7 +171,8 @@ Keeps only the part of each feature that overlaps a mask feature.
 ```
 
 Each feature is clipped against the first mask feature it matches. Features that don't
-overlap any mask (or only touch it) are dropped.
+overlap any mask (or only touch it) are dropped, or kept unclipped in a
+[`rejects`](#rejects) layer when one is set.
 
 ## `erase`
 
@@ -200,7 +205,8 @@ Merges geometries that share the same values in the `by` columns.
   where: "pond IS NOT NULL AND bread_crumbs > 1000"
 ```
 
-Drops rows where the SQL condition is false (or NULL).
+Drops rows where the SQL condition is false (or NULL). With `rejects: <layer>`, those rows are
+written to that layer instead of being thrown away. See [`rejects`](#rejects).
 
 ## `merge`
 
@@ -241,3 +247,40 @@ Any step can carry `branch: <snapshot id>` to operate on that branch instead of 
 
 The branch must be created by a snapshot **earlier** in the list. Output layers are always
 written from the main chain. See [Branches and derived sources](../concepts.md#branches-and-derived-sources).
+
+## `rejects`
+
+Like the Passed and Failed ports of an FME transformer, `rejects` splits a step's rows in two:
+the rows that pass go on down the chain, and the rest are written to an output layer of their
+own. It's available on these steps:
+
+| Step | Rejected rows |
+|---|---|
+| `spatial_join` | base features with no match |
+| `attribute_join` | rows with no match |
+| `nearest_neighbor` | features with no neighbour (within `max_distance`, if set) |
+| `clip` | features clip would drop (outside the mask, or only touching it), unclipped |
+| `filter` | rows where `where` isn't true (false or NULL) |
+
+```yaml
+- type: spatial_join
+  source: ponds
+  fields: {pond_name: name}
+  rejects: ducks_on_land    # unmatched ducks go here, not on with an empty pond_name
+- type: filter
+  where: "bread_crumbs >= 1000"
+  rejects: hungry_ducks     # instead of being discarded
+```
+
+- **On a join, `rejects` changes what continues.** Without it, an unmatched row stays in the
+  chain with NULL fields. With it, the row leaves the chain and only goes to the rejects layer.
+  For `filter` and `clip`, the rows were dropped anyway, so the other layers don't change.
+- **The rejects layer is written as the rows are at that step:** every column, without the
+  [mapping](mapping.md), and without the join's own fields, which would only be NULL. It goes
+  into the config's output file, in the CRS of the pipeline's first output layer.
+- **The name must be new.** It can't be the name of an output layer or of another step's
+  rejects layer. For a GeoParquet output, each rejects layer is one more file, so a config with
+  one layer and one rejects layer writes a folder with two files.
+- **Preview them** in the editor by clicking the step's red rejects node in the
+  [pipeline flow](../editor/overview.md#ducks-in-a-row-the-pipeline-flow). Each run reports how many rows every
+  rejects layer got, in the run log and in the [run history](../editor/preview-and-run.md#run-history).
