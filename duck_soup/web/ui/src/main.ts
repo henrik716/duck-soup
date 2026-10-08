@@ -5,9 +5,9 @@ import {
   Terminal, CheckSquare, Save, Play, Download, Copy, Trash2, Loader,
   Database, ChevronDown, Info, AlertTriangle, AlertCircle, CheckCircle,
   ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
-  Crosshair, Scissors, Eraser, Layers, GitMerge, Radar, UploadCloud,
+  Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
   Filter as FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon
+  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown
 } from 'lucide'
 
 const appIcons = {
@@ -15,15 +15,16 @@ const appIcons = {
   Terminal, CheckSquare, Save, Play, Download, Copy, Trash2, Loader,
   Database, ChevronDown, Info, AlertTriangle, AlertCircle, CheckCircle,
   ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
-  Crosshair, Scissors, Eraser, Layers, GitMerge, Radar, UploadCloud,
+  Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
   Filter: FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon
+  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown
 }
 import {
   fetchMeta, fetchPipelineNames, fetchPipeline, savePipeline,
   validateConfig, previewConfig, runConfig, exportScript,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange } from './map'
+import { initLayout } from './layout'
 import { updateLineageDiagram } from './lineage'
 import { qs, mkEl, esc, wireCollapse } from './dom'
 import { META } from './state'
@@ -757,6 +758,7 @@ async function init(): Promise<void> {
   Object.assign(META, meta)
 
   initMap()
+  initLayout()
   initHistory(sync)
   wireHistoryShortcuts()
   wireGlobalShortcuts()
@@ -871,7 +873,7 @@ function wireHeaderActions(): void {
   // browse button for cfg output
   qs('#cfg_output_browse')?.addEventListener('click', () => {
     const inp = qs<HTMLInputElement>('#cfg_output')
-    if (inp) openFileExplorer(inp)
+    if (inp) openFileExplorer(inp, { mode: 'save', exts: ['gpkg', 'parquet', 'geoparquet'], title: 'save output as' })
   })
 
   // add pipeline button

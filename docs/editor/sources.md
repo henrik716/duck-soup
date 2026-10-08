@@ -33,6 +33,26 @@ There are three ways to add one:
     you'll run again, point the `uri` at the file where it lives instead (type the path or use
     the folder button). A source can point at any absolute path on disk.
 
+## The file browser
+
+The folder button next to a source's **uri** (and next to the **output file** and a codelist's
+CSV file) opens a file browser on the server's file system:
+
+- **Places** on the left jump to the project folder, its `data/`, `pipelines/` and `output/`
+  subfolders, your home folder, and each drive.
+- The **path bar** shows where you are. Click a folder in it to go up, or click the bar (or
+  press <kbd>Ctrl</kbd>+<kbd>L</kbd>) to type or paste a path.
+- **Search** (<kbd>Ctrl</kbd>+<kbd>F</kbd>) filters the current folder as you type. From two
+  letters on, it also searches every subfolder below it.
+- The **filter** shows only data files by default. Switch it to *all files* to see
+  everything. Click a column header to sort by name, type, size or date.
+- Click to select, double-click (or <kbd>Enter</kbd>) to open a folder or pick a file. A
+  `.gdb` folder is picked like a file. <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> go back and
+  forward.
+
+The browser remembers the last folder you used. It shows the machine the **server** runs on:
+in Docker, that's the container, so only mounted folders are visible.
+
 ## The source card
 
 ![The sources tab with an expanded source card](../assets/screenshots/sources-tab-light.png#only-light){ .screenshot loading=lazy }
@@ -42,7 +62,7 @@ There are three ways to add one:
 |---|---|
 | **id** | Your handle for the source, used by `base`, steps and derived sources. |
 | **format** | Detected from the file extension when possible (marked *from extension*). |
-| **uri / path / url** | A file path, a `.gdb` folder, a service URL or a Postgres connection string. The folder button opens a file browser rooted at the project folder. |
+| **uri / path / url** | A file path, a `.gdb` folder, a service URL or a Postgres connection string. The folder button opens a file browser at the current file's folder (or the project folder): search the folder and its subfolders, sort by name/type/size/date, jump to project folders, home or drives from the sidebar, or click the path bar (Ctrl+L) to paste a path. Double-click or Enter picks a file; by default only supported data files are shown. |
 | **layer / typename / sheet / collection** | Filled with the layers, feature types, sheets, collections or tables found in the source. Pick one. |
 | **crs** | Detected from the data where possible (marked *detected*). Searchable list of common EPSG codes. |
 | **repair invalid geometry** | `make_valid`: on by default. |

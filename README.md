@@ -16,77 +16,116 @@ Under the hood, everything runs inside DuckDB using the powerful **spatial** ext
 
 ## Run it
 
-No repo clone needed — pick one:
+Install the `duck-soup` command with **pipx** or **uv**. Both give it its own isolated
+environment and need no admin rights:
 
 ```bash
-# Docker (no Python needed): mounts the current directory as /data,
-# so pipelines/, data/, output/ etc. are read from and written to it
-docker run -p 8000:8000 -v "$PWD":/data ghcr.io/henrik716/duck-soup
-
-# or: pipx (needs Python 3.11+)
+# pipx: if you already have Python 3.11+
 pipx install duck-soup-etl
+
+# uv: if you don't have Python (or it's too old); uv downloads a matching one itself
+uv tool install duck-soup-etl
+```
+
+Then start the editor and open http://localhost:8000:
+
+```bash
 duck-soup serve
 ```
 
-Then open http://localhost:8000. Internet access is needed on first run so DuckDB
-can download its `spatial` extension. See "Install" below for a from-source setup
-(needed if you want to modify the code or frontend).
+Internet access is needed on first run so DuckDB can download its `spatial` extension.
 
-To upgrade an existing install: `pipx upgrade duck-soup-etl`, or re-pull the Docker
-image (`docker pull ghcr.io/henrik716/duck-soup`).
-
-[pipx](https://pipx.pypa.io/) installs Python command-line apps (as opposed to
-`pip`, which installs Python *libraries*, typically into a project's virtual
-environment). It keeps each app in its own isolated environment and puts its
-command on your `PATH` automatically, so `duck-soup serve` just works afterward
-with no extra setup. If it's not already on your machine:
+Don't have pipx or uv yet?
 
 ```bash
+# pipx
 python -m pip install --user pipx
-python -m pipx ensurepath
-# then open a new terminal so the PATH change takes effect
+python -m pipx ensurepath          # then open a new terminal
+
+# uv, on Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# uv, on macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-If you use `pip install duck-soup-etl` instead and `duck-soup serve` isn't found
-afterwards, it's a PATH issue, not a broken install: plain `pip` installs the
-console script into a per-user (or venv) `Scripts`/`bin` directory that isn't
-always on `PATH` by default (Windows per-user installs especially — `pipx` avoids
-this entirely by managing PATH for you). Either add that directory to `PATH`
-(`pip` prints its location as a warning when this happens), or sidestep it by
-running the module directly, which always works regardless of `PATH`:
+To upgrade: `pipx upgrade duck-soup-etl` or `uv tool upgrade duck-soup-etl`.
+
+If you used plain `pip install duck-soup-etl` and `duck-soup` isn't found, that's a
+`PATH` issue, not a broken install. `python -m duck_soup.cli serve` always works.
+
+### Docker
+
+For servers, scheduled jobs, or machines where you can't install Python:
 
 ```bash
-python -m duck_soup.cli serve
+docker run -p 8000:8000 -v "$PWD":/data ghcr.io/henrik716/duck-soup
 ```
+
+This mounts the current directory as `/data` (also the container's working directory),
+so `pipelines/`, `data/` and `output/` are read from and written to it. Folders outside
+it, such as another drive or a network share, need their own `-v` mount. To upgrade:
+`docker pull ghcr.io/henrik716/duck-soup`.
+
+## Try it
+
+`duck-soup tutorial` copies a small sample town (Pondsworth) and a config with an
+example of every step and mapping option into a folder:
+
+```bash
+mkdir -p ~/duck-soup && cd ~/duck-soup   # the editor's default project folder
+duck-soup tutorial
+duck-soup serve                          # then pick "pondsworth" in the editor's load list
+```
+
+The [tutorials](https://henrik716.github.io/duck-soup/tutorials/) walk through it.
+
+## Command line
+
+| Command | What it does |
+|---------|--------------|
+| `duck-soup check <file>` | validate a pipeline YAML without reading any data |
+| `duck-soup run <file>` | run every pipeline in the file and write the output |
+| `duck-soup serve [--host] [--port]` | start the web editor (default `127.0.0.1:8000`); `DUCK_SOUP_ROOT` sets the project folder (default `~/duck-soup`) |
+| `duck-soup tutorial [folder] [--force]` | copy the tutorial data and config into a project folder |
+
+`check` and `run` exit non-zero on any failure, so they slot into scripts and CI.
+Relative paths in a pipeline resolve against the folder you run the command from.
+
+The editor has no authentication and can read files and run SQL on the machine it runs
+on. Keep it on `127.0.0.1` or behind something that controls access.
+
+### Scheduling
+
+A run is one command, so cron, systemd timers, Windows Task Scheduler, Docker and CI can
+all schedule it:
+
+```bash
+# crontab: rebuild every night at 02:00
+0 2 * * * cd /srv/gis && /home/gis/.local/bin/duck-soup run pipelines/nightly.yaml >> logs/nightly.log 2>&1
+```
+
+With `overwrite: true` the old output is deleted *before* the sources are read, so a
+failed run leaves no file. The [scheduling guide](https://henrik716.github.io/duck-soup/scheduling/)
+has a recipe per scheduler and shows how to swap in the new file only after a good run.
 
 ## Key Features
 
-- **YAML-driven pipelines:** Describe inputs, join/geoprocessing steps, schema mapping, and output layers in one neat configuration file.
-- **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage (or, for GeoParquet, one file per layer) with optional dataset-level metadata.
-- **Web Editor:** A visual, browser-based pipeline builder with live YAML preview, syntax validation, data previewing, and interactive execution logs. Drag a File Geodatabase folder straight onto the sources panel and it's uploaded and wired up as a source automatically.
-- **Interactive map preview:** A MapLibre GL-powered map with a light/dark basemap toggle previews source and result geometry directly in the browser, with hover/click inspection of feature attributes.
-- **Powered by DuckDB Spatial:** Blistering speed using DuckDB's columnar execution engine and GDAL-backed `ST_Read`/`ST_Write` operations.
-- **Flexible Joins:** Spatial joins (intersects/contains/within, keeping the first match or fanning out to all), attribute joins, and nearest-neighbor (distance-constrained) searches.
-- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union) — chainable like any join step, with `snapshot` to fork the chain into named branches.
+- **YAML-driven pipelines:** Describe inputs, join/geoprocessing steps, schema mapping, and output layers in one configuration file you can commit, diff, and review.
+- **Multi-pipeline / multi-layer output:** One file can define several independent pipelines, each writing one or more layers, all into a single shared GeoPackage (or, for GeoParquet, one file per layer) with optional dataset-level metadata. Each layer can have its own filter and its own column mapping.
+- **Web editor:** A visual, browser-based pipeline builder. Everything you can write in YAML can be built and edited there:
+  - live validation as you type, with a **Problems** tab that jumps to the card at fault
+  - a preview of any source, any intermediate step, or the final output, on a map and in a sortable table
+  - a lineage diagram of sources → steps → layers
+  - a SQL expression builder with live checks against sample data
+  - import a pasted YAML, or export a pipeline as a standalone `.py` script
+  - undo/redo, dark and light mode
+  - drag a File Geodatabase folder or a Shapefile onto the sources panel to upload it and add it as a source
+- **Powered by DuckDB Spatial:** Fast columnar execution, GDAL-backed `ST_Read`/`ST_Write`, and R-tree spatial joins.
+- **Many sources:** GeoPackage, GeoJSON, Shapefile, FlatGeobuf, GML, File Geodatabase, (Geo)Parquet, CSV/Excel, PostGIS, WFS, OGC API - Features and ArcGIS REST.
+- **Flexible joins:** Spatial joins (intersects/contains/within; keep the first match, the largest overlap, or all matches), attribute joins, and nearest-neighbour searches with an optional distance cap.
+- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union), chainable like any join step, with `snapshot` to fork the chain into named branches.
 - **Derived sources:** Build a filtered/buffered view of any source and reuse it as a join source, without a dedicated step.
-- **Rich Attribute Mapping:** Translate, rename, compute coordinates/area/length, generate UUIDs/timestamps, or apply rule-based/CSV-based codelist lookups on the fly.
-
----
-
-```
-duck_soup/           # Python package directory
-  config.py          # YAML schema (pydantic) + load/save
-  sources.py         # one reader per format (mostly DuckDB ST_Read / GDAL)
-  derive.py          # python UDFs (MGRS) registered into DuckDB
-  engine.py          # builds a chain of SQL views, writes GeoPackage/GeoParquet
-  cli.py             # python -m duck_soup.cli run pipelines/test.yaml
-  web/
-    app.py           # FastAPI backend
-    static/          # compiled editor frontend assets served by FastAPI
-    ui/              # TypeScript + Vite editor frontend source
-pipelines/           # your dataset definitions (*.yaml)
-data/  output/       # inputs / outputs
-```
+- **Rich attribute mapping:** Rename, cast, compute coordinates/MGRS/area/length, generate UUIDs/timestamps, write SQL expressions, or apply rule-based/CSV-based codelist lookups.
 
 ## How it works
 
@@ -100,10 +139,11 @@ isn't limited to one strictly linear sequence of steps. DuckDB plans each layer'
 view chain as one query, so joins, geoprocessing, and projections stream and stay
 fast.
 
-Once the chain is built, each output layer applies its own attribute `mapping` (and
-optional `filter`) and is written straight to GeoPackage via
-`COPY … (FORMAT GDAL, DRIVER 'GPKG')`. A pipeline can write several layers this way,
-and a Config file can run several pipelines, all appended into the same GeoPackage.
+Once the chain is built, each output layer applies its optional `filter`, then the
+attribute mapping (the pipeline's `mapping`, or the layer's own if it has one), and is
+written straight to GeoPackage via `COPY … (FORMAT GDAL, DRIVER 'GPKG')`. A pipeline
+can write several layers this way, and a Config file can run several pipelines, all
+appended into the same GeoPackage.
 An `output` ending in `.parquet` (or `.geoparquet`) is written as GeoParquet instead,
 via DuckDB's native `COPY … (FORMAT PARQUET)` with the layer CRS embedded in the `geo`
 metadata. GeoParquet has no layers, so a single layer is written to that file and
@@ -117,85 +157,6 @@ are paged over HTTP into a temporary GeoJSON file first, then read like any othe
 **WFS** is likewise fetched (GetFeature/GML) into a temporary `.gml` file first. **Parquet**
 and **Postgres** skip GDAL entirely, using DuckDB's native `read_parquet()` and `postgres`
 extension respectively. See "Source formats" below for the full picture.
-
-## Prerequisites
-
-Before setting up the project, make sure you have the following installed:
-
-1. **Python**: Python `3.11` or newer.
-2. **Node.js & npm** (optional): Only needed if you plan to modify or rebuild the frontend editor. Node.js `18+` is recommended.
-3. **Internet Access**: Required on the first run so DuckDB can automatically download and install its `spatial` extension.
-
-Tested with DuckDB `1.5.4` (spatial extension core build `28db190`). `pyproject.toml`
-pins `duckdb` to `>=1.5.4,<1.6` because `INSTALL spatial` always fetches the extension
-build matching the running DuckDB core version — pinning DuckDB is what keeps the
-spatial extension version reproducible. Bump the pin (and this note) together when
-upgrading.
-
-## Install (from source)
-
-Create a virtual environment, activate it, and install the package with dependencies:
-
-```bash
-python -m venv .venv
-
-# Activate on Windows:
-.venv\Scripts\activate
-# Activate on macOS/Linux:
-source .venv/bin/activate
-
-pip install -e .           # installs duck_soup + all deps, including mgrs and pyogrio
-# optional: pip install -e ".[test]"     adds pytest + httpx for running the test suite
-```
-
-DuckDB downloads its **spatial** extension on first run (needs internet once, or
-pre-install it offline). `func: mgrs` and automatic linearization of curve-geometry
-sources (CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface —
-DuckDB's spatial extension can't parse these, only plain OGC linear geometry) both
-work out of the box; no optional extras needed.
-
-## Quickstart
-
-Run the self-contained test pipeline (no external data or services needed):
-
-```bash
-python -m duck_soup.cli check pipelines/test.yaml   # validate
-python -m duck_soup.cli run   pipelines/test.yaml   # writes output/test.gpkg
-```
-
-## Editor (Web App)
-
-The editor is a FastAPI backend plus a TypeScript + Vite frontend. With the venv from
-"Install" above, the pre-built static files are already in place, so just run the
-backend:
-
-```bash
-uvicorn duck_soup.web.app:app --reload
-```
-
-Then open http://127.0.0.1:8000 in your browser.
-
-To modify the frontend itself, run the Vite dev server alongside the backend for hot
-reloading (it proxies `/api` to the backend on port 8000):
-
-```bash
-cd duck_soup/web/ui
-npm install
-npm run dev
-```
-
-Then open http://localhost:5173. Once you're happy with the changes, compile them to
-the static files FastAPI serves, and commit the output:
-
-```bash
-cd duck_soup/web/ui
-npm run build      # compiles TypeScript and copies assets to ../static/
-```
-
-The editor lets you add sources and derived sources, pick the base, build join and
-geoprocessing steps, define one or more output layers and their mapping, add more
-pipelines to the same file, and Validate / Save / Run — with a live YAML preview
-and run log.
 
 ## Pipeline YAML
 
@@ -267,13 +228,24 @@ pipelines:
       - layer: DucksChillPonds     # a second layer, filtered from the same pipeline
         crs: EPSG:25833
         filter: "s_pond_type = 'no_drama'"
+      - layer: DucksPublic         # a third layer with its own, slimmer columns
+        crs: EPSG:4326
+        mapping:                   # replaces the pipeline mapping for this layer only
+          - { to: name,    from: "nickname" }
+          - { to: species, from: "s_species_name" }
 ```
+
+A layer `filter` runs before the mapping, so it uses the upstream column names
+(`s_pond_type`), not the output names.
 
 A single-layer pipeline can write `layer:`/`crs:`/`filter:` directly instead of a
 `layers:` list (see `pipelines/test.yaml` for a minimal working example) — and a
 single-pipeline file can skip the `pipelines:` wrapper entirely and write
 `sources`/`base`/`steps`/`mapping`/`output` directly at the top level. Both are
 legacy shorthands, auto-upgraded to the Config shape above on load.
+
+Every option below can be set in the editor as well as in YAML. The full reference is in
+the [user guide](https://henrik716.github.io/duck-soup/reference/yaml/).
 
 ### Source formats
 
@@ -283,7 +255,7 @@ legacy shorthands, auto-upgraded to the Config shape above on load.
 | `fgdb` | `ST_Read` | points at a `.gdb` folder; its geometry column is detected via a `DESCRIBE` fallback since `ST_Read_Meta` is unreliable on File Geodatabases |
 | `wfs` | GetFeature (GML) → temp `.gml` → `ST_Read` | `SRSNAME` is pinned to the source `crs` to avoid silent geometry corruption |
 | `arcgis_rest` | paged JSON → temp GeoJSON → `ST_Read` | always EPSG:4326; `page_size` caps the page size, `where` pushes a filter server-side |
-| `oapif` (OGC API - Features) | paged `/collections/{layer}/items` → temp GeoJSON → `ST_Read` | always EPSG:4326; supports `bbox`, `max_features`, and `page_size` |
+| `oapif` (OGC API - Features) | paged `/collections/{layer}/items` → temp GeoJSON → `ST_Read` | always EPSG:4326; `page_size` sets the features per request |
 | `parquet` | DuckDB's native `read_parquet()` | bypasses GDAL entirely — the bundled GDAL build has no Parquet/Arrow driver |
 | `postgres` | DuckDB's `postgres` extension (`ATTACH ... TYPE postgres`) | not GDAL's PG driver; geometry comes back as hex-EWKB, parsed via `ST_GeomFromHEXWKB` |
 | `xlsx`, `csv` | `ST_Read` (tabular) | optional geometry from `x_field`+`y_field` (→ `ST_Point`) or `geom_field` (WKT or hex-WKB, auto-detected); `header_row` controls header detection |
@@ -304,6 +276,7 @@ Every source also accepts an optional `make_valid: true` to repair invalid geome
 | `erase`              | subtract the union of all matching `source` features from the geometry (`ST_Difference`) |
 | `dissolve`           | `ST_Union_Agg(geom)` grouped `by` a list of columns (omit for one feature total) |
 | `intersect_overlay`  | inner join + `ST_Intersection`, one output row per overlapping pair |
+| `line_overlay`       | line-on-line overlay: cut lines where `source` lines lie on them, shared pieces get `fields`, the rest pass through; optional `tolerance` for lines that are only nearly on top of each other |
 | `filter`             | drop rows where `where` (SQL boolean) is false |
 | `merge`              | append another source's rows via `UNION ALL BY NAME` |
 | `snapshot`           | name the chain's current state (`id:`) so a later step can join back against it or fork a branch |
@@ -324,7 +297,7 @@ dedicated step to the main chain.
 
 `spatial_join` with `match: first` (the default) keeps exactly one matching feature per
 base row even when several join-source features satisfy the predicate. Which one is kept
-is controlled by `on_multiple`:
+is controlled by `on_multiple` (**when several match** in the editor):
 
 | `on_multiple`     | meaning                                                                 |
 |-------------------|--------------------------------------------------------------------------|
@@ -404,11 +377,77 @@ default) and **file lookup** (csv path + key/value columns).
 - **`match: first` is the default and is easy to reach for by accident.** A base
   feature that overlaps more than one join-source feature — e.g. a duck paddling
   exactly on the boundary between two overlapping ponds — silently keeps only one
-  match's fields unless you deliberately opt into `match: all` (see "Spatial join
-  match resolution" above).
+  match's fields unless you deliberately opt into `on_multiple: largest_overlap` or
+  `match: all` (see "Spatial join match resolution" above).
 - **Synchronous run.** `POST /api/run` blocks on the whole pipeline and returns
   once it's done — no job queue, cancellation, or streamed logs for long-running
   jobs. `check`/`run` in the CLI are likewise blocking, single-shot commands.
+- **Output is GeoPackage or GeoParquet only.**
+- **No variable substitution in the YAML.** Connection strings and URLs are stored as
+  written. For PostgreSQL, leave the password out and set `PGPASSWORD` instead.
 - **Small `func` set on purpose** (`lon`, `lat`, `mgrs`, `wkb`, `area`, `length`,
-  `uuid`, `now`, `today`); add new ones in `engine.py:_func_expr` (SQL) or
-  `derive.py` (python UDF).
+  `uuid`, `now`, `today`); anything else can be an `expr`. New ones go in
+  `engine.py:_func_expr` (SQL) or `derive.py` (python UDF).
+
+---
+
+## Development
+
+Only needed to change duck soup itself. You need Python 3.11+, and Node.js 18+ only if
+you change the editor frontend. More detail in the
+[development guide](https://henrik716.github.io/duck-soup/development/).
+
+```bash
+git clone https://github.com/henrik716/duck-soup.git
+cd duck-soup
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[test,docs]"      # package + pytest/httpx + mkdocs
+
+pytest -v                                            # test suite
+python -m duck_soup.cli check pipelines/test.yaml    # validate the self-contained test pipeline
+python -m duck_soup.cli run   pipelines/test.yaml    # writes output/test.gpkg
+uvicorn duck_soup.web.app:app --reload               # editor backend at http://127.0.0.1:8000
+```
+
+The built editor is committed in `duck_soup/web/static/`, so the backend serves it
+without Node. To change the frontend, run the Vite dev server alongside the backend for
+hot reloading (it proxies `/api` to port 8000), then build and commit the output:
+
+```bash
+cd duck_soup/web/ui
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # type-checks and writes ../static/ (commit it)
+```
+
+The user guide is MkDocs Material, in `docs/`. `mkdocs serve` previews it, and
+`mkdocs build --strict` is what the Docs workflow runs before deploying to GitHub Pages.
+
+```
+duck_soup/           # Python package
+  config.py          # YAML schema (pydantic) + load/save
+  sources.py         # one reader per format (mostly DuckDB ST_Read / GDAL)
+  engine.py          # builds a chain of SQL views, writes GeoPackage/GeoParquet
+  derive.py          # DuckDB bootstrap (extensions) + python UDFs (MGRS)
+  sql_util.py        # identifier / literal quoting
+  cli.py             # duck-soup check / run / serve / tutorial
+  tutorial.py        # copies tutorial/ (sample data + config) into a project folder
+  web/
+    app.py           # FastAPI backend
+    static/          # compiled editor frontend, served by FastAPI
+    ui/              # TypeScript + Vite + MapLibre editor source
+pipelines/           # example pipelines
+data/                # test fixtures
+tests/               # pytest suite
+docs/                # user guide (MkDocs Material)
+```
+
+`pyproject.toml` pins `duckdb` to `>=1.5.4,<1.6` because `INSTALL spatial` always
+fetches the extension build matching the running DuckDB core version — pinning DuckDB
+is what keeps the spatial extension version reproducible. Bump the pin (and this note)
+together when upgrading.
+
+**Releasing:** bump `version` in `pyproject.toml`, commit and push, then push a `v*` tag
+(e.g. `git tag v0.1.16 && git push origin v0.1.16`). CI then publishes to PyPI and
+`ghcr.io/henrik716/duck-soup`.

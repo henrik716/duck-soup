@@ -228,8 +228,7 @@ To avoid both, write to a staging path, and replace the published file only afte
 run:
 
 ```yaml
-outputs:
-  - path: output/staging/roads.gpkg     # the pipeline writes here…
+output: output/staging/roads.gpkg     # the pipeline writes here…
 ```
 
 ```bash

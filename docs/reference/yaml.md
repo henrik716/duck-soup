@@ -107,6 +107,12 @@ A CRS is always written as `AUTHORITY:CODE`, e.g. `EPSG:25833`.
 | `filter` | SQL | — | Only rows where this is true go into this layer. Uses pre-mapping column names. |
 | `mapping` | list | — | Replaces the pipeline `mapping` for this layer only. |
 
+## Paths
+
+`uri`, codelist `file` and `output` may be absolute or relative. Relative paths resolve against
+the **current working directory** of the process: where you ran `duck-soup run`, where you
+started the server, or `/data` in Docker. Your data doesn't need to live in the repository.
+
 ## GeoParquet output
 
 An `output` path ending in `.parquet` or `.geoparquet` is written as
@@ -177,9 +183,3 @@ output:
   layer: result_layer
   crs: EPSG:25833
 ```
-
-## Paths
-
-`uri`, codelist `file` and `output` may be absolute or relative. Relative paths resolve against
-the **current working directory** of the process: where you ran `duck-soup run`, where you
-started the server, or `/data` in Docker. Your data doesn't need to live in the repository.

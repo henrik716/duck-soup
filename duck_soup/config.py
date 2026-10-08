@@ -240,6 +240,22 @@ class IntersectOverlay(StepBase):
     fields: dict[str, str] = Field(default_factory=dict)
 
 
+class LineOverlay(StepBase):
+    """Line-on-line overlay ("identity"): the running lines are cut where they lie on the
+    `source` lines. Shared stretches get `fields` from the source, the rest pass through
+    with NULL fields, so the output is still the complete network."""
+
+    type: Literal["line_overlay"] = "line_overlay"
+    source: str = Field(..., description="id of the overlay line source")
+    fields: dict[str, str] = Field(default_factory=dict)
+    tolerance: Optional[float] = Field(
+        None,
+        gt=0,
+        description="How far apart (working CRS units) two lines may be and still count as "
+        "lying on each other; without it, they must match to within 0.000001 units",
+    )
+
+
 class Filter(StepBase):
     type: Literal["filter"] = "filter"
     where: str = Field(
@@ -269,7 +285,7 @@ class Snapshot(StepBase):
 Step = Annotated[
     Union[
         SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
-        Dissolve, IntersectOverlay, Filter, Merge, Snapshot,
+        Dissolve, IntersectOverlay, LineOverlay, Filter, Merge, Snapshot,
     ],
     Field(discriminator='type'),
 ]

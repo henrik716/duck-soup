@@ -26,7 +26,7 @@ import duckdb
 from . import sources as src_readers
 from .config import (
     AttributeJoin, Buffer, Centroid, Clip, CodeCase, CodeList, Config,
-    Dissolve, Erase, Filter, IntersectOverlay, MapItem, Merge, NearestNeighbor,
+    Dissolve, Erase, Filter, IntersectOverlay, LineOverlay, MapItem, Merge, NearestNeighbor,
     OutputLayer, Pipeline, Snapshot, SpatialJoin, is_parquet_path,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
@@ -408,19 +408,24 @@ class Engine:
         pred = _PREDICATE_SQL[step.predicate]
         src_view = _ident(f"src_{step.source}")
         out_view = f"step_{idx}"
-        # Each feature minus the union of everything it matches; unmatched ones pass
-        # through, and ones erased completely are dropped rather than kept as empty shapes.
-        select = _drop_empty(self._per_row_match_select(
-            prev, src_view, f"{pred}(a.geom, b.geom)",
+        select = self._erase_select(prev, src_view, f"{pred}(a.geom, b.geom)")
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
+        self.log(f"step {idx}: erase {step.predicate} {step.source}")
+        return sql, out_view
+
+    @classmethod
+    def _erase_select(cls, prev: str, src_view: str, on: str) -> str:
+        """Each `prev` feature minus the union of everything it matches in `src_view`;
+        unmatched ones pass through, and ones erased completely are dropped rather than
+        kept as empty shapes."""
+        return _drop_empty(cls._per_row_match_select(
+            prev, src_view, on,
             agg="ST_Union_Agg(b.geom)",
             columns=(
                 "a.* EXCLUDE (__a_row, geom), "
                 "COALESCE(ST_Difference(a.geom, m.__agg), a.geom) AS geom"
             ),
         ))
-        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
-        self.log(f"step {idx}: erase {step.predicate} {step.source}")
-        return sql, out_view
 
     def _apply_dissolve(self, prev: str, step: Dissolve, idx: int) -> tuple[str, str]:
         out_view = f"step_{idx}"
@@ -463,6 +468,113 @@ class Engine:
         """
         sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {_drop_empty(pairs)}"
         self.log(f"step {idx}: intersect_overlay {step.source}")
+        return sql, out_view
+
+    # line_overlay without a `tolerance`: lines must lie on each other to within this many
+    # working-CRS units (a micrometre in a metric CRS), which is "exactly" for real data.
+    _LINE_OVERLAY_EXACT = 1e-6
+    # A stretch only counts as shared when the source line runs along it: its end points'
+    # closest points on the source line must be at least this fraction of the stretch's own
+    # length apart (the cosine of the angle between the lines, ~18°). Lines that only cross
+    # otherwise leave a stretch of 2 x tolerance around the crossing.
+    _LINE_OVERLAY_MIN_ALIGNMENT = 0.95
+
+    def _apply_line_overlay(self, prev: str, step: LineOverlay, idx: int) -> tuple[str, str]:
+        """Each running line cut where it lies within `tolerance` of a source line; every
+        piece is one row, with `fields` from the source line it lies on (the first one, in
+        source row order, where several do) or NULL.
+
+        Overlaying the lines directly (ST_Intersection) only finds the shared stretches when
+        the coordinates match to the last bit; lines that are equal to within a centimetre
+        come back as points. Instead, each line is matched against the source lines buffered
+        by the tolerance, which yields the stretches as positions along the line itself
+        (ST_LineLocatePoint). The line is cut at all of them with ST_LineSubstring, so
+        neighbouring pieces share their end points exactly and the geometry stays the
+        running line's own, not the source's.
+        """
+        out_view = f"step_{idx}"
+        tol = step.tolerance if step.tolerance is not None else self._LINE_OVERLAY_EXACT
+        src_view = _ident(f"src_{step.source}")
+        f_struct = ", ".join(
+            [f"{_lit(out)}: b.{_ident(col)}" for out, col in step.fields.items()]
+            + ["'__b_row': b.__src_row"]
+        )
+        pulled = "".join(
+            f", struct_extract(g.__agg, {_lit(out)}) AS {_ident(out)}" for out in step.fields
+        )
+        is_line = "ST_GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')"
+        select = f"""
+        WITH a AS MATERIALIZED (
+            -- one row per line part, so positions along it are well defined
+            SELECT * EXCLUDE (__part), __part.geom AS geom, row_number() OVER () AS __a_row
+            FROM (
+                SELECT * EXCLUDE (geom), unnest(ST_Dump(geom)) AS __part
+                FROM {_ident(prev)} WHERE {is_line}
+            )
+        ),
+        b AS (
+            SELECT *, ST_Buffer(geom, {tol}, 8, 'CAP_FLAT', 'JOIN_ROUND', 1.0) AS __buf
+            FROM {src_view}
+        ),
+        stretch AS (
+            SELECT a.__a_row, a.geom AS __a, b.geom AS __b, {{{f_struct}}} AS __f,
+                   unnest(ST_Dump(ST_CollectionExtract(ST_Intersection(a.geom, b.__buf), 2))).geom AS __s
+            FROM a JOIN b ON ST_Intersects(a.geom, b.__buf)
+        ),
+        span AS (
+            SELECT __a_row, __f,
+                   least(ST_LineLocatePoint(__a, ST_StartPoint(__s)),
+                         ST_LineLocatePoint(__a, ST_EndPoint(__s))) AS lo,
+                   greatest(ST_LineLocatePoint(__a, ST_StartPoint(__s)),
+                            ST_LineLocatePoint(__a, ST_EndPoint(__s))) AS hi
+            FROM stretch
+            WHERE ST_Distance(ST_ClosestPoint(__b, ST_StartPoint(__s)), ST_ClosestPoint(__b, ST_EndPoint(__s)))
+                  >= {self._LINE_OVERLAY_MIN_ALIGNMENT} * ST_Distance(ST_StartPoint(__s), ST_EndPoint(__s))
+        ),
+        cut AS (
+            SELECT __a_row, f AS lo, lead(f) OVER (PARTITION BY __a_row ORDER BY f) AS hi
+            FROM (
+                SELECT c.__a_row, c.f, lag(c.f) OVER (PARTITION BY c.__a_row ORDER BY c.f) AS prev_f,
+                       {tol} / nullif(ST_Length(a.geom), 0) AS near
+                FROM (
+                    SELECT __a_row, 0.0 AS f FROM a UNION SELECT __a_row, 1.0 FROM a
+                    UNION SELECT __a_row, lo FROM span UNION SELECT __a_row, hi FROM span
+                ) c JOIN a ON a.__a_row = c.__a_row
+            )
+            -- Positions within the tolerance of each other are one cut, and the line's own
+            -- ends stay where they are: a source line stopping 2 cm short of where the path
+            -- ends (or overshooting it) shouldn't leave a 2 cm piece behind.
+            WHERE f = 0 OR f = 1 OR (f - prev_f > near AND f < 1 - near)
+        ),
+        piece AS (
+            -- the first source line (in source row order) covering each piece's middle
+            SELECT c.__a_row, c.lo, c.hi, arg_min(s.__f, s.__f.__b_row) AS __agg
+            FROM cut c
+            LEFT JOIN span s ON s.__a_row = c.__a_row AND (c.lo + c.hi) / 2 BETWEEN s.lo AND s.hi
+            WHERE c.hi > c.lo
+            GROUP BY ALL
+        ),
+        run AS (
+            -- consecutive pieces on the same source line (cut where two of its stretches
+            -- meet, or where another line's stretch began and ended inside it) become one
+            SELECT *, sum(CASE WHEN __agg.__b_row IS NOT DISTINCT FROM prev_b THEN 0 ELSE 1 END)
+                          OVER (PARTITION BY __a_row ORDER BY lo) AS __run
+            FROM (SELECT *, lag(__agg.__b_row) OVER (PARTITION BY __a_row ORDER BY lo) AS prev_b FROM piece)
+        ),
+        g AS (
+            SELECT __a_row, min(lo) AS lo, max(hi) AS hi, any_value(__agg) AS __agg
+            FROM run GROUP BY __a_row, __run
+        )
+        SELECT a.* EXCLUDE (__a_row, geom){pulled},
+               ST_LineSubstring(a.geom, g.lo, g.hi) AS geom
+        FROM g JOIN a ON a.__a_row = g.__a_row
+        UNION ALL BY NAME
+        -- anything that isn't a line (or has no geometry) passes through untouched
+        SELECT * FROM {_ident(prev)} WHERE geom IS NULL OR NOT {is_line}
+        """
+        sql = f"CREATE OR REPLACE TEMP VIEW {_ident(out_view)} AS {select}"
+        suffix = f" (tolerance={step.tolerance})" if step.tolerance is not None else ""
+        self.log(f"step {idx}: line_overlay {step.source}{suffix}")
         return sql, out_view
 
     def _apply_filter(self, prev: str, step: Filter, idx: int) -> tuple[str, str]:
@@ -542,6 +654,8 @@ class Engine:
                 sql, new_view = self._apply_dissolve(cur, step, i)
             elif isinstance(step, IntersectOverlay):
                 sql, new_view = self._apply_intersect_overlay(cur, step, i)
+            elif isinstance(step, LineOverlay):
+                sql, new_view = self._apply_line_overlay(cur, step, i)
             elif isinstance(step, Filter):
                 sql, new_view = self._apply_filter(cur, step, i)
             elif isinstance(step, Merge):

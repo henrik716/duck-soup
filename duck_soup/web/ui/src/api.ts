@@ -1,6 +1,8 @@
 import type {
   Config,
   ExportScriptResponse,
+  FilePlace,
+  FileSearchResponse,
   FilesResponse,
   InspectFileResponse,
   InspectResponse,
@@ -131,7 +133,23 @@ export async function inspectFile(uri: string, format: string): Promise<InspectF
 
 export async function fetchFiles(subpath: string): Promise<FilesResponse> {
   const r = await fetch(`/api/files?subpath=${encodeURIComponent(subpath)}`)
-  if (!r.ok) throw new Error('Failed to load directory')
+  if (!r.ok) {
+    const detail = await r.json().then(b => b?.detail, () => null)
+    throw new Error(typeof detail === 'string' ? detail : 'Failed to load directory')
+  }
+  return r.json()
+}
+
+export async function fetchFilePlaces(): Promise<FilePlace[]> {
+  const r = await fetch('/api/files/places')
+  if (!r.ok) return []
+  return (await r.json()).places
+}
+
+export async function searchFiles(q: string, subpath: string, signal?: AbortSignal): Promise<FileSearchResponse> {
+  const params = new URLSearchParams({ q, subpath })
+  const r = await fetch(`/api/files/search?${params}`, { signal })
+  if (!r.ok) throw new Error('Search failed')
   return r.json()
 }
 

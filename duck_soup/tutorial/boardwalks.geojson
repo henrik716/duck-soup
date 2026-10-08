@@ -1,0 +1,66 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "material": "oak"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0064764,
+      51.4556873
+     ],
+     [
+      3.0086352,
+      51.4553904
+     ],
+     [
+      3.0093548,
+      51.4552914
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "material": "oak"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0086352,
+      51.4553904
+     ],
+     [
+      3.008635,
+      51.4541316
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "material": "recycled plastic"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0115133,
+      51.4537357
+     ],
+     [
+      3.0143916,
+      51.4533397
+     ]
+    ]
+   }
+  }
+ ]
+}

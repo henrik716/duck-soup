@@ -348,6 +348,32 @@ def test_files_endpoint_lists_data_directory(client):
     assert "test.geojson" in names
 
 
+def test_files_endpoint_reports_metadata_and_crumbs(client):
+    body = client.get("/api/files", params={"subpath": "data"}).json()
+    assert body["current"] == "data"
+    assert body["parent"] == ""
+    assert [c["path"] for c in body["crumbs"]][-2:] == ["", "data"]
+    geojson = next(e for e in body["entries"] if e["name"] == "test.geojson")
+    assert geojson["size"] > 0 and geojson["modified"] is not None
+
+
+def test_files_endpoint_missing_directory_is_404(client):
+    assert client.get("/api/files", params={"subpath": "no/such/dir"}).status_code == 404
+
+
+def test_files_places_include_project_root(client):
+    places = client.get("/api/files/places").json()["places"]
+    assert places[0] == {"name": places[0]["name"], "path": "", "kind": "project"}
+    assert any(p["kind"] == "drive" for p in places)
+
+
+def test_files_search_finds_nested_files(client):
+    body = client.get("/api/files/search", params={"q": "TEST.GEO", "subpath": ""}).json()
+    hit = next(r for r in body["results"] if r["name"] == "test.geojson")
+    assert hit["folder"] == "data" and hit["path"] == "data/test.geojson"
+    assert client.get("/api/files/search", params={"q": " "}).json()["results"] == []
+
+
 def test_upload_with_relpath_lands_under_subdirectory(client):
     # A File Geodatabase drop uploads each of its internal files individually, with
     # `relpath` set so they all land together under one folder instead of flat in the

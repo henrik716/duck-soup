@@ -9,13 +9,17 @@ explained with examples in [Mapping by example](../tutorials/mapping.md).
     With no mapping rows at all, every upstream column (base columns plus every pulled field) is
     written as-is. Add rows when you want to choose, rename, reorder or compute columns.
 
+The mapping applies to every output layer of the pipeline. To give one layer different
+columns, see [Per-layer mapping](output-layers.md#per-layer-mapping).
+
 ## Layout
 
 ![The mapping tab: field pool on the left, mapping grid on the right](../assets/screenshots/mapping-tab-light.png#only-light){ .screenshot loading=lazy }
 ![The mapping tab: field pool on the left, mapping grid on the right](../assets/screenshots/mapping-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
 On the left is the **Available Source Fields** pool: every column available after the last
-step (base columns plus fields pulled by join steps). On the right is the mapping grid, one row
+step, grouped by where each column comes from (**base**, then **step 1 · spatial_join** and
+so on for fields pulled in by join steps). Hover a field to see its full name and type. On the right is the mapping grid, one row
 per output column:
 
 | output column | value source | value | cast | |

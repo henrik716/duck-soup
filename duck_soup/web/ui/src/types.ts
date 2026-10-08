@@ -100,6 +100,14 @@ export interface IntersectOverlay {
   branch?: string
 }
 
+export interface LineOverlay {
+  type: 'line_overlay'
+  source: string
+  fields: Record<string, string>
+  tolerance?: number
+  branch?: string
+}
+
 export interface Filter {
   type: 'filter'
   where: string
@@ -118,7 +126,7 @@ export interface Snapshot {
   branch?: string
 }
 
-export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | IntersectOverlay | Filter | Merge | Snapshot
+export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | IntersectOverlay | LineOverlay | Filter | Merge | Snapshot
 
 export interface CodeCase {
   value: string
@@ -253,10 +261,31 @@ export interface ExportScriptResponse {
   error?: string
 }
 
+export interface FileEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number | null
+  modified: number | null  // epoch seconds
+  folder?: string          // search results only: the containing folder
+}
+
 export interface FilesResponse {
   current: string
   parent: string | null
-  entries: { name: string; path: string; is_dir: boolean }[]
+  crumbs: { name: string; path: string }[]
+  entries: FileEntry[]
+}
+
+export interface FilePlace {
+  name: string
+  path: string
+  kind: 'project' | 'data' | 'pipelines' | 'output' | 'home' | 'drive'
+}
+
+export interface FileSearchResponse {
+  results: FileEntry[]
+  truncated: boolean
 }
 
 export interface PipelineLoadResponse {

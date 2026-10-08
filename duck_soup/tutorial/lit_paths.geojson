@@ -1,0 +1,70 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "lamps": "LED"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0021594,
+      51.4562804
+     ],
+     [
+      3.0043182,
+      51.4559836
+     ],
+     [
+      3.008636,
+      51.4553899
+     ],
+     [
+      3.0107948,
+      51.455093
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "lamps": "gas"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0043185,
+      51.4583754
+     ],
+     [
+      3.0043182,
+      51.4559836
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "lamps": "LED"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0000004,
+      51.4553183
+     ],
+     [
+      3.0035985,
+      51.4548236
+     ]
+    ]
+   }
+  }
+ ]
+}

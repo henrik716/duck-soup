@@ -130,6 +130,44 @@ overlapping pair with the shared area as its geometry.
   ignored.
 - The row count can grow quickly when many features overlap.
 
+### `line_overlay`
+
+**Cuts lines where other lines lie on top of them**, and copies those lines' attributes onto
+the shared stretches. Everything else is kept, so the whole network comes out again and can go
+into the next `line_overlay`. This is FME's LineOnLineOverlayer.
+
+Here the footpath network collects attributes from two datasets: the lamp register
+(`lit_paths`, which has gaps) and the boardwalk survey (`boardwalks`, just a few stretches).
+
+```yaml
+--8<-- "docs/tutorials/generated/line_overlay.yaml"
+```
+
+--8<-- "docs/tutorials/generated/line_overlay.svg"
+
+<div class="ds-key" markdown>
+<span><i class="k-path"></i>footpaths</span>
+<span><i class="k-lamp"></i>lit (`lit_paths`)</span>
+<span><i class="k-board"></i>boardwalk (`boardwalks`)</span>
+<span><i class="k-cut"></i>piece ends</span>
+</div>
+
+--8<-- "docs/tutorials/generated/line_overlay.md"
+
+- Riverside Walk is lit in the middle, and part of that lit stretch is also a boardwalk, so it
+  comes out as five pieces: unlit, lit, lit and oak, lit, unlit. Each piece is its own row, and
+  neighbouring pieces meet exactly.
+- Every metre of the network is still there: the pieces add up to the original paths.
+  The geometry is always the footpath's own; the other two datasets only decide where the cuts
+  go and what each piece gets.
+- Waddle Bridge ends on Riverside Walk and Reed Way, but they are not cut there: lines that
+  only meet or cross don't count as lying on each other.
+- `tolerance: 0.1` is needed here. The lamp register and the boardwalk survey were digitised
+  separately, and their lines lie a few centimetres off the footpaths. Without a tolerance
+  nothing would match, and nothing would get `lamps` or `material`. With it, lines within
+  10 cm of each other count as the same line, and a lamp line stopping 3 cm before the end of
+  Mill Lane still lights all of it.
+
 ## Geometry: change the shapes
 
 ### `buffer`
@@ -241,7 +279,7 @@ shape itself.
 - Rows where the condition is NULL are dropped too. Nobody has counted the crumbs at the
   Duckling Swim School, so `bread_crumbs >= 20000` is NULL rather than false, and the row goes.
 - To split rows into several outputs rather than drop them, keep them all and give each
-  [output layer](../editor/preview-and-run.md#output-layers) its own `filter`.
+  [output layer](../editor/output-layers.md) its own `filter`.
 
 ### `merge`
 

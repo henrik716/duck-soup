@@ -12,6 +12,7 @@ can follow every row from input to output.
 <span><i class="k-ref"></i>transit stops</span>
 <span><i class="k-park"></i>parks</span>
 <span><i class="k-water"></i>River Waddle</span>
+<span><i class="k-trail"></i>footpaths</span>
 <span><i class="k-ghost"></i>new places (for `merge`)</span>
 </div>
 
@@ -21,7 +22,7 @@ One command copies the Pondsworth data and a config with every tutorial example 
 `data/tutorial/` holds the datasets, and `pipelines/pondsworth.yaml` the config. Run it in the
 editor's project folder (by default `~/duck-soup`), so the editor finds the config too:
 
-=== "pipx / pip"
+=== "pipx / uv / pip"
 
     ```bash
     mkdir -p ~/duck-soup      # the editor's default project folder
@@ -60,6 +61,9 @@ Add `--force` to start over. To use another folder, pass it as an argument
 | `river` | `river.geojson` | 1 polygon | `name` |
 | `stops` | `stops.geojson` | 7 points | `stop_name`, `stop_type` (`B` bus, `T` tram, `P` paddle boat) |
 | `new_places` | `new_places.geojson` | 2 points | `name`, `category` |
+| `paths` | `paths.geojson` | 4 lines | `name` (the footpath network) |
+| `lit_paths` | `lit_paths.geojson` | 3 lines | `lamps` (`LED`/`gas`): the lamp-lit stretches of the paths |
+| `boardwalks` | `boardwalks.geojson` | 3 lines | `material`: the stretches of path that are boardwalk |
 | `categories` | `categories.csv` | none (table) | `code`, `label` |
 
 A few features are there on purpose, to show what happens at the edges:
@@ -70,6 +74,8 @@ A few features are there on purpose, to show what happens at the edges:
   isn't in `categories.csv`.
 - **Breadcrumb Hill** has `opened` = `unknown`, and `inspected` mixes `2024-03-14`,
   `14.03.2024` and `March 2024`, which is useful when explaining `cast`.
+- **`lit_paths`** and **`boardwalks`** lie on the footpaths, but were digitised separately: their
+  lines are a few centimetres off, and they start and stop in the middle of a path.
 
 Every source is GeoJSON in EPSG:4326, like most data you'll download. The examples set
 `working_crs: EPSG:32631` (UTM zone 31N), so distances and areas are in metres. Pondsworth
@@ -85,6 +91,9 @@ sources:
   - {id: river,      format: geojson, uri: data/tutorial/river.geojson,      crs: EPSG:4326}
   - {id: stops,      format: geojson, uri: data/tutorial/stops.geojson,      crs: EPSG:4326}
   - {id: new_places, format: geojson, uri: data/tutorial/new_places.geojson, crs: EPSG:4326}
+  - {id: paths,      format: geojson, uri: data/tutorial/paths.geojson,      crs: EPSG:4326}
+  - {id: lit_paths,  format: geojson, uri: data/tutorial/lit_paths.geojson,  crs: EPSG:4326}
+  - {id: boardwalks, format: geojson, uri: data/tutorial/boardwalks.geojson, crs: EPSG:4326}
   - {id: categories, format: csv,     uri: data/tutorial/categories.csv}
 ```
 

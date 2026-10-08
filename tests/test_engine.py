@@ -161,9 +161,11 @@ _ZONES = [("A", _square(0, 0, 2, 1)), ("B", _square(1, 0, 3, 1))]
 _POINTS = [("p1", _point(0.5, 0.5)), ("p2", _point(1.5, 0.5)), ("p3", _point(10, 10)), ("p4", _point(2.5, 0.5))]
 
 
-def _step_output(tmp_path: Path, base: list, other: list, steps: list[dict], sql: str) -> list[tuple]:
-    """Run `steps` over `base` (with `other` as source `other`) and return `sql`
-    evaluated over the final step view, referenced as `t`."""
+def _step_output(
+    tmp_path: Path, base: list, other: list, steps: list[dict], sql: str, more: dict | None = None,
+) -> list[tuple]:
+    """Run `steps` over `base` (with `other` as source `other`, plus any `more` {id: features})
+    and return `sql` evaluated over the final step view, referenced as `t`."""
     import duckdb
 
     from duck_soup.derive import init_duckdb
@@ -171,7 +173,7 @@ def _step_output(tmp_path: Path, base: list, other: list, steps: list[dict], sql
     sources = [
         {"id": sid, "format": "geojson", "uri": _write_geojson(tmp_path / f"{sid}.geojson", feats),
          "crs": "EPSG:25833"}
-        for sid, feats in (("base", base), ("other", other))
+        for sid, feats in (("base", base), ("other", other), *(more or {}).items())
     ]
     cfg = load_config_dict({
         "name": "t", "working_crs": "EPSG:25833", "sources": sources, "base": "base",
@@ -260,6 +262,88 @@ def test_erase_subtracts_union_of_all_matches_and_drops_fully_erased(tmp_path):
     # A ∪ B covers x 0..3, leaving x 3..4 of q; "far" matches nothing and passes through;
     # "covered" has nothing left and is dropped rather than kept as an empty geometry.
     assert rows == [("q", 1.0), ("far", 1.0)]
+
+
+def _line(*coords: tuple[float, float]) -> dict:
+    return {"type": "LineString", "coordinates": [list(c) for c in coords]}
+
+
+def test_line_overlay_chains_into_a_complete_split_network(tmp_path):
+    base = [("main", _line((0, 0), (10, 0), (20, 0), (30, 0))), ("side", _line((0, 10), (10, 10)))]
+    ds2 = [("x", _line((5, 0), (15, 0)))]
+    ds3 = [("y", _line((12, 0), (25, 0))), ("cross", _line((8, -5), (8, 5)))]
+    rows = _step_output(
+        tmp_path, base, ds2,
+        [
+            {"type": "line_overlay", "source": "other", "fields": {"ds2": "name"}},
+            {"type": "line_overlay", "source": "ds3", "fields": {"ds3": "name"}},
+        ],
+        "SELECT name, ds2, ds3, ST_GeometryType(geom), round(ST_XMin(geom), 6), round(ST_Length(geom), 6) "
+        "FROM t ORDER BY name, ST_XMin(geom)",
+        more={"ds3": ds3},
+    )
+    # x covers the middle of main, so both ends come back as separate features; "cross"
+    # only crosses main, so it neither adds a piece nor cuts 5..12 at x=8.
+    assert rows == [
+        ("main", None, None, "LINESTRING", 0, 5),
+        ("main", "x", None, "LINESTRING", 5, 7),
+        ("main", "x", "y", "LINESTRING", 12, 3),
+        ("main", None, "y", "LINESTRING", 15, 10),
+        ("main", None, None, "LINESTRING", 25, 5),
+        ("side", None, None, "LINESTRING", 0, 10),
+    ]
+
+
+def test_line_overlay_tolerance_catches_nearly_coincident_lines(tmp_path):
+    # Sloped, with the overlay's vertices a few millimetres off the base line and one of them
+    # in the middle of a base segment, the way two datasets digitised from the same line
+    # differ. Snapping both to a grid doesn't line those up; the tolerance has to.
+    base = [("main", _line((0, 600), (500, 490), (1000, 380)))]
+    other = [("x", _line((200, 556.004), (500.003, 489.998), (800.002, 424.003)))]
+
+    def run(**extra):
+        return _step_output(
+            tmp_path, base, other,
+            [{"type": "line_overlay", "source": "other", "fields": {"ds2": "name"}, **extra}],
+            "SELECT ds2, round(ST_XMin(geom)), round(ST_XMax(geom)), ST_Length(geom) FROM t ORDER BY ST_XMin(geom)",
+        )
+
+    # Without one, only the few centimetres where the lines cross each other count as shared.
+    assert sum(length for ds2, _, _, length in run() if ds2) < 1
+    rows = run(tolerance=0.01)
+    assert [r[:3] for r in rows] == [(None, 0, 200), ("x", 200, 800), (None, 800, 1000)]
+    assert sum(r[3] for r in rows) == pytest.approx(sum(r[3] for r in run()))
+
+
+def test_line_overlay_pieces_share_end_points_and_keep_base_geometry(tmp_path):
+    base = [("main", _line((0, 0), (10, 0), (20, 0)))]
+    other = [("a", _line((2, 0.003), (8, -0.002))), ("b", _line((8, 0.001), (15, 0)))]
+    rows = _step_output(
+        tmp_path, base, other,
+        [{"type": "line_overlay", "source": "other", "fields": {"ds2": "name"}, "tolerance": 0.01}],
+        "SELECT ds2, ST_AsText(ST_StartPoint(geom)), ST_AsText(ST_EndPoint(geom)), ST_NPoints(geom), "
+        "ST_YMin(geom), ST_YMax(geom), round(ST_XMin(geom), 3) FROM t ORDER BY ST_XMin(geom)",
+    )
+    # Cut on the base line itself: y stays 0, the vertex at x=10 is kept, and each piece
+    # starts exactly where the previous one ends (the cuts themselves may be off by up to
+    # the tolerance, wherever the overlay line ends).
+    assert [(r[0], r[6]) for r in rows] == [(None, 0), ("a", 2), ("b", 8), (None, 15)]
+    assert all(r[4] == r[5] == 0 for r in rows)
+    assert [r[3] for r in rows] == [2, 2, 3, 2]
+    assert rows[0][1] == "POINT (0 0)" and rows[-1][2] == "POINT (20 0)"
+    assert all(prev[2] == nxt[1] for prev, nxt in zip(rows, rows[1:]))
+
+
+def test_line_overlay_source_ending_near_a_line_end_leaves_no_sliver(tmp_path):
+    # The source line stops 3 cm short of one end of the path and overshoots the other.
+    base = [("main", _line((0, 0), (10, 0)))]
+    other = [("x", _line((0.03, 0.01), (10.02, 0)))]
+    rows = _step_output(
+        tmp_path, base, other,
+        [{"type": "line_overlay", "source": "other", "fields": {"ds2": "name"}, "tolerance": 0.05}],
+        "SELECT ds2, ST_AsText(geom) FROM t",
+    )
+    assert rows == [("x", "LINESTRING (0 0, 10 0)")]
 
 
 def _config(tmp_path: Path, base: list, steps: list[dict], mapping: list[dict], **pipeline):

@@ -1,4 +1,4 @@
-import { createIcons, Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera, DatabaseZap } from 'lucide'
+import { createIcons, Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Split, Filter, Camera, DatabaseZap } from 'lucide'
 import type { Config } from './types'
 import { esc } from './dom'
 
@@ -8,7 +8,7 @@ let dragScrollLeft = 0
 let isMouseDown = false
 let dragMoved = false
 
-function getSourceIcon(format: string): { icon: string; color: string } {
+export function getSourceIcon(format: string): { icon: string; color: string } {
   const fmt = (format || '').toLowerCase()
   switch (fmt) {
     case 'xlsx':
@@ -199,6 +199,7 @@ export function updateLineageDiagram(cfg: Config): void {
       else if (st.type === 'erase') { icon = 'eraser'; color = 'var(--spatial)' }
       else if (st.type === 'dissolve') { icon = 'layers'; color = 'var(--accent)' }
       else if (st.type === 'intersect_overlay') { icon = 'crosshair'; color = 'var(--spatial)' }
+      else if (st.type === 'line_overlay') { icon = 'split'; color = 'var(--spatial)' }
       else if (st.type === 'filter') { icon = 'filter'; color = 'var(--accent)' }
       else if (st.type === 'snapshot') { icon = 'camera'; color = 'var(--accent)' }
       else if (st.type === 'merge') { icon = 'git-merge'; color = 'var(--accent)' }
@@ -207,7 +208,7 @@ export function updateLineageDiagram(cfg: Config): void {
       const label = 'source' in st ? (st as any).source : (st.type === 'snapshot' ? (st as any).id : st.type)
 
       const node = document.createElement('div')
-      node.className = `lineage-node lineage-step-node ${st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'nearest_neighbor' ? 'is-spatial' : 'is-attribute'}`
+      node.className = `lineage-node lineage-step-node ${st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'line_overlay' || st.type === 'nearest_neighbor' ? 'is-spatial' : 'is-attribute'}`
       node.setAttribute('data-source-id', stepSourceId)
       node.dataset.stepIndex = idx.toString()
       node.innerHTML = `<i data-lucide="${icon}" style="width:12px;height:12px;color:${color};"></i> <span>${esc(label)}</span>`
@@ -318,7 +319,7 @@ export function updateLineageDiagram(cfg: Config): void {
   // Attach hover interactivity to paths & nodes globally
   setupGlobalHoverEffects(outer)
 
-  createIcons({ icons: { Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Filter, Camera, DatabaseZap } })
+  createIcons({ icons: { Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Split, Filter, Camera, DatabaseZap } })
 }
 
 function drawPaths(outer: HTMLElement, cfg: Config): void {
@@ -440,7 +441,7 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
         const stepSrcId = (st as any).source
         const stepSrcEl = srcNodes.find(n => n.getAttribute('data-source-id') === stepSrcId && n.closest('.lineage-column') === stepEl.closest('.lineage-column'))
         if (stepSrcEl) {
-          const isSpatial = st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'nearest_neighbor'
+          const isSpatial = st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'line_overlay' || st.type === 'nearest_neighbor'
           const color = isSpatial ? 'var(--spatial)' : 'var(--accent)'
           const marker = isSpatial ? 'arrow-spatial' : 'arrow-accent'
           connect(stepSrcEl, stepEl, color, marker, `p${pIdx}::src::${stepSrcId}`, `p${pIdx}::step::${idx}`, 'vertical')
@@ -493,7 +494,7 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
       } else {
         const input = branchLatest.get(branchName)
         if (input) {
-          const isSpatial = st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'nearest_neighbor'
+          const isSpatial = st.type === 'spatial_join' || st.type === 'clip' || st.type === 'erase' || st.type === 'intersect_overlay' || st.type === 'line_overlay' || st.type === 'nearest_neighbor'
           const color = isSpatial ? 'var(--spatial)' : 'var(--accent)'
           const marker = isSpatial ? 'arrow-spatial' : 'arrow-accent'
           connect(input.el, stepEl, color, marker, input.id, `p${pIdx}::step::${idx}`, 'horizontal')

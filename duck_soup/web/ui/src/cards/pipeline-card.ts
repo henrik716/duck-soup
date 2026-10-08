@@ -242,7 +242,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
               <div style="font-size: 10px; font-family: var(--mono); text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 6px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
                 <i data-lucide="database" style="width: 12px; height: 12px;"></i> Available Source Fields
               </div>
-              <div class="pl-available-fields-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; max-height: 350px; padding-right: 4px;">
+              <div class="pl-available-fields-list">
                 <!-- Filled dynamically by updateDatalistsScoped -->
               </div>
             </div>
@@ -733,7 +733,7 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     const st: Record<string, unknown> = { type: t }
     const branchVal = val(c, 'branch')
     if (branchVal) st['branch'] = branchVal
-    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'merge'].includes(t)) {
+    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge'].includes(t)) {
       st['source'] = val(c, 'source')
     }
     if (['spatial_join', 'clip', 'erase'].includes(t)) {
@@ -760,6 +760,10 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
       const distField = val(c, 'distance_field').trim()
       if (distField) st['distance_field'] = distField
     }
+    if (t === 'line_overlay') {
+      const tol = parseFloat(val(c, 'tolerance'))
+      if (tol > 0) st['tolerance'] = tol
+    }
     if (t === 'buffer') {
       st['distance'] = parseFloat(val(c, 'distance')) || 0
     }
@@ -767,7 +771,7 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
       st['by'] = [...c.querySelectorAll<HTMLInputElement>('[data-by-col]')]
         .map(i => i.value.trim()).filter(Boolean)
     }
-    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay'].includes(t)) {
+    if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay'].includes(t)) {
       const f: Record<string, string> = {}
       c.querySelectorAll('[data-fields] .kv').forEach(r => {
         const o = r.querySelector<HTMLInputElement>('[data-fo]')!.value.trim()

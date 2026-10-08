@@ -9,6 +9,7 @@ import asyncio
 import io
 import os
 import tempfile
+import time
 import traceback
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -66,7 +67,7 @@ def meta() -> dict:
         "formats": SOURCE_FORMATS,
         "predicates": JOIN_PREDICATES,
         "funcs": MAP_FUNCS,
-        "step_types": ["spatial_join", "attribute_join", "nearest_neighbor", "buffer", "centroid", "clip", "erase", "dissolve", "intersect_overlay", "filter", "merge", "snapshot"],
+        "step_types": ["spatial_join", "attribute_join", "nearest_neighbor", "buffer", "centroid", "clip", "erase", "dissolve", "intersect_overlay", "line_overlay", "filter", "merge", "snapshot"],
     }
 
 
@@ -334,46 +335,143 @@ def preview(req: PreviewRequest) -> dict:
 
 
 
+# ---- file browser ----
+# Paths inside ROOT are reported relative to it (so pipelines stay portable); anything
+# outside is reported absolute. All paths use forward slashes.
+_HIDDEN_DIRS = {".git", ".venv", "__pycache__", ".gemini", ".idea", ".vscode", "node_modules"}
+
+
+def _display_path(p: Path) -> str:
+    if p.is_relative_to(ROOT):
+        rel = str(p.relative_to(ROOT)).replace("\\", "/")
+        return "" if rel == "." else rel
+    return str(p).replace("\\", "/")
+
+
+def _resolve_browse_dir(subpath: str) -> Path:
+    if not subpath:
+        return ROOT
+    p = Path(subpath)
+    return (p if p.is_absolute() else ROOT / subpath).resolve()
+
+
+def _file_entry(p: Path, is_dir: bool | None = None) -> dict:
+    if is_dir is None:
+        is_dir = p.is_dir()
+    size = modified = None
+    try:
+        st = p.stat()
+        modified = st.st_mtime
+        if not is_dir:
+            size = st.st_size
+    except OSError:
+        pass
+    return {"name": p.name, "path": _display_path(p), "is_dir": is_dir, "size": size, "modified": modified}
+
+
+def _crumbs(target: Path) -> list[dict]:
+    # Breadcrumb trail: inside ROOT it starts at ROOT itself; outside, at the filesystem anchor.
+    chain = []
+    for d in [target, *target.parents]:
+        chain.append(d)
+        if d == ROOT:
+            break
+    out = []
+    for d in reversed(chain):
+        name = d.name or str(d).replace("\\", "/").rstrip("/") or "/"
+        out.append({"name": name, "path": _display_path(d)})
+    return out
+
+
 @app.get("/api/files")
 def list_files(subpath: str = "") -> dict:
-    if not subpath:
-        target_dir = ROOT
-    else:
-        p = Path(subpath)
-        target_dir = p if p.is_absolute() else (ROOT / subpath).resolve()
-
+    target_dir = _resolve_browse_dir(subpath)
     if not target_dir.exists() or not target_dir.is_dir():
         raise HTTPException(404, "Directory not found")
     entries = []
     try:
         for p in target_dir.iterdir():
-            if p.name in {".git", ".venv", "__pycache__", ".gemini", ".idea", ".vscode"}:
+            if p.name in _HIDDEN_DIRS:
                 continue
-            inside_root = p.is_relative_to(ROOT)
-            path_str = (
-                str(p.relative_to(ROOT)).replace("\\", "/")
-                if inside_root
-                else str(p).replace("\\", "/")
-            )
-            entries.append({"name": p.name, "path": path_str, "is_dir": p.is_dir()})
+            try:
+                is_dir = p.is_dir()
+            except OSError:
+                continue
+            entries.append(_file_entry(p, is_dir))
+    except PermissionError:
+        raise HTTPException(403, "Permission denied")
     except Exception as e:
         raise HTTPException(500, str(e))
     entries.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
 
     parent_dir = target_dir.parent
-    if parent_dir == target_dir:  # filesystem root (e.g. C:\)
-        parent = None
-    elif parent_dir.is_relative_to(ROOT):
-        parent = str(parent_dir.relative_to(ROOT)).replace("\\", "/")
-    else:
-        parent = str(parent_dir).replace("\\", "/")
+    parent = None if parent_dir == target_dir else _display_path(parent_dir)  # None at e.g. C:\
+    return {
+        "current": _display_path(target_dir),
+        "parent": parent,
+        "crumbs": _crumbs(target_dir),
+        "entries": entries,
+    }
 
-    if target_dir.is_relative_to(ROOT):
-        current = str(target_dir.relative_to(ROOT)).replace("\\", "/")
-    else:
-        current = str(target_dir).replace("\\", "/")
 
-    return {"current": current, "parent": parent, "entries": entries}
+@app.get("/api/files/places")
+def file_places() -> dict:
+    """Quick-access sidebar: the project folder and its usual subfolders, home, and drives."""
+    places = [{"name": ROOT.name or str(ROOT), "path": "", "kind": "project"}]
+    for sub in ("data", "pipelines", "output"):
+        if (ROOT / sub).is_dir():
+            places.append({"name": sub, "path": sub, "kind": sub})
+    home = Path.home()
+    if home != ROOT:
+        places.append({"name": "home", "path": _display_path(home), "kind": "home"})
+    if os.name == "nt":
+        drives = [f"{c}:/" for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{c}:\\")]
+    else:
+        drives = ["/"]
+    places += [{"name": d.rstrip("/") or "/", "path": d, "kind": "drive"} for d in drives]
+    return {"places": places}
+
+
+@app.get("/api/files/search")
+def search_files(q: str, subpath: str = "", limit: int = 200) -> dict:
+    """Case-insensitive name search below `subpath`, breadth-first so nearby matches come
+    first. Bounded by entry count and time, so searching from e.g. a drive root returns
+    partial results (`truncated`) instead of hanging."""
+    needle = q.strip().lower()
+    root = _resolve_browse_dir(subpath)
+    if not needle or not root.is_dir():
+        return {"results": [], "truncated": False}
+    deadline = time.monotonic() + 3.0
+    scanned, max_scan = 0, 50_000
+    results: list[dict] = []
+    queue = [root]
+    truncated = False
+    while queue:
+        d = queue.pop(0)
+        try:
+            with os.scandir(d) as it:
+                children = sorted(it, key=lambda e: e.name.lower())
+        except OSError:
+            continue
+        for e in children:
+            if e.name in _HIDDEN_DIRS:
+                continue
+            scanned += 1
+            try:
+                is_dir = e.is_dir()
+            except OSError:
+                continue
+            if needle in e.name.lower():
+                entry = _file_entry(Path(e.path), is_dir)
+                entry["folder"] = _display_path(Path(e.path).parent)
+                results.append(entry)
+            # A File Geodatabase is a directory, but a leaf data source â€” not worth descending.
+            if is_dir and not e.name.lower().endswith(".gdb") and not e.is_symlink():
+                queue.append(Path(e.path))
+        if len(results) >= limit or scanned >= max_scan or time.monotonic() > deadline:
+            truncated = bool(queue) or len(results) >= limit
+            break
+    return {"results": results[:limit], "truncated": truncated}
 
 
 _UPLOAD_DIR = Path(tempfile.gettempdir()) / "duck_soup_uploads"

@@ -57,7 +57,7 @@ shows a short summary of what it contains:
 | **derived sources** | filtered/buffered views of sources | [Sources](sources.md#derived-sources) |
 | **steps** | joins and geoprocessing, in order | [Steps](steps.md) |
 | **mapping** | the output columns | [Mapping](mapping.md) |
-| **output layers** | layer names, CRS, per-layer filters | [Preview, validate & run](preview-and-run.md#output-layers) |
+| **output layers** | layer names, CRS, per-layer filters and mappings | [Output layers](output-layers.md) |
 
 **+ add pipeline** at the bottom adds another independent pipeline that writes into the same
 output.
@@ -72,6 +72,22 @@ output.
 - **Problems**: validation errors, each with a link that jumps to the card causing it.
 
 See [Preview, validate & run](preview-and-run.md) for details.
+
+## Resizing the panels
+
+![A wider preview panel with the map collapsed, so the table gets the full height](../assets/screenshots/resized-panels-light.png#only-light){ .screenshot loading=lazy }
+![A wider preview panel with the map collapsed, so the table gets the full height](../assets/screenshots/resized-panels-dark.png#only-dark){ .screenshot loading=lazy }
+
+- Drag the line between the builder and the right-hand panel to make either side wider.
+- Drag the line between the map and the tabs to give the map or the table more height.
+- The small **⌃** tab in the middle of that line collapses the map to a thin strip.
+  The toolbar stays visible, so **view**, **limit** and **in view** still work, and the table
+  gets the full height. Click the button again, or drag the line down, to bring the map back.
+- Double-click a dividing line to reset it. You can also focus a line with <kbd>Tab</kbd> and
+  move it with the arrow keys.
+
+The editor remembers the sizes in your browser. On narrow screens the panels stack vertically
+and the dividers are hidden.
 
 ## Keyboard shortcuts
 

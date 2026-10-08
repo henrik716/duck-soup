@@ -78,6 +78,13 @@ export function openStepGalleryModal(onSelect: (type: Step['type']) => void): vo
                 <span class="desc">Perform full overlap analysis, keeping intersecting intersections.</span>
               </div>
             </div>
+            <div class="step-gallery-item" data-type="line_overlay">
+              <div class="step-gallery-icon"><i data-lucide="split"></i></div>
+              <div class="step-gallery-info">
+                <span class="name">Line Overlay</span>
+                <span class="desc">Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network.</span>
+              </div>
+            </div>
             <div class="step-gallery-item" data-type="filter">
               <div class="step-gallery-icon"><i data-lucide="filter"></i></div>
               <div class="step-gallery-info">

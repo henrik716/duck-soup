@@ -42,6 +42,11 @@ Any item can add `cast: <SQL type>` (`INTEGER`, `DOUBLE`, `VARCHAR`, `BOOLEAN`, 
 `TIMESTAMP`, …). It's applied as `TRY_CAST`, so a value that can't be converted becomes NULL
 instead of failing the run.
 
+!!! warning "Dates before 1970 in GeoPackage"
+    GeoPackage output can't store `DATE` values before 1970. Cast older dates to `TIMESTAMP`
+    instead. See [`cast`](../tutorials/mapping.md#cast-set-the-column-type) in the mapping
+    tutorial.
+
 ### `func`
 
 | `func` | Output |
@@ -123,4 +128,4 @@ layers:
 
 Without its own `mapping`, a layer uses the pipeline mapping. In the editor, turn on
 **own column mapping for this layer** on the layer's card. See
-[Preview, validate & run](../editor/preview-and-run.md#per-layer-mapping).
+[Output layers](../editor/output-layers.md#per-layer-mapping).

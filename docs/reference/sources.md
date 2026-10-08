@@ -12,6 +12,18 @@
 | `geometry` | bool | by format | Force the source to be treated as spatial (`true`) or tabular (`false`). |
 | `make_valid` | bool | `true` | Repair invalid geometry with `ST_MakeValid` when loading. |
 
+## Format-specific fields
+
+| Key | Formats | Default | Meaning |
+|---|---|---|---|
+| `header_row` | `csv`, `xlsx` | auto-detect | `true` = first row is headers, `false` = no header row. See [CSV and Excel](#csv-and-excel). |
+| `x_field`, `y_field` | `csv`, `xlsx` | — | Build point geometry from two numeric columns. |
+| `geom_field` | `csv`, `xlsx` | — | Build geometry from a WKT or hex-WKB column. |
+| `where` | `arcgis_rest` | `1=1` | Filter evaluated by the ArcGIS server. See [ArcGIS REST](#arcgis-rest). |
+| `page_size` | `arcgis_rest`, `oapif` | `2000` | Features per request while paging. |
+
+Other formats ignore these keys.
+
 ## Formats at a glance
 
 | `format` | Reads | How |
@@ -127,6 +139,12 @@ as hex EWKB and is parsed automatically.
 duck soup sends `GetFeature` (GML 3.2) with `SRSNAME` set to the source's `crs`, so you get
 coordinates in the CRS you declared, never in silently swapped axes.
 
+- The whole feature type is fetched in **one** `GetFeature` request, with no paging. Many
+  servers cap the number of features per response, so a large layer can come back
+  incomplete. If the service also offers OGC API - Features, use `oapif`, which pages.
+- Extra query parameters on the `uri` (an API key, for example) are kept and sent with the
+  request. duck soup sets `SERVICE`, `VERSION`, `REQUEST`, `TYPENAMES` and `SRSNAME` itself.
+
 ### OGC API - Features
 
 ```yaml
@@ -139,6 +157,8 @@ coordinates in the CRS you declared, never in silently swapped axes.
 
 Always fetched as CRS84 (EPSG:4326), so leave `crs` out or set it to EPSG:4326. Pages through
 `/collections/{layer}/items` until done.
+
+Services that need authentication aren't supported.
 
 ### ArcGIS REST
 
@@ -153,3 +173,6 @@ Always fetched as CRS84 (EPSG:4326), so leave `crs` out or set it to EPSG:4326. 
 
 Always fetched as EPSG:4326. `uri` can be the service root (with `layer` set) **or** the full
 `…/FeatureServer/3` URL (with no `layer`), but not both.
+
+Services that need a login or token aren't supported: requests are sent without
+authentication.

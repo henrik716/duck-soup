@@ -23,6 +23,7 @@ Click **add step** (at the top or bottom of the list) to open the step gallery:
 | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
 | Dissolve | `dissolve` | Merge features that share the same group-by values. |
 | Intersect Overlay | `intersect_overlay` | One row per overlapping pair, with the intersection as geometry. |
+| Line Overlay | `line_overlay` | Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network. |
 | Filter | `filter` | Drop rows where a SQL condition is false. |
 | Merge / Union | `merge` | Append another source's rows, matched by column name. |
 | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
@@ -77,7 +78,7 @@ The step preview is the main tool for debugging a pipeline. A typical loop:
    usually means a CRS problem or the wrong predicate.
 3. Add a `filter` step (`pulled_column IS NOT NULL`) if you only want matched rows, or keep
    them all and split matched/unmatched into separate
-   [output layers](preview-and-run.md#output-layers).
+   [output layers](output-layers.md).
 
 When a step's preview draws a buffer or a nearest-neighbour search radius, the map shows it as
 an overlay so you can check the distance visually.

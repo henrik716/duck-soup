@@ -65,7 +65,7 @@ and reprojected into the pipeline's working CRS. Tabular sources (CSV, Excel, or
 
 `base` names the source whose features flow through the pipeline. **One base feature in = one
 output row out**, unless a step deliberately changes the row count (a `filter`, a `merge`, a
-`dissolve`, a `spatial_join` with `match: all`, an `intersect_overlay`).
+`dissolve`, a `spatial_join` with `match: all`, an `intersect_overlay`, a `line_overlay`).
 
 Every other source is reference data. Steps join it onto the base rows, but it never becomes
 output rows on its own.
@@ -74,7 +74,7 @@ output rows on its own.
 
 Steps run in order. Each step takes the rows produced so far and returns a new set of rows:
 
-- **Joins** add columns: `spatial_join`, `attribute_join`, `nearest_neighbor`, `intersect_overlay`.
+- **Joins** add columns: `spatial_join`, `attribute_join`, `nearest_neighbor`, `intersect_overlay`, `line_overlay`.
 - **Geoprocessing** changes the geometry: `buffer`, `centroid`, `clip`, `erase`, `dissolve`.
 - **Row operations** change which rows exist: `filter`, `merge`.
 - **`snapshot`** names the current state so later steps can refer back to it.
@@ -129,24 +129,6 @@ reprojected into it when read, and each layer is reprojected out of it when writ
 - `lon`, `lat` and `mgrs` are always computed in EPSG:4326 from the centroid, whatever the
   working CRS is.
 
-## How it runs
-
-Under the hood, a pipeline compiles to a chain of DuckDB SQL views:
-
-```mermaid
-flowchart LR
-    A["src_ducks<br/>(read + reproject)"] --> S0[step_0<br/>= base]
-    B["src_ponds"] --> S1
-    S0 --> S1[step_1<br/>spatial_join]
-    S1 --> S2[step_2<br/>filter]
-    S2 --> M[mapped<br/>mapping applied]
-    M --> W["COPY … TO output.gpkg / .parquet"]
-```
-
-DuckDB plans the whole chain as one query, so data streams through without intermediate
-files. Spatial joins use DuckDB's R-tree spatial join, which keeps large point-in-polygon
-joins fast.
-
 ## Branches and derived sources
 
 A pipeline isn't strictly linear. There are two ways to fork it.
@@ -183,3 +165,21 @@ steps:
 
 The [snapshot tutorial](tutorials/steps.md#snapshot) walks through a similar example step by
 step.
+
+## How it runs
+
+Under the hood, a pipeline compiles to a chain of DuckDB SQL views:
+
+```mermaid
+flowchart LR
+    A["src_ducks<br/>(read + reproject)"] --> S0[step_0<br/>= base]
+    B["src_ponds"] --> S1
+    S0 --> S1[step_1<br/>spatial_join]
+    S1 --> S2[step_2<br/>filter]
+    S2 --> M[mapped<br/>mapping applied]
+    M --> W["COPY … TO output.gpkg / .parquet"]
+```
+
+DuckDB plans the whole chain as one query, so data streams through without intermediate
+files. Spatial joins use DuckDB's R-tree spatial join, which keeps large point-in-polygon
+joins fast.

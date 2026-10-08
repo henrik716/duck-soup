@@ -1,0 +1,93 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Riverside Walk"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0,
+      51.4565773
+     ],
+     [
+      3.0043178,
+      51.4559837
+     ],
+     [
+      3.0086355,
+      51.4553901
+     ],
+     [
+      3.0143923,
+      51.4545982
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Mill Lane"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.004318,
+      51.4583756
+     ],
+     [
+      3.0043178,
+      51.4559837
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Reed Way"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0,
+      51.4553184
+     ],
+     [
+      3.0071961,
+      51.4543291
+     ],
+     [
+      3.0143919,
+      51.4533394
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Waddle Bridge"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      3.0086355,
+      51.4553901
+     ],
+     [
+      3.0086353,
+      51.4541312
+     ]
+    ]
+   }
+  }
+ ]
+}

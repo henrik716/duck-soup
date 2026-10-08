@@ -22,7 +22,8 @@ duck_soup/
   engine.py      builds the src_<id> → step_N → mapped view chain and writes the output
   derive.py      DuckDB bootstrap (extensions) + Python UDFs (to_mgrs)
   sql_util.py    identifier / literal quoting
-  cli.py         check / run / serve
+  cli.py         check / run / serve / tutorial
+  tutorial.py    copies the bundled tutorial (tutorial/) into a project folder
   web/
     app.py       FastAPI backend (/api/inspect, /api/preview, /api/run, …)
     ui/          TypeScript + Vite + MapLibre editor source
@@ -80,6 +81,11 @@ python scripts/build_tutorial.py
 
 ## CI
 
-`.github/workflows/ci.yml` runs `pytest` and the frontend build on every push and PR, and on
-`v*` tags publishes the Docker image to `ghcr.io/henrik716/duck-soup`.
+`.github/workflows/ci.yml` runs `pytest` and the frontend build on every push and PR. On
+`v*` tags it also publishes the package to PyPI (`duck-soup-etl`) and the Docker image to
+`ghcr.io/henrik716/duck-soup`.
+
+To release: bump `version` in `pyproject.toml`, commit and push, then push a matching tag
+(`git tag v0.1.15 && git push origin v0.1.15`). PyPI rejects a version that's already been
+published.
 `.github/workflows/docs.yml` builds this site and deploys it.

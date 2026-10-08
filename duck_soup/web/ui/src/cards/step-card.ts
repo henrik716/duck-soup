@@ -1,6 +1,6 @@
 import {
   createIcons, MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser,
-  Layers, GitMerge, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
+  Layers, GitMerge, Split, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
   Filter as FilterIcon, Combine, Camera, GripVertical,
 } from 'lucide'
 import { mkEl, esc, wireCollapse } from '../dom'
@@ -10,7 +10,7 @@ import { mutate } from '../history'
 import { collectPipelineDef } from './pipeline-card'
 import { resolveSchemaScoped, collectAvailableColumnsScoped } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, Dissolve, Config } from '../types'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, Config } from '../types'
 
 // ---- step card ----
 const STEP_ICONS: Record<string, string> = {
@@ -23,6 +23,7 @@ const STEP_ICONS: Record<string, string> = {
   erase: 'eraser',
   dissolve: 'layers',
   intersect_overlay: 'git-merge',
+  line_overlay: 'split',
   filter: 'filter',
   merge: 'combine',
   snapshot: 'camera',
@@ -38,6 +39,7 @@ const STEP_LABELS: Record<string, string> = {
   erase: 'erase',
   dissolve: 'dissolve',
   intersect_overlay: 'intersect overlay',
+  line_overlay: 'line overlay',
   filter: 'filter',
   merge: 'merge',
   snapshot: 'snapshot',
@@ -53,14 +55,15 @@ const STEP_HINTS: Record<string, string> = {
   erase: 'Removes the overlap with a mask source from base feature geometry. Non-overlapping features are kept unchanged. Both sources must be spatial.',
   dissolve: 'Merges features that share the same group-by column values, combining their geometries via union. All columns not in the group-by list are dropped.',
   intersect_overlay: 'Produces one output row per intersecting (base × source) pair with the intersection as geometry. Row count may increase significantly. Both sources must be spatial.',
+  line_overlay: 'Cuts the lines where they lie on top of the source lines. Shared stretches get the source fields; every other piece is kept with empty fields, so the complete network flows on to the next step. Chain one per overlay dataset.',
   filter: 'Drops rows where this SQL condition is false — e.g. reject rows a prior join left unmatched.',
   merge: 'Appends rows from another source (matched by column name; non-overlapping columns become NULL). Row count adds rather than multiplies.',
   snapshot: 'Names this step\'s current state so a later step can join back against it — fork mid-pipeline (after some processing), not just from a raw source.',
 }
 
-const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'merge']
+const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge']
 const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
-const KINDS_WITH_FIELDS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay']
+const KINDS_WITH_FIELDS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay']
 
 function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: string[]): string {
   const hasSrc = KINDS_WITH_SOURCE.includes(kind)
@@ -111,6 +114,12 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
       <label class="field grow">max distance (optional, CRS units)<input data-k="max_distance" type="number" step="any" placeholder="unbounded"></label>
       <label class="field grow">distance field (optional)<input data-k="distance_field" placeholder="distance_m"></label>
     </div>`
+  }
+  if (kind === 'line_overlay') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow">tolerance (optional, CRS units)<input data-k="tolerance" type="number" step="any" min="0" placeholder="none — lines must match exactly"></label>
+    </div>`
+    bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['line_overlay']}</p>`
   }
   if (kind === 'buffer') {
     bodyHtml += `<div class="row" style="margin-top:8px">
@@ -217,7 +226,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   }
   // hydrate pulled fields
   if (hasFields) {
-    Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
+    Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay | LineOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
     updateFieldsEmpty()
   }
   // hydrate dissolve by-cols
@@ -243,7 +252,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
   c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
 
-  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical } })
+  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical } })
   return c
 }
 

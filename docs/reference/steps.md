@@ -8,20 +8,21 @@ base source, for the first step). Every step type accepts an optional
     [Steps by example](../tutorials/steps.md) runs every step type on a small sample town, with
     before/after diagrams and the actual output.
 
-| `type` | Row count | Changes geometry | Adds columns |
-|---|---|---|---|
-| [`spatial_join`](#spatial_join) | same (`match: all`: may grow) | – | ✓ |
-| [`attribute_join`](#attribute_join) | same | – | ✓ |
-| [`nearest_neighbor`](#nearest_neighbor) | same | – | ✓ |
-| [`buffer`](#buffer) | same | ✓ | – |
-| [`centroid`](#centroid) | same | ✓ | – |
-| [`clip`](#clip) | may shrink | ✓ | – |
-| [`erase`](#erase) | may shrink | ✓ | – |
-| [`dissolve`](#dissolve) | shrinks | ✓ | drops all but `by` |
-| [`intersect_overlay`](#intersect_overlay) | may grow or shrink | ✓ | ✓ |
-| [`filter`](#filter) | may shrink | – | – |
-| [`merge`](#merge) | grows | – | ✓ (union of columns) |
-| [`snapshot`](#snapshot) | – | – | – |
+| Group | `type` | Row count | Changes geometry | Adds columns |
+|---|---|---|---|---|
+| Joins | [`spatial_join`](#spatial_join) | same (`match: all`: may grow) | – | ✓ |
+| | [`attribute_join`](#attribute_join) | same | – | ✓ |
+| | [`nearest_neighbor`](#nearest_neighbor) | same | – | ✓ |
+| | [`intersect_overlay`](#intersect_overlay) | may grow or shrink | ✓ | ✓ |
+| | [`line_overlay`](#line_overlay) | grows | ✓ | ✓ |
+| Geometry | [`buffer`](#buffer) | same | ✓ | – |
+| | [`centroid`](#centroid) | same | ✓ | – |
+| | [`clip`](#clip) | may shrink | ✓ | – |
+| | [`erase`](#erase) | may shrink | ✓ | – |
+| | [`dissolve`](#dissolve) | shrinks | ✓ | drops all but `by` |
+| Rows | [`filter`](#filter) | may shrink | – | – |
+| | [`merge`](#merge) | grows | – | ✓ (union of columns) |
+| | [`snapshot`](#snapshot) | – | – | – |
 
 `fields` on join steps is always a map of **`output_name: source_column`**.
 
@@ -93,6 +94,51 @@ slow on big inputs. Set a sensible radius when you can: it lets DuckDB use its s
 Features with nothing in range get NULL fields. Needs a projected working CRS when
 `max_distance` or `distance_field` is set.
 
+## `intersect_overlay`
+
+One output row per overlapping (base × source) pair, with the intersection as the geometry.
+
+```yaml
+- type: intersect_overlay
+  source: feeding_zones
+  fields: {zone: name}
+```
+
+Base features that overlap nothing are dropped, and pairs that only touch are ignored. Row
+count can grow a lot when there are many overlaps.
+
+## `line_overlay`
+
+Line-on-line overlay, like FME's LineOnLineOverlayer. The running lines are cut where they lie
+on top of the `source` lines: the shared stretches get `fields` from the source, and every
+other piece is kept with those fields NULL. The output is still the complete network, so one
+`line_overlay` per dataset can be chained to collect attributes from several line layers.
+
+```yaml
+- type: line_overlay
+  source: speed_limits
+  fields: {speed: limit_kmh}
+- type: line_overlay
+  source: surfaces
+  fields: {surface: surface_type}
+  tolerance: 0.05    # optional, working-CRS units
+```
+
+Each piece becomes its own feature: a line covered in the middle comes out as three lines,
+not one multi-line. Neighbouring pieces share their end points exactly, and the geometry stays
+the running line's own; the source lines only decide where the cuts go and which attributes a
+piece gets. Lines that only cross a source line are not cut there. Where several source lines
+lie on the same stretch, the first one (in source order) wins. Source lines with no running
+line under them are not added.
+
+`tolerance` is how far apart two lines may be and still count as lying on each other. Lines
+that look identical rarely are: one dataset was digitised separately, has vertices the other
+lacks, or went through a reprojection, and they differ by millimetres. Without a `tolerance`
+they must match to within 0.000001 units, so those lines get no source fields, except for a
+few centimetres where they cross each other. Set it just above the expected difference, e.g.
+`0.05` for data in metres. A cut can land up to the tolerance away from where the source line
+ends.
+
 ## `buffer`
 
 ```yaml
@@ -146,19 +192,6 @@ Merges geometries that share the same values in the `by` columns.
 ```
 
 **Every column not listed in `by` is dropped.**
-
-## `intersect_overlay`
-
-One output row per overlapping (base × source) pair, with the intersection as the geometry.
-
-```yaml
-- type: intersect_overlay
-  source: feeding_zones
-  fields: {zone: name}
-```
-
-Base features that overlap nothing are dropped, and pairs that only touch are ignored. Row
-count can grow a lot when there are many overlaps.
 
 ## `filter`
 

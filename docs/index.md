@@ -86,6 +86,9 @@ pipelines:
 duck-soup run ducks_by_pond.yaml
 ```
 
+The file paths above are illustrative. The [Quickstart](getting-started/quickstart.md) has a
+version you can run as-is on the sample data that ships with duck soup.
+
 In the editor, the same pipeline is a handful of cards (sources, steps, a mapping grid,
 output layers) next to a live map and table of the result. Here it is with a larger example
 loaded:
@@ -99,6 +102,9 @@ loaded:
 |---|---|
 | Install duck soup and run your first pipeline | [Install](getting-started/install.md), [Quickstart](getting-started/quickstart.md) |
 | Understand sources, base, steps, mapping and layers | [Core concepts](concepts.md) |
+| See every step and mapping option run on sample data | [Tutorials](tutorials/index.md) |
 | Build pipelines by clicking rather than typing | [Web editor](editor/overview.md) |
-| Look up every YAML option | [Reference](reference/yaml.md) |
+| Translate an FME workspace | [Coming from FME](guides/fme.md) |
+| Run pipelines on a schedule | [Scheduling runs](scheduling.md) |
 | Fix something that went wrong | [Troubleshooting](troubleshooting.md) |
+| Look up every YAML option | [Reference](reference/yaml.md) |

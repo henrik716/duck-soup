@@ -90,6 +90,31 @@ STOPS = [
     ("Paddle Boat Pier", "P", 980, 330),
 ]
 
+# Footpaths: the whole network. name, vertices.
+PATHS = [
+    ("Riverside Walk", [(0, 600), (300, 534), (600, 468), (1000, 380)]),
+    ("Mill Lane", [(300, 800), (300, 534)]),
+    ("Reed Way", [(0, 460), (500, 350), (1000, 240)]),
+    ("Waddle Bridge", [(600, 468), (600, 328)]),
+]
+
+# The lamp register and the boardwalk survey were digitised separately from the footpaths, so
+# their lines lie a few centimetres off the paths (DX, DY below), and start and end in the
+# middle of a path segment rather than on its vertices.
+LIT_PATHS = [
+    ("LED", [(150, 567), (300, 534), (600, 468), (750, 435)]),
+    ("gas", [(300, 800), (300, 534)]),
+    ("LED", [(0, 460), (250, 405)]),
+]
+LIT_OFFSET = (0.03, -0.02)
+
+BOARDWALKS = [
+    ("oak", [(450, 501), (600, 468), (650, 457)]),
+    ("oak", [(600, 468), (600, 328)]),
+    ("recycled plastic", [(800, 284), (1000, 240)]),
+]
+BOARDWALK_OFFSET = (-0.02, 0.04)
+
 NEW_PLACES = [
     ("Harbour Fish Market", "MKT", 950, 600),
     ("Pop-up Duck Gallery", "MUS", 560, 120),
@@ -132,6 +157,11 @@ def _point(con, x, y):
     return {"type": "Point", "coordinates": _to_lonlat(con, x, y)}
 
 
+def _line(con, pts, offset=(0, 0)):
+    dx, dy = offset
+    return {"type": "LineString", "coordinates": [_to_lonlat(con, x + dx, y + dy) for x, y in pts]}
+
+
 def write_data() -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     con = _con()
@@ -164,6 +194,18 @@ def write_data() -> None:
         {"type": "Feature", "properties": {"name": n, "category": c}, "geometry": _point(con, x, y)}
         for n, c, x, y in NEW_PLACES
     ])
+    dump("paths", [
+        {"type": "Feature", "properties": {"name": n}, "geometry": _line(con, pts)}
+        for n, pts in PATHS
+    ])
+    dump("lit_paths", [
+        {"type": "Feature", "properties": {"lamps": k}, "geometry": _line(con, pts, LIT_OFFSET)}
+        for k, pts in LIT_PATHS
+    ])
+    dump("boardwalks", [
+        {"type": "Feature", "properties": {"material": m}, "geometry": _line(con, pts, BOARDWALK_OFFSET)}
+        for m, pts in BOARDWALKS
+    ])
     with open(DATA / "categories.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["code", "label"])
@@ -177,6 +219,9 @@ SOURCES = [
     {"id": "river", "format": "geojson", "uri": f"{DATA_REL}/river.geojson", "crs": "EPSG:4326"},
     {"id": "stops", "format": "geojson", "uri": f"{DATA_REL}/stops.geojson", "crs": "EPSG:4326"},
     {"id": "new_places", "format": "geojson", "uri": f"{DATA_REL}/new_places.geojson", "crs": "EPSG:4326"},
+    {"id": "paths", "format": "geojson", "uri": f"{DATA_REL}/paths.geojson", "crs": "EPSG:4326"},
+    {"id": "lit_paths", "format": "geojson", "uri": f"{DATA_REL}/lit_paths.geojson", "crs": "EPSG:4326"},
+    {"id": "boardwalks", "format": "geojson", "uri": f"{DATA_REL}/boardwalks.geojson", "crs": "EPSG:4326"},
     {"id": "categories", "format": "csv", "uri": f"{DATA_REL}/categories.csv"},
 ]
 
@@ -301,6 +346,23 @@ EXAMPLES: dict[str, dict] = {
         "figure": {
             "before": [("SELECT geom FROM districts", "ref"), ("SELECT geom FROM parks", "base")],
             "after": [BG_DISTRICTS, ("SELECT geom FROM out", "out")],
+        },
+    },
+    "line_overlay": {
+        "pipeline": {"base": "paths", "steps": [
+            {"type": "line_overlay", "source": "lit_paths", "fields": {"lamps": "lamps"}, "tolerance": 0.1},
+            {"type": "line_overlay", "source": "boardwalks", "fields": {"material": "material"}, "tolerance": 0.1},
+        ]},
+        "table": [("name", "name"), ("lamps", "lamps"), ("material", "material"),
+                  ("length_m", "round(ST_Length(geom), 1)")],
+        "order": "name, ST_XMin(geom), ST_YMin(geom) DESC",
+        "figure": {
+            "before": [BG_DISTRICTS, ("SELECT geom FROM lit_paths", "lit"),
+                       ("SELECT geom FROM paths", "path"), ("SELECT geom FROM boardwalks", "board")],
+            "after": [BG_DISTRICTS, ("SELECT geom FROM out WHERE lamps IS NOT NULL", "lit"),
+                      ("SELECT geom FROM out", "path"),
+                      ("SELECT geom FROM out WHERE material IS NOT NULL", "board"),
+                      ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
         },
     },
     "filter": {
@@ -565,7 +627,7 @@ def _svg_from_geojson(gj, cls, ox) -> list[str]:
     t = gj["type"]
     if t == "Point":
         x, y = _xy(*gj["coordinates"], ox)
-        r = 3.2 if cls in ("ghostpt",) else 4.2
+        r = 2.2 if cls == "cut" else 3.2 if cls in ("ghostpt",) else 4.2
         return [f'<circle class="{cls}" cx="{x:.1f}" cy="{y:.1f}" r="{r}"/>']
     if t in ("LineString",):
         pts = " ".join(f"{a:.1f},{b:.1f}" for a, b in (_xy(*c, ox) for c in gj["coordinates"]))
@@ -685,7 +747,8 @@ def main() -> None:
         # Overview map of the sample data for the tutorial landing page.
         overview = {
             "before": [("SELECT geom FROM districts", "ref"), ("SELECT geom FROM river", "water"),
-                       ("SELECT geom FROM parks", "park"), ("SELECT geom FROM stops", "stop"),
+                       ("SELECT geom FROM parks", "park"), ("SELECT geom FROM paths", "trail"),
+                       ("SELECT geom FROM stops", "stop"),
                        ("SELECT geom FROM places", "base"), ("SELECT geom FROM new_places", "ghostpt")],
             "labels": {"before": "SELECT district_name, ST_Translate(ST_Centroid(geom), 0, "
                                  "CASE WHEN ward = 'Upstream' THEN 150 ELSE -165 END) FROM districts"},

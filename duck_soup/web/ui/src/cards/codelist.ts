@@ -102,7 +102,7 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, available
   fileBtn.onclick = () => { setMode('file'); syncFn() }
 
   panel.querySelector('.cl-browse-btn')!.addEventListener('click', () =>
-    openFileExplorer(panel.querySelector<HTMLInputElement>('[data-cl-file]')!))
+    openFileExplorer(panel.querySelector<HTMLInputElement>('[data-cl-file]')!, { exts: ['csv'], title: 'select code list CSV' }))
 
   panel.querySelectorAll('input,[data-cl-ci]').forEach(i => i.addEventListener('input', syncFn))
 

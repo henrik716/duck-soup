@@ -78,24 +78,27 @@ nav:
       - Install: getting-started/install.md
       - Quickstart: getting-started/quickstart.md
       - Core concepts: concepts.md
+  - Tutorials:
+      - The sample town: tutorials/index.md
+      - Steps by example: tutorials/steps.md
+      - Mapping by example: tutorials/mapping.md
   - Web editor:
       - Tour of the editor: editor/overview.md
       - Sources: editor/sources.md
       - Steps: editor/steps.md
       - Mapping: editor/mapping.md
+      - Output layers: editor/output-layers.md
       - Preview, validate & run: editor/preview-and-run.md
-  - Tutorials:
-      - The sample town: tutorials/index.md
-      - Steps by example: tutorials/steps.md
-      - Mapping by example: tutorials/mapping.md
-  - Scheduling: scheduling.md
+  - Guides:
+      - Coming from FME: guides/fme.md
+      - Scheduling runs: scheduling.md
+      - Troubleshooting: troubleshooting.md
   - Reference:
       - Pipeline YAML: reference/yaml.md
       - Source formats: reference/sources.md
       - Step types: reference/steps.md
       - Mapping & codelists: reference/mapping.md
       - Command line: reference/cli.md
-  - Troubleshooting: troubleshooting.md
   - Development: development.md
 
 # Generated tables/snippets for the tutorials: included into pages, not pages themselves.

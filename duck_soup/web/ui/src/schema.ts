@@ -112,6 +112,30 @@ export function collectAvailableColumnsScoped(scope: Element): Set<string> {
   return cols
 }
 
+// One row of the mapping tab's field pool: click to append a `from` mapping for it.
+function poolField(scope: Element, c: AvailableColumnDetail, plId: string): HTMLElement {
+  const el = mkEl('button', { className: 'pool-field' })
+  el.type = 'button'
+  el.title = c.type ? `${c.name} (${c.type}) — click to map` : `${c.name} — click to map`
+  el.innerHTML = `<i data-lucide="plus"></i><span class="pool-field-name">${esc(c.name)}</span>${c.type ? `<span class="pool-field-type">${esc(c.type)}</span>` : ''}`
+  el.addEventListener('click', () => {
+    const mappingEl = scope.querySelector('.pl-mapping')!
+    const mappedTo = new Set([...mappingEl.querySelectorAll('.map-item')]
+      .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
+
+    if (!mappedTo.has(c.name)) {
+      const syncCallback = (scope as any)._scopedSync || (() => {})
+      mappingEl.appendChild(mapRow({ to: c.name, from: c.name }, syncCallback, plId))
+      refreshIcons()
+      syncCallback()
+      showToast(`Mapped ${c.name}`, 'ok')
+    } else {
+      showToast(`${c.name} is already mapped`, 'info')
+    }
+  })
+  return el
+}
+
 export interface AvailableColumnDetail { name: string; type: string; origin: string }
 
 // Same column set as collectAvailableColumnsScoped, but resolved with type (for base-source
@@ -158,7 +182,8 @@ export function updateDatalistsScoped(scope: Element): void {
   container.innerHTML = html
 
   // Build rich ComboOptionDef list for mapping columns
-  const availableOptions: ComboOptionDef[] = collectAvailableColumnDetailsScoped(scope).map(c => {
+  const details = collectAvailableColumnDetailsScoped(scope)
+  const availableOptions: ComboOptionDef[] = details.map(c => {
     if (c.origin === 'base') {
       return {
         value: c.name,
@@ -171,54 +196,24 @@ export function updateDatalistsScoped(scope: Element): void {
     }
   })
 
-  // Render fields in the side visual schema mapper panel
+  // Render fields in the side visual schema mapper panel, grouped by where each column comes
+  // from (base, step 1, …) so the origin is a group heading rather than a tag repeated on, and
+  // crowding, every row.
   const fieldsListEl = scope.querySelector('.pl-available-fields-list')
   if (fieldsListEl) {
     fieldsListEl.innerHTML = ''
-    availableOptions.forEach(opt => {
-      const fieldEl = mkEl('div', { className: 'available-field-badge' })
-      fieldEl.style.cssText = 'padding: 6px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 11px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; user-select: none;'
+    const groups = new Map<string, AvailableColumnDetail[]>()
+    for (const c of details) {
+      if (!groups.has(c.origin)) groups.set(c.origin, [])
+      groups.get(c.origin)!.push(c)
+    }
+    for (const [origin, cols] of groups) {
+      fieldsListEl.appendChild(mkEl('div', { className: 'pool-group-head', textContent: origin === 'base' ? 'base' : origin.replace(/^(step \d+) \((.*)\)$/, '$1 · $2') }))
+      for (const c of cols) fieldsListEl.appendChild(poolField(scope, c, plId))
+    }
 
-      fieldEl.innerHTML = `
-        <span style="display: flex; align-items: center; gap: 6px; font-weight: 500;">
-          <i data-lucide="plus" style="width: 11px; height: 11px; color: var(--muted); opacity: 0.7; transition: color 0.2s;"></i>
-          <span style="font-family: var(--mono); color: var(--ink);">${esc(opt.value)}</span>
-        </span>
-        ${opt.label ? opt.label.substring(opt.label.indexOf('<span data-tag')) : ''}
-      `
-
-      fieldEl.addEventListener('mouseenter', () => {
-        fieldEl.style.borderColor = 'var(--accent)'
-        fieldEl.style.background = 'var(--accent-soft)'
-        const icon = fieldEl.querySelector('i')
-        if (icon) icon.style.color = 'var(--accent)'
-      })
-      fieldEl.addEventListener('mouseleave', () => {
-        fieldEl.style.borderColor = 'var(--line)'
-        fieldEl.style.background = 'var(--panel)'
-        const icon = fieldEl.querySelector('i')
-        if (icon) icon.style.color = 'var(--muted)'
-      })
-      fieldEl.addEventListener('click', () => {
-        const mappingEl = scope.querySelector('.pl-mapping')!
-        const mappedTo = new Set([...mappingEl.querySelectorAll('.map-item')]
-          .map(w => w.querySelector<HTMLInputElement>('[data-to]')?.value.trim() || '').filter(Boolean))
-
-        if (!mappedTo.has(opt.value)) {
-          const syncCallback = (scope as any)._scopedSync || (() => {})
-          mappingEl.appendChild(mapRow({ to: opt.value, from: opt.value }, syncCallback, plId))
-          refreshIcons()
-          syncCallback()
-          showToast(`Mapped ${opt.value}`, 'ok')
-        } else {
-          showToast(`${opt.value} is already mapped`, 'info')
-        }
-      })
-      fieldsListEl.appendChild(fieldEl)
-    })
-
-    if (availableOptions.length === 0) {
-      fieldsListEl.innerHTML = '<div style="color:var(--muted); font-size: 11px; padding: 12px 4px; text-align: center;">No fields available. Set base source first.</div>'
+    if (details.length === 0) {
+      fieldsListEl.innerHTML = '<div class="pool-empty">No fields available. Set base source first.</div>'
     } else {
       createIcons({ icons: { Plus } })
     }
