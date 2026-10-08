@@ -39,7 +39,7 @@ SPATIAL_FORMATS = {
 JOIN_PREDICATES = ["intersects", "contains", "within"]
 
 # Mapping value functions computed by the engine.
-MAP_FUNCS = ["uuid", "now", "today", "lon", "lat", "mgrs", "wkb", "area", "length"]
+MAP_FUNCS = ["uuid", "now", "today", "lat", "lon", "mgrs", "wkb", "area", "length"]
 
 CASE_MATCH_TYPES = ["match", "like", "regex"]
 
