@@ -230,19 +230,24 @@ class Engine:
         # counts() sets this so steps become tables, each computed once (see _emit).
         self._materialize = False
 
-    def _emit(self, con: duckdb.DuckDBPyConnection | None, view: str, select: str, kind: str, **meta) -> None:
+    def _emit(
+        self, con: duckdb.DuckDBPyConnection | None, view: str, select: str, kind: str,
+        table: bool = False, **meta,
+    ) -> None:
         """CREATE `view` AS `select` and record it in self.plan.
 
         Steps are TEMP VIEWs, so DuckDB plans the whole chain as one query, except in runs
         and while counting rows (counts()), where they're TEMP TABLEs: writing N layers or
         counting N views would compute the chain up to each of them again, N times in total.
-        Source views always stay views, since a table would read every source in full. Without a connection (plan()) the
-        view is only recorded.
+        `table` makes a TEMP TABLE regardless (a snapshot read again later, see
+        _build_step_views). Source views always stay views, since a table would read every
+        source in full. Without a connection (plan()) the view is only recorded.
         """
         self.plan.append({"kind": kind, "view": view, "sql": textwrap.dedent(select).strip(), **meta})
         if con is None:
             return
-        obj = "TABLE" if self._materialize and kind not in ("source", "derived", "branch") else "VIEW"
+        steps_as_tables = self._materialize and kind not in ("source", "derived", "branch")
+        obj = "TABLE" if table or steps_as_tables else "VIEW"
         con.execute(f"CREATE OR REPLACE TEMP {obj} {_ident(view)} AS {select}")
 
     # -- source views -------------------------------------------------------
@@ -770,6 +775,11 @@ class Engine:
         )
         self.reject_views[i] = rejects
 
+    def _snapshot_used(self, sid: str, idx: int, limit_steps: int | None) -> bool:
+        """Whether a step after step `idx` (up to `limit_steps`) reads snapshot `sid`."""
+        later = self.p.steps[idx:limit_steps]
+        return any(getattr(s, "source", None) == sid or s.branch == sid for s in later)
+
     def _build_step_views(self, con: duckdb.DuckDBPyConnection | None, prev: str, limit_steps: int | None = None) -> str:
         """Build the step views; returns the main chain's final view.
 
@@ -787,6 +797,21 @@ class Engine:
                 # `branch` here means "snapshot from this branch", not
                 # "operate on this branch" — no new view needed, just an alias.
                 source_branch = step.branch or self._MAIN_BRANCH
+                if not self._materialize and self._snapshot_used(step.id, i, limit_steps):
+                    # ...except when a later step reads the snapshot: the chain so far is then
+                    # read twice (by the branch it was taken from, and through the snapshot),
+                    # and as a view, computed twice, doubling with every snapshot used this
+                    # way. Stored once as a table, both read that. Nothing is lost: a step that
+                    # reads a snapshot needs all of its rows, so a preview's LIMIT couldn't cut
+                    # it short anyway. (Runs and counts() store every step already.)
+                    view = f"step_{i}"
+                    self._emit(
+                        con, view, f"SELECT * FROM {_ident(chains[source_branch])}", "step",
+                        table=True, step=i,
+                        title=f"step {i}: snapshot '{step.id}' (stored once, read again later)",
+                    )
+                    chains[source_branch] = view
+                    self._sync_branch_view(con, chains, source_branch, i)
                 chains[step.id] = chains[source_branch]
                 self._sync_branch_view(con, chains, step.id, i)
                 self.step_views[i] = chains[step.id]

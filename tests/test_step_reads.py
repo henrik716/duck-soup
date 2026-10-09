@@ -86,3 +86,47 @@ def test_run_reads_each_source_once_for_every_layer(tmp_path, reads):
     pipeline = _pipeline(tmp_path, "spatial_join_rejects", n_steps=2, n_layers=2)
     Engine(pipeline).run()
     assert reads == {"base": 1, "s0": 1, "s1": 1}
+
+
+# A step that reads a snapshot reads the chain up to it a second time (see
+# Engine._build_step_views); each pattern is repeated, so a doubling would compound.
+_SNAPSHOT_PATTERNS = {
+    "join_snapshot": lambda i: [
+        {"type": "snapshot", "id": f"snap{i}"},
+        {"type": "spatial_join", "source": f"snap{i}", "fields": {f"f{i}": "name"}},
+    ],
+    "merge_snapshot": lambda i: [
+        {"type": "snapshot", "id": f"snap{i}"},
+        {"type": "merge", "source": f"snap{i}"},
+    ],
+    "branch_then_join_back": lambda i: [
+        {"type": "snapshot", "id": f"snap{i}"},
+        {"type": "buffer", "distance": 1, "branch": f"snap{i}"},
+        {"type": "spatial_join", "source": f"snap{i}", "fields": {f"f{i}": "name"}},
+    ],
+}
+
+
+def _snapshot_pipeline(tmp_path, steps):
+    cfg = Config.model_validate({"name": "t", "output": str(tmp_path / "out.gpkg"), "pipelines": [{
+        "name": "t", "working_crs": "EPSG:25833", "base": "base", "steps": steps,
+        "sources": [{"id": "base", "format": "geojson", "uri": "unused.geojson", "crs": "EPSG:25833"}],
+        "mapping": [{"to": "name", "from": "name"}], "layers": [{"layer": "out"}],
+    }]})
+    return cfg.pipelines[0].to_pipeline(cfg.output)
+
+
+@pytest.mark.parametrize("pattern", _SNAPSHOT_PATTERNS)
+def test_snapshots_read_again_later_are_computed_once(tmp_path, reads, pattern):
+    steps = [s for i in range(3) for s in _SNAPSHOT_PATTERNS[pattern](i)]
+    Engine(_snapshot_pipeline(tmp_path, steps)).preview()
+    assert reads == {"base": 1}
+
+
+def test_snapshot_nothing_reads_stays_a_view(tmp_path, reads):
+    # Stored as a table only when read again: otherwise the preview's LIMIT can still cut
+    # the chain short.
+    steps = [{"type": "snapshot", "id": "snap"}, {"type": "buffer", "distance": 1}]
+    engine = Engine(_snapshot_pipeline(tmp_path, steps))
+    engine.preview()
+    assert [e["view"] for e in engine.plan if e["kind"] == "step"] == ["step_2"]
