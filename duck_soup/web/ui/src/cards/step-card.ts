@@ -89,7 +89,9 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
 
   let bodyHtml = ''
   if (hasSrc) {
-    bodyHtml += `<div class="row" style="margin-top:8px">
+    // Top-aligned for attribute_join: left/right carry a validation line under their input,
+    // which would lift them above the source field in a bottom-aligned row.
+    bodyHtml += `<div class="row" style="margin-top:8px${kind === 'attribute_join' ? ';align-items:flex-start' : ''}">
       <label class="field grow">source${comboField('data-k="source"', '', sourceIds, '', 'No sources defined yet — add one above')}</label>
       ${hasPredicate ? `<label class="field grow">predicate${comboField('data-k="predicate"', predicateVal, META.predicates)}</label>` : ''}
       ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', matchVal, ['first', 'all'], 'first')}</label>
@@ -98,9 +100,9 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
           { value: 'largest_overlap', label: '<span style="font-family:var(--mono);font-weight:600;">largest_overlap</span> <span data-tag style="font-size:10px;color:var(--muted);">biggest intersection area</span>' },
         ], 'first')}</label>` : ''}
       ${kind === 'attribute_join' ? `
-        <label class="field grow">left (upstream column or SQL literal)${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}
+        <label class="field grow" title="A column on the running row, or a SQL literal such as 'Embassies'">left column${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}
           <div class="expr-validation-msg" data-left-validation></div></label>
-        <label class="field grow">right (column on the join source)${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}
+        <label class="field grow" title="The column on the join source to match against">right column${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}
           <div class="expr-validation-msg" aria-hidden="true"></div></label>` : ''}
     </div>`
     if (kind === 'merge') {
