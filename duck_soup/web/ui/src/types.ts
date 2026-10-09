@@ -233,6 +233,8 @@ export interface InspectResponse {
   // _pending_response in web/app.py): show `progress` and ask again shortly.
   pending?: boolean
   progress?: SourceProgress
+  // Every pending source, each with its `source` id (progress is the first of them).
+  pending_sources?: SourceProgress[]
   columns?: InspectColumn[]
   // A sanity-check hint when the declared crs looks inconsistent with the sampled
   // coordinate magnitudes (e.g. EPSG:4326 but values are clearly meters) — see
@@ -253,6 +255,8 @@ export interface InspectFileResponse {
   // _pending_response in web/app.py): show `progress` and ask again shortly.
   pending?: boolean
   progress?: SourceProgress
+  // Every pending source, each with its `source` id (progress is the first of them).
+  pending_sources?: SourceProgress[]
   layers?: (string | { value: string; label?: string })[]
   default_crs?: string
   // Present whenever ok is false — /api/inspect_file never raises, it reports.
@@ -276,6 +280,8 @@ export interface PreviewResponse {
   // _pending_response in web/app.py): show `progress` and ask again shortly.
   pending?: boolean
   progress?: SourceProgress
+  // Every pending source, each with its `source` id (progress is the first of them).
+  pending_sources?: SourceProgress[]
   rows?: PreviewRow[]
   error?: string
 }
@@ -322,6 +328,8 @@ export interface CountsResponse {
   // _pending_response in web/app.py): show `progress` and ask again shortly.
   pending?: boolean
   progress?: SourceProgress
+  // Every pending source, each with its `source` id (progress is the first of them).
+  pending_sources?: SourceProgress[]
   limit?: number | null
   base?: number
   steps?: Record<string, number>

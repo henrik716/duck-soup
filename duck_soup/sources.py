@@ -104,7 +104,17 @@ _OAPIF_CACHE_TTL = 20.0  # seconds
 # editor's Run) downloads fresh instead, see fresh_downloads, so its output reflects the
 # current data.
 _REMOTE_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_remote_cache"
-_REMOTE_CACHE_LOCK = threading.Lock()
+
+# One lock per URL: two reads of the same URL share one download (the second waits for the
+# first, then finds it), while different URLs download in parallel. A single lock for all of
+# them made every other download queue behind the slowest, even an abandoned one.
+_URL_LOCKS: dict[str, threading.Lock] = {}
+_URL_LOCKS_GUARD = threading.Lock()
+
+
+def _url_lock(uri: str) -> threading.Lock:
+    with _URL_LOCKS_GUARD:
+        return _URL_LOCKS.setdefault(uri, threading.Lock())
 
 # How old a superseded download (or its Parquet copy) must be before it's deleted. Every
 # read looks up the newest download, but a query already running against an older one (a
@@ -216,8 +226,8 @@ def latest_download(uri: str, fmt: str) -> Path | None:
 
 
 def download_time(path: Path) -> float:
-    """When a download (a latest_download path) was made, as a Unix timestamp."""
-    return int(Path(path).parent.name) / 1e9
+    """When a download (a latest_download path) finished, as a Unix timestamp."""
+    return Path(path).stat().st_mtime
 
 
 def fetch_remote_file(
@@ -228,9 +238,14 @@ def fetch_remote_file(
     fresh: bool = False,
 ) -> str:
     """Download a remote file source to a local cache file (see _REMOTE_CACHE_DIR) and return
-    its path, or the newest earlier download of it unless `fresh` or inside fresh_downloads(). The file keeps the URL's own name, since GDAL derives a csv/geojson layer name
-    from it and picks drivers from compound suffixes like `.gdb.zip`; a name without an
-    extension gets the format's (`fmt`).
+    its path, or the newest earlier download of it unless `fresh` or inside fresh_downloads().
+    The file keeps the URL's own name, since GDAL derives a csv/geojson layer name from it
+    and picks drivers from compound suffixes like `.gdb.zip`; a name without an extension
+    gets the format's (`fmt`).
+
+    A read that arrives while the same URL is already downloading (in this process) waits
+    for it and uses it. That includes a run: a download that finished after the run started
+    counts as fresh, so Run during a preview's download doesn't fetch the file twice.
 
     Each download goes into its own folder, `<url hash>/<download time>/<name>`, rather than
     overwriting the previous one: on Windows a file another process still has open (the
@@ -238,7 +253,7 @@ def fetch_remote_file(
     downloads of the same URL are removed after _SUPERSEDED_GRACE.
 
     Progress is published under `progress_key` (default: `uri`), see source_progress."""
-    with _REMOTE_CACHE_LOCK:
+    with _url_lock(uri):
         latest = latest_download(uri, fmt)
         fresh_after = _FRESH_AFTER.get()
         if latest and not fresh and (fresh_after is None or download_time(latest) >= fresh_after):
@@ -1196,8 +1211,20 @@ def _is_download(path: Path) -> bool:
 # answers "not ready yet, here's the progress" straight away. The CLI never calls it:
 # read_expr does the same work inline, sharing the same caches.
 _PREPARE_JOBS: dict[str, threading.Thread] = {}
-_PREPARE_ERRORS: dict[str, str] = {}
 _PREPARE_LOCK = threading.Lock()
+
+# The last failed preparation per uri: (what was prepared, when it failed, the error). Every
+# request asking about the same thing gets that error until it's _PREPARE_ERROR_TTL old,
+# the source's settings change, or the user refreshes. Handing it to only the first request
+# made the others (inspect, preview and counts all ask) start new attempts: a dead URL got
+# tried several times over.
+_PREPARE_ERRORS: dict[str, tuple[tuple, float, str]] = {}
+_PREPARE_ERROR_TTL = 60.0  # seconds
+
+
+def _prepare_signature(src: Source) -> tuple:
+    """What preparing `src` depends on: a change to any of these is worth another attempt."""
+    return (src.uri, src.format, src.layer, _tabular_open_extra(src))
 
 
 def _needs_preparing(src: Source) -> bool:
@@ -1239,8 +1266,9 @@ def _prepare_job(src: Source, refresh: bool) -> None:
                     finally:
                         con.close()
     except Exception as e:
+        message = str(e) or type(e).__name__
         with _PREPARE_LOCK:
-            _PREPARE_ERRORS[key] = f"{type(e).__name__}: {e}" if not str(e) else str(e)
+            _PREPARE_ERRORS[key] = (_prepare_signature(src), time.monotonic(), message)
     finally:
         _clear_all_progress(key)
         with _PREPARE_LOCK:
@@ -1250,13 +1278,18 @@ def _prepare_job(src: Source, refresh: bool) -> None:
 def prepare_source(src: Source, refresh: bool = False) -> dict | None:
     """None when `src` can be read right away. Otherwise makes sure a background job is
     downloading / converting it (one per uri) and returns what it's doing — see
-    source_progress — or {"stage": "error", "error": ...} once if the last job failed.
-    `refresh` downloads a remote file source again even when it's already downloaded."""
+    source_progress — or {"stage": "error", "error": ...} while the last attempt's failure
+    still applies (see _PREPARE_ERRORS). `refresh` downloads a remote file source again
+    even when it's already downloaded, and retries one that failed."""
     key = src.uri
     with _PREPARE_LOCK:
-        error = _PREPARE_ERRORS.pop(key, None)
-        if error is not None:
-            return {"stage": "error", "error": error}
+        failed = _PREPARE_ERRORS.get(key)
+        if failed is not None:
+            signature, at, message = failed
+            if (not refresh and signature == _prepare_signature(src)
+                    and time.monotonic() - at < _PREPARE_ERROR_TTL):
+                return {"stage": "error", "error": message}
+            del _PREPARE_ERRORS[key]
         if key not in _PREPARE_JOBS:
             refresh = refresh and should_download(src.uri, src.format)
             if not refresh and not _needs_preparing(src):

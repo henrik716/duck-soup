@@ -154,19 +154,22 @@ def refresh_source(req: RefreshSourceRequest) -> dict:
 
 
 def _pending_response(sources: list[Source]) -> dict | None:
-    """A response for when one of `sources` still needs downloading / converting to Parquet
-    (see sources.prepare_source): `{"ok": False, "pending": True, "progress": {...}}`, which
-    the editor shows and then retries. Starts every source that needs it, not just the first.
-    None when all of them can be read right away."""
-    first = None
+    """A response for when some of `sources` still need downloading / converting to Parquet
+    (see sources.prepare_source): `{"ok": False, "pending": True, "progress": {...},
+    "pending_sources": [...]}`, which the editor shows and then retries. `progress` is the
+    first pending source's, `pending_sources` every one's (each with its `source` id). All of
+    them are started, not just the first. None when all can be read right away."""
+    pending = []
     for src in sources:
         prog = prepare_source(src)
         if prog is None:
             continue
         if prog["stage"] == "error":
             return {"ok": False, "error": f"source '{src.id}': {prog['error']}"}
-        first = first or {**prog, "source": src.id}
-    return {"ok": False, "pending": True, "progress": first} if first else None
+        pending.append({**prog, "source": src.id})
+    if not pending:
+        return None
+    return {"ok": False, "pending": True, "progress": pending[0], "pending_sources": pending}
 
 
 @app.post("/api/inspect")

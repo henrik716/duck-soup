@@ -44,7 +44,7 @@ import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from '.
 import { openPasteYamlModal } from './paste-yaml'
 import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
 import type { Config, CountsResponse, PreviewRow, SourceProgress, WrittenLayer } from './types'
-import { formatSourceProgress, PENDING_RETRY_MS } from './schema'
+import { formatPendingSources, PENDING_RETRY_MS } from './schema'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
 
@@ -408,7 +408,7 @@ function renderProblems(): void {
  * converted to Parquet in the background (`pending`, see web/app.py's _pending_response),
  * reporting what it's doing through `onProgress`. Null once `stale()` (a newer request took
  * over), so callers just return. */
-async function awaitPrepared<T extends { pending?: boolean; progress?: SourceProgress }>(
+async function awaitPrepared<T extends { pending?: boolean; progress?: SourceProgress; pending_sources?: SourceProgress[] }>(
   request: () => Promise<T>,
   onProgress: (text: string) => void,
   stale: () => boolean,
@@ -416,8 +416,7 @@ async function awaitPrepared<T extends { pending?: boolean; progress?: SourcePro
   let d = await request()
   while (d.pending && d.progress) {
     if (stale()) return null
-    const who = d.progress.source ? `${d.progress.source}: ` : ''
-    onProgress(`${who}${formatSourceProgress(d.progress)}`)
+    onProgress(formatPendingSources(d.pending_sources?.length ? d.pending_sources : [d.progress]))
     await new Promise(resolve => setTimeout(resolve, PENDING_RETRY_MS))
     if (stale()) return null
     d = await request()

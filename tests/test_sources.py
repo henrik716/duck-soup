@@ -1027,17 +1027,102 @@ def test_prepare_source_downloads_and_converts_in_background(
     assert spatial_con.execute(f"SELECT count(*) FROM {read}").fetchone() == (2,)
 
 
-def test_prepare_source_reports_a_failed_download_once(monkeypatch, _remote_cache):
+def test_failed_download_stays_reported_until_retried(monkeypatch, _remote_cache):
+    calls = []
+
     def boom(url, **kw):
+        calls.append(url)
         raise ConnectionError("server unreachable")
 
     monkeypatch.setattr("duck_soup.sources.requests.get", boom)
     src = Source(id="r", format="csv", uri="https://example.com/fail.csv")
     sources_mod.prepare_source(src)
-    prog = _wait_prepared(src)
-    assert prog == {"stage": "error", "error": "server unreachable"}
-    # The error is reported once; the next call starts a fresh attempt.
-    assert sources_mod.prepare_source(src)["stage"] in ("queued", "download", "error")
+    assert _wait_prepared(src) == {"stage": "error", "error": "server unreachable"}
+    # Every request asking again (inspect, preview, counts) gets the same error, no new attempt.
+    for _ in range(3):
+        assert sources_mod.prepare_source(src) == {"stage": "error", "error": "server unreachable"}
+    assert len(calls) == 1
+
+    # Refresh retries...
+    assert sources_mod.prepare_source(src, refresh=True)["stage"] != "error"
+    assert _wait_prepared(src)["stage"] == "error"
+    assert len(calls) == 2
+    # ...and so do changed settings, or the error getting old.
+    changed = Source(id="r", format="csv", uri=src.uri, header_row=True)
+    assert sources_mod.prepare_source(changed)["stage"] != "error"
+    assert _wait_prepared(changed)["stage"] == "error"
+    monkeypatch.setattr(sources_mod, "_PREPARE_ERROR_TTL", 0.0)
+    assert sources_mod.prepare_source(changed)["stage"] != "error"
+    monkeypatch.setattr(sources_mod, "_PREPARE_ERROR_TTL", 60.0)
+    _wait_prepared(changed)
+    assert len(calls) == 4
+
+
+def test_different_urls_download_in_parallel(monkeypatch, _remote_cache):
+    import threading as _th
+
+    release_slow = _th.Event()
+
+    def fake_get(url, **kw):
+        class _R(_FakeStreamResponse):
+            def iter_content(self, chunk_size=1):
+                if "slow" in url:
+                    release_slow.wait(5)
+                yield self._body
+        return _R(b"a\n1\n")
+
+    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    slow = _th.Thread(target=sources_mod.fetch_remote_file, args=("https://example.com/slow.csv", "csv"))
+    slow.start()
+    try:
+        # Finishes while the other URL is still downloading (one shared lock made it wait).
+        done = _th.Thread(target=sources_mod.fetch_remote_file, args=("https://example.com/fast.csv", "csv"))
+        done.start()
+        done.join(3)
+        assert not done.is_alive()
+        assert slow.is_alive()
+    finally:
+        release_slow.set()
+        slow.join(5)
+
+
+def test_run_reuses_a_download_in_progress(monkeypatch, _remote_cache):
+    import threading as _th
+
+    release = _th.Event()
+    calls = []
+
+    def fake_get(url, **kw):
+        calls.append(url)
+
+        class _R(_FakeStreamResponse):
+            def iter_content(self, chunk_size=1):
+                release.wait(5)
+                yield self._body
+        return _R(b"a\n1\n")
+
+    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    url = "https://example.com/r.csv"
+    preview = _th.Thread(target=sources_mod.fetch_remote_file, args=(url, "csv"))
+    preview.start()
+    import time as _t
+    _t.sleep(0.2)  # the preview's download is under way
+    result = {}
+
+    def run():
+        with sources_mod.fresh_downloads():
+            result["path"] = sources_mod.fetch_remote_file(url, "csv")
+
+    runner = _th.Thread(target=run)
+    runner.start()
+    _t.sleep(0.2)
+    release.set()
+    preview.join(5)
+    runner.join(5)
+    # The run waited for that download (it finished after the run started) instead of
+    # fetching the file a second time.
+    assert len(calls) == 1
+    assert result["path"] == str(sources_mod.latest_download(url, "csv"))
 
 
 def test_csv_parquet_copy_ignores_layer_and_geometry_settings(spatial_con, tmp_path, _tabular_cache):

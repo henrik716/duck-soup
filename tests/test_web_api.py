@@ -476,3 +476,44 @@ def test_inspect_answers_pending_while_a_remote_source_downloads(client, monkeyp
             break
         time.sleep(0.05)
     assert d["ok"] is True
+
+
+def test_preview_reports_every_pending_source(client, monkeypatch, tmp_path):
+    import threading
+    import time
+    import duck_soup.sources as sources_mod
+
+    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    release = threading.Event()
+
+    class _Resp:
+        headers = {}
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def raise_for_status(self): pass
+        def iter_content(self, chunk_size=1):
+            release.wait(5)
+            yield b"id,name\n1,A\n"
+
+    monkeypatch.setattr("duck_soup.sources.requests.get", lambda url, **kw: _Resp())
+    sources = [
+        {"id": "a", "format": "csv", "uri": "https://example.com/a.csv", "geometry": False},
+        {"id": "b", "format": "csv", "uri": "https://example.com/b.csv", "geometry": False},
+    ]
+    cfg = {"name": "t", "output": str(tmp_path / "o.gpkg"), "pipelines": [{
+        "name": "t", "sources": sources, "base": "a", "steps": [],
+        "mapping": [{"to": "name", "from": "name"}], "layers": [{"layer": "o"}],
+    }]}
+    try:
+        d = client.post("/api/preview", json={"config": cfg, "limit": 5}).json()
+        assert d["pending"] is True
+        assert [p["source"] for p in d["pending_sources"]] == ["a", "b"]
+        assert d["progress"]["source"] == "a"
+    finally:
+        release.set()
+    for _ in range(100):
+        d = client.post("/api/preview", json={"config": cfg, "limit": 5}).json()
+        if not d.get("pending"):
+            break
+        time.sleep(0.05)
+    assert d["ok"] is True and d["rows"][0]["name"] == "A"

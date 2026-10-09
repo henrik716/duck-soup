@@ -21,6 +21,25 @@ export function formatSourceProgress(p: SourceProgress): string {
   return `downloading… ${mb(bytes)}${speed}`
 }
 
+/** One pending source, briefly, for a list of several: "segmentert 23.4 MB". */
+function shortSourceProgress(p: SourceProgress): string {
+  if (p.stage === 'queued') return 'queued'
+  if (p.stage === 'convert') return 'converting'
+  if (p.total) return `${Math.round((100 * (p.bytes ?? 0)) / p.total)}%`
+  return mb(p.bytes ?? 0)
+}
+
+/** The header status while sources are prepared: the one in full ("segmentert:
+ * downloading… 23.4 MB · 4.1 MB/s"), or several briefly ("2 sources: segmentert 23.4 MB ·
+ * roads converting"). */
+export function formatPendingSources(list: SourceProgress[]): string {
+  if (list.length === 1) {
+    const p = list[0]
+    return `${p.source ? `${p.source}: ` : ''}${formatSourceProgress(p)}`
+  }
+  return `${list.length} sources: ${list.map(p => `${p.source ?? '?'} ${shortSourceProgress(p)}`).join(' · ')}`
+}
+
 /** How long to wait before asking again about a source that's still being prepared. */
 export const PENDING_RETRY_MS = 700
 

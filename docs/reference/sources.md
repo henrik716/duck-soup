@@ -176,7 +176,12 @@ A file-based source (`gpkg`, `geojson`, `shp`, `flatgeobuf`, `gml`, `fgdb`, `csv
   Parquet) runs in the background. The source card and the status at the top show what's
   happening, e.g. *downloading… 23.4 MB · 4.1 MB/s*, then *converting to Parquet for fast
   previews… 12 s*. The rest of the editor stays usable meanwhile.
-- If a download fails, the read fails. There's no fallback to an older copy.
+- Several remote sources download at the same time, each URL once even if several sources
+  use it. A run started while the editor is downloading a file waits for that download and
+  uses it.
+- If a download fails, the read fails. There's no fallback to an older copy. In the editor
+  the error stays until you change the source's settings or click **refresh**, or for a
+  minute, instead of being retried with every preview.
 - Downloads and Parquet copies are kept in the system temp folder. A copy replaced by a
   newer download is removed an hour later, so a run that's still reading it, in the editor
   or in another `duck-soup run`, isn't disrupted.

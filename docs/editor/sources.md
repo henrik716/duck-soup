@@ -116,7 +116,9 @@ the card's badge shows the progress in place of *inspecting…*:
   size.
 - *converting to Parquet for fast previews… 12 s*.
 
-The status at the top of the editor shows the same while a preview waits on the source.
+The status at the top of the editor shows the same while a preview waits on the source, or
+lists them all when several are pending, e.g. *2 sources: segmentert 23.4 MB · roads
+converting*.
 
 Once it's done, the card shows when the file was downloaded, e.g. *Downloaded 2 h ago ·
 44.6 MB · read via Parquet*. Previews keep using that download, even after you restart the
