@@ -130,32 +130,20 @@ export async function fetchRun(name: string, id: string): Promise<RunRecord | nu
 }
 
 /** `name` keys the run history: the saved config's name. */
+// No timeout: a run takes as long as it takes, in its own engine process on the server
+// (previews keep working meanwhile), and cancelRun stops it.
 export async function runConfig(config: Config, name?: string): Promise<RunResponse> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000)
-  try {
-    const r = await fetch('/api/run', {
-      method: 'POST',
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ config, name }),
-      signal: controller.signal,
-    })
-    return r.json()
-  } catch (e) {
-    // "Timed out" overstated what happened: aborting only drops *our* side of the request.
-    // The server has no cancellation path, so the run carries on — and it holds the global
-    // DUCKDB_LOCK while it does, which is why previews stay frozen until it finishes.
-    if ((e as Error).name === 'AbortError')
-      return {
-        ok: false,
-        error: 'Stopped waiting after 5 minutes — the run is still going on the server, '
-             + 'and previews will stay frozen until it finishes.',
-        log: [],
-      } as RunResponse
-    throw e
-  } finally {
-    clearTimeout(timer)
-  }
+  const r = await fetch('/api/run', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ config, name }),
+  })
+  return r.json()
+}
+
+/** Stops the run in progress; its /api/run request then answers `cancelled: true`. */
+export async function cancelRun(): Promise<void> {
+  await fetch('/api/run/cancel', { method: 'POST' })
 }
 
 export async function exportScript(config: Config, name: string): Promise<ExportScriptResponse> {

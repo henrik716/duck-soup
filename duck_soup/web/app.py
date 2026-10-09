@@ -6,17 +6,15 @@ Then open http://127.0.0.1:8000
 from __future__ import annotations
 
 import asyncio
-import io
 import os
 import tempfile
+import threading
 import time
 import traceback
-from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 
-import duckdb
 import yaml
 from fastapi import FastAPI, Form, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -33,27 +31,22 @@ from ..config import (
     load_config_dict,
 )
 from .. import history
-from ..engine import (
-    count_config_pipeline, plan_config_pipeline, preview_config_pipeline, run_config,
-)
+from ..engine import plan_config_pipeline
 from ..sources import (
     cached_read_note,
     download_info,
-    crs_extent_warning,
+    download_remote_sources,
+    fresh_downloads,
     fetch_remote_file,
     large_file_reader_note,
     prepare_source,
     remote_file_name,
     should_download,
     list_arcgis_rest_layers,
-    list_gdal_layers,
     list_oapif_collections,
-    list_postgres_tables,
     list_wfs_layers,
-    parquet_geometry_info,
-    read_expr,
 )
-from ..derive import DUCKDB_LOCK, init_duckdb, load_extensions
+from ..worker import ENGINE, RUNNER, EngineCancelled, EngineCrashed
 
 ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
 PIPELINE_DIR = ROOT / "pipelines"
@@ -183,46 +176,14 @@ def inspect_source(req: InspectRequest) -> dict:
     if pending:
         return pending
     try:
-        with DUCKDB_LOCK:
-            con = duckdb.connect()
-            try:
-                init_duckdb(con)
-                with tempfile.TemporaryDirectory() as tmp:
-                    workdir = Path(tmp)
-                    read = read_expr(src, workdir, con=con, sample=True)
-                    res = con.execute(f"DESCRIBE SELECT * FROM {read}").fetchall()
-                    columns = [{"name": r[0], "type": str(r[1])} for r in res]
-                    crs_warning = None
-                    has_geom = any(
-                        c["name"] == "geom" and c["type"].upper().startswith("GEOMETRY")
-                        for c in columns
-                    )
-                    if src.crs and has_geom:
-                        # Bounded by LIMIT so this sanity check stays cheap even against a
-                        # huge source — a few hundred features are plenty to tell "this is
-                        # clearly in meters, not degrees" from actual data, no need to scan
-                        # the whole file. Best-effort: a source this query can't handle (e.g.
-                        # an odd geometry type ST_XMin/ST_XMax choke on) just skips the hint
-                        # rather than failing the whole inspect.
-                        try:
-                            ext = con.execute(
-                                f"SELECT MIN(ST_XMin(geom)), MAX(ST_XMax(geom)), "
-                                f"MIN(ST_YMin(geom)), MAX(ST_YMax(geom)) "
-                                f"FROM (SELECT geom FROM {read} WHERE geom IS NOT NULL LIMIT 500) t"
-                            ).fetchone()
-                            if ext:
-                                crs_warning = crs_extent_warning(src.crs, *ext)
-                        except Exception:
-                            pass
-                    return {
-                        "ok": True, "columns": columns, "crs_warning": crs_warning,
-                        "reader_note": large_file_reader_note(src) or cached_read_note(src),
-                        "download": download_info(src),
-                    }
-            finally:
-                con.close()
+        found = ENGINE.call("inspect", req.source)
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed)}
+    return {
+        "ok": True, **found,
+        "reader_note": large_file_reader_note(src) or cached_read_note(src),
+        "download": download_info(src),
+    }
 
 
 class ParseYamlRequest(BaseModel):
@@ -274,7 +235,6 @@ async def run(req: RunRequest) -> dict:
 
     log_lines: list[str] = []
     written: list[dict] = []
-    buf = io.StringIO()
     started = datetime.now(timezone.utc)
 
     def record(**result) -> None:
@@ -284,26 +244,82 @@ async def run(req: RunRequest) -> dict:
             layers=written, log=log_lines, yaml_text=dump_config_yaml(cfg), **result,
         )
 
+    cancel = threading.Event()
+    writing = threading.Event()  # the run itself has started: the output may be half-written
+
+    def execute() -> dict:
+        # Remote files are downloaded here rather than in the engine worker, so their progress
+        # shows and a download the editor already has in progress is shared; the worker then
+        # reads those files instead of fetching them again (see run_config).
+        with fresh_downloads() as done:
+            download_remote_sources([s for p in cfg.pipelines for s in p.sources], log_lines.append)
+        if cancel.is_set():
+            raise EngineCancelled()
+        writing.set()
+        return RUNNER.call("run", req.config, log=log_lines.append, downloads=done)
+
+    _ACTIVE_RUNS.add(cancel)
     try:
-        with redirect_stdout(buf):
-            out_path = await asyncio.to_thread(run_config, cfg, log_lines.append, written)
-        record(ok=True, output=out_path)
+        job = asyncio.ensure_future(asyncio.to_thread(execute))
+        # Cancelling during the downloads answers at once: they finish in the background (and
+        # are kept for the next read), then execute() stops before the run itself starts.
+        while not job.done():
+            await asyncio.wait({job}, timeout=0.25)
+            if cancel.is_set() and not job.done():
+                job.add_done_callback(lambda j: j.exception())  # retrieved: not an unhandled error
+                raise EngineCancelled()
+        result = job.result()
+        written.extend(result["layers"])
+        record(ok=True, output=result["output"])
         return {
             "ok": True,
-            "output": out_path,
+            "output": result["output"],
             "log": log_lines,
             "layers": written,
-            "stdout": buf.getvalue(),
+            "stdout": result["stdout"],
         }
     except Exception as e:
-        record(ok=False, error=str(e))
+        written.extend(getattr(e, "partial", {}).get("layers", []))
+        cancelled = isinstance(e, EngineCancelled)
+        error = str(e)
+        if cancelled and writing.is_set():
+            error += " The output may be incomplete: layers already written are kept, the one being written may be cut short."
+
+        record(ok=False, error=error)
         return {
             "ok": False,
-            "error": str(e),
+            "error": error,
+            "crashed": isinstance(e, EngineCrashed),
+            "cancelled": cancelled,
             "log": log_lines,
             "layers": written,
-            "trace": traceback.format_exc(),
+            "trace": _trace(e),
         }
+    finally:
+        _ACTIVE_RUNS.discard(cancel)
+
+
+# The cancel events of the runs in progress (or waiting for RUNNER), see /api/run/cancel.
+_ACTIVE_RUNS: set[threading.Event] = set()
+
+
+@app.post("/api/run/cancel")
+def cancel_run() -> dict:
+    """Cancel every run in progress: the one in the run worker is stopped (killing it), one
+    still downloading its sources stops before it starts."""
+    runs = list(_ACTIVE_RUNS)
+    for event in runs:
+        event.set()
+    RUNNER.cancel()
+    return {"ok": True, "cancelled": len(runs)}
+
+
+def _trace(e: Exception) -> str | None:
+    """The traceback to show for an engine error: the worker's own for a task that failed
+    there, none for a crash (there's no Python stack to show), else this one."""
+    if isinstance(e, (EngineCrashed, EngineCancelled)):
+        return None
+    return getattr(e, "trace", None) or traceback.format_exc()
 
 
 @app.get("/api/runs/{name}")
@@ -400,8 +416,8 @@ def preview(req: PreviewRequest) -> dict:
     if pending:
         return pending
     try:
-        rows = preview_config_pipeline(
-            cfg, pipeline_idx=req.pipeline_idx, limit=req.limit,
+        rows = ENGINE.call(
+            "preview", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit,
             preview_until_step=req.preview_until_step, bbox=req.bbox, rejects=req.rejects,
         )
         # Sanitize values to ensure JSON serializability (handles non-UTF-8 strings, bytes, etc.)
@@ -421,7 +437,8 @@ def preview(req: PreviewRequest) -> dict:
         return {
             "ok": False,
             "error": str(e),
-            "trace": traceback.format_exc(),
+            "crashed": isinstance(e, EngineCrashed),
+            "trace": _trace(e),
         }
 
 
@@ -459,11 +476,11 @@ def counts(req: CountsRequest) -> dict:
     if pending:
         return pending
     try:
-        return {"ok": True, **count_config_pipeline(
-            cfg, pipeline_idx=req.pipeline_idx, limit=req.limit, bbox=req.bbox,
+        return {"ok": True, **ENGINE.call(
+            "counts", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit, bbox=req.bbox,
         )}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed)}
 
 
 # ---- file browser ----
@@ -649,57 +666,53 @@ def inspect_file(req: InspectFileRequest) -> dict:
     ):
         resolved_path = (ROOT / uri).resolve()
 
-    with DUCKDB_LOCK:
-        con = duckdb.connect()
-        try:
-            load_extensions(con)
-
-            if fmt == "postgres":
-                layers, default_crs = list_postgres_tables(con, uri)
-                return {"ok": True, "layers": layers, "default_crs": default_crs}
-
-            fwd_path = str(resolved_path).replace("\\", "/")
-            if fmt == "csv":
-                # A csv has exactly one layer, named after the file; skip ST_Read_Meta, which
-                # makes GDAL scan the whole file (seconds for a large one).
-                # A remote one is named after its download (see sources.remote_file_name).
-                local = remote_file_name(uri, fmt) if should_download(uri, fmt) else fwd_path
-                return {"ok": True, "layers": [Path(local).stem], "default_crs": None}
-            if fmt == "json":
-                # Read with DuckDB's read_json (see sources.py), not GDAL: no layers, no CRS.
-                return {"ok": True, "layers": [], "default_crs": None}
-            if fmt == "parquet":
-                # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
-                # bundled GDAL build — see sources.py's module docstring). No layer concept
-                # for a single flat Parquet file, so just report the CRS if one is embedded.
-                _name, crs = parquet_geometry_info(con, fwd_path)
-                return {"ok": True, "layers": [], "default_crs": crs}
-            elif fmt == "wfs" or uri.upper().startswith("WFS:"):
-                layers, default_crs = list_wfs_layers(uri)
-                return {"ok": True, "layers": layers, "default_crs": default_crs}
-            elif fmt == "oapif":
-                # fetch_oapif() always requests the default CRS84 response.
-                return {"ok": True, "layers": list_oapif_collections(uri), "default_crs": "EPSG:4326"}
-            elif fmt == "arcgis_rest":
-                # fetch_arcgis_rest() always forces outSR=4326.
-                return {"ok": True, "layers": list_arcgis_rest_layers(uri), "default_crs": "EPSG:4326"}
-
-            if should_download(uri, fmt):
-                pending = _pending_response([Source(id="inspect", format=fmt, uri=uri)])
-                if pending:
-                    return {**pending, "layers": [], "default_crs": None}
-                target = fetch_remote_file(uri, fmt)  # ready: a cache hit, no download
-            elif uri.startswith(("http://", "https://")):
-                target = uri
-            else:
-                target = fwd_path
-            layers, default_crs = list_gdal_layers(con, target)
+    try:
+        if fmt == "postgres":
+            layers, default_crs = ENGINE.call("layers", {"kind": "postgres", "path": uri})
             return {"ok": True, "layers": layers, "default_crs": default_crs}
-        except Exception as e:
-            return {"ok": False, "error": str(e), "layers": [], "default_crs": None}
-        finally:
-            con.close()
 
+        fwd_path = str(resolved_path).replace("\\", "/")
+        if fmt == "csv":
+            # A csv has exactly one layer, named after the file; skip ST_Read_Meta, which
+            # makes GDAL scan the whole file (seconds for a large one).
+            # A remote one is named after its download (see sources.remote_file_name).
+            local = remote_file_name(uri, fmt) if should_download(uri, fmt) else fwd_path
+            return {"ok": True, "layers": [Path(local).stem], "default_crs": None}
+        if fmt == "json":
+            # Read with DuckDB's read_json (see sources.py), not GDAL: no layers, no CRS.
+            return {"ok": True, "layers": [], "default_crs": None}
+        if fmt == "parquet":
+            # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
+            # bundled GDAL build — see sources.py's module docstring). No layer concept
+            # for a single flat Parquet file, so just report the CRS if one is embedded.
+            _, crs = ENGINE.call("layers", {"kind": "parquet", "path": fwd_path})
+            return {"ok": True, "layers": [], "default_crs": crs}
+        elif fmt == "wfs" or uri.upper().startswith("WFS:"):
+            layers, default_crs = list_wfs_layers(uri)
+            return {"ok": True, "layers": layers, "default_crs": default_crs}
+        elif fmt == "oapif":
+            # fetch_oapif() always requests the default CRS84 response.
+            return {"ok": True, "layers": list_oapif_collections(uri), "default_crs": "EPSG:4326"}
+        elif fmt == "arcgis_rest":
+            # fetch_arcgis_rest() always forces outSR=4326.
+            return {"ok": True, "layers": list_arcgis_rest_layers(uri), "default_crs": "EPSG:4326"}
+
+        if should_download(uri, fmt):
+            pending = _pending_response([Source(id="inspect", format=fmt, uri=uri)])
+            if pending:
+                return {**pending, "layers": [], "default_crs": None}
+            target = fetch_remote_file(uri, fmt)  # ready: a cache hit, no download
+        elif uri.startswith(("http://", "https://")):
+            target = uri
+        else:
+            target = fwd_path
+        layers, default_crs = ENGINE.call("layers", {"kind": "gdal", "path": target})
+        return {"ok": True, "layers": layers, "default_crs": default_crs}
+    except Exception as e:
+        return {
+            "ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed),
+            "layers": [], "default_crs": None,
+        }
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

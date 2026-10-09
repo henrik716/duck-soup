@@ -303,6 +303,10 @@ export interface RunResponse {
   layers?: WrittenLayer[]
   error?: string
   trace?: string
+  /** The engine process died (a native crash in DuckDB), see worker.py. */
+  crashed?: boolean
+  /** Stopped by /api/run/cancel. */
+  cancelled?: boolean
 }
 
 // One view of the SQL plan (Engine.sql_plan in engine.py).

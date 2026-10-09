@@ -116,6 +116,21 @@
     The base is tabular (CSV/Excel/JSON). Give it geometry with `x_field`/`y_field` or
     `geom_field`, or set `geometry: true` if it really is spatial.
 
+## Crashes
+
+??? failure "\"The DuckDB engine crashed (exit code …)\""
+    DuckDB or its spatial extension crashed in native code, usually on something specific in
+    the data (for example, a function that can't handle 3D geometry). The editor runs the
+    engine in a separate process, so the editor itself keeps working and the next preview or
+    run starts a fresh engine. The message quotes the last progress lines before the crash,
+    which narrow down the step involved; the server's console may show more.
+
+    To work around it, try leaving out the step or mapping column involved, or flattening a
+    3D source with [`force_2d`](reference/sources.md#3d-geometry). Please
+    [open an issue](https://github.com/henrik716/duck-soup/issues) with the config and, if
+    you can, a small sample of the data. With `duck-soup run`, the same crash ends the run
+    with a non-zero exit code and a short native traceback.
+
 ## Performance
 
 ??? tip "Nearest-neighbour is slow"
@@ -131,8 +146,8 @@
 
 - **One base per pipeline.** `merge` can append rows mid-chain, but those rows skip the
   earlier steps. To run the same steps over two datasets, write two pipelines.
-- **Runs are synchronous.** The editor's run is one request: no live log, no cancellation.
-  Use the CLI for long jobs.
+- **No live run log.** The editor's run is one request, so its log appears when it ends
+  (it can be cancelled any time). Use the CLI to follow a long job as it goes.
 - **No authentication for web services.** WFS, OGC API - Features and ArcGIS REST sources
   are fetched without credentials. A WFS `uri` can carry an API key as a query parameter.
 - **WFS isn't paged.** A feature type is fetched in one request, so a server's response limit

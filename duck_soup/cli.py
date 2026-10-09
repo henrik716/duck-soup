@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "run":
+        # A native crash in DuckDB then prints at least a Python traceback, not nothing.
+        import faulthandler
+        faulthandler.enable()
         return _run(cfg, args)
 
     return 1

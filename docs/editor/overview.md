@@ -24,6 +24,7 @@ The left side is where you **build**. The right side is where you **see** the re
 | **validate** | Re-checks the config now. The editor already validates automatically shortly after every change. |
 | **save** | Writes the YAML. The button is highlighted when you have unsaved changes, and the editor warns before you navigate away and lose them. |
 | **run** | Runs every pipeline and writes the output file. The log appears in **Run Logs**. |
+| **cancel** | Shown while a run is going. Stops it at once; see [Running](preview-and-run.md#running). |
 | **☀ / ☾** | Switches the editor between dark and light mode. It follows your OS setting until you click it, and then remembers your choice. The map's basemap switches with it. |
 | **status** | Shows `valid`, `validating…`, `running…`, what a preview is waiting on (e.g. `segmentert: downloading… 23.4 MB`), or the first line of an error. Click it to open the **Problems** tab. |
 

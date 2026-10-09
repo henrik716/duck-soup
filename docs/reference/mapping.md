@@ -47,6 +47,15 @@ instead of failing the run.
     instead. See [`cast`](../tutorials/mapping.md#cast-set-the-column-type) in the mapping
     tutorial.
 
+!!! note "Very large numbers in GeoPackage"
+    A GeoPackage stores integers in 64 bits and has no exact decimals. `sum()` returns wider
+    types than that: a 128-bit `HUGEINT` for integer columns, and `DECIMAL(38, …)` for
+    decimal ones. When writing a GeoPackage, duck soup converts those columns (also inside
+    lists and structs): 128-bit integers to 64-bit ones, and decimals wider than 18 digits to
+    `DOUBLE`. The run log lists each column it converted. A value too large for 64 bits stops
+    the run with an error naming the column; `cast: DOUBLE` on that column writes it as a
+    floating-point number instead. GeoParquet output keeps the types as they are.
+
 ### `func`
 
 | `func` | Output |

@@ -517,3 +517,51 @@ def test_tutorial_config_runs(tmp_path, monkeypatch):
     assert layers["spatial_join"] == 11
     assert layers["dissolve"] == 2
     assert layers["spatial_join_all"] == 7
+
+
+# GDAL's GeoPackage writer crashes the whole process on these column types (see
+# engine._gpkg_safe_select), so they're cast to what a GeoPackage stores before writing.
+_GPKG_UNSAFE_EXPRS = {
+    "total": "sum(1::INTEGER) OVER ()",  # HUGEINT
+    "unsigned": "1::UHUGEINT",
+    "amount": "sum(1.25::DECIMAL(10, 2)) OVER ()",  # DECIMAL(38, 2)
+    "counts": "[1::HUGEINT, 2::HUGEINT]",
+    "info": "{'n': 3::HUGEINT, 'x': 1.5::DECIMAL(20, 1)}",
+    "narrow": "1.25::DECIMAL(18, 2)",  # fine as it is, left alone
+}
+
+
+def _gpkg_types_config(tmp_path, mapping):
+    point = {"type": "Point", "coordinates": [10.75, 59.91]}
+    uri = _write_geojson(tmp_path / "pts.geojson", [("a", point)])
+    return load_config_dict({
+        "name": "t", "working_crs": "EPSG:25833", "base": "pts", "steps": [],
+        "sources": [{"id": "pts", "format": "geojson", "uri": uri, "crs": "EPSG:4326"}],
+        "mapping": mapping,
+        "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out", "crs": "EPSG:25833"},
+    })
+
+
+def test_gpkg_output_casts_types_the_writer_cannot_take(tmp_path):
+    import duckdb
+
+    from duck_soup.derive import init_duckdb
+
+    mapping = [{"to": to, "expr": expr} for to, expr in _GPKG_UNSAFE_EXPRS.items()]
+    log = []
+    out = run_config(_gpkg_types_config(tmp_path, mapping), log=log.append)
+    con = duckdb.connect()
+    init_duckdb(con)
+    rel = con.execute(f"SELECT * EXCLUDE (geom) FROM ST_Read('{out}')")
+    row = dict(zip([d[0] for d in rel.description], rel.fetchone()))
+    assert (row["total"], row["unsigned"], row["amount"], row["narrow"]) == (1, 1, 1.25, 1.25)
+    assert "1" in str(row["counts"]) and "2" in str(row["counts"])
+    assert (row["info.n"], row["info.x"]) == (3, 1.5)  # GDAL flattens a struct
+    assert any("'total': HUGEINT written as BIGINT" in line for line in log)
+    assert not any("'narrow'" in line for line in log)
+
+
+def test_gpkg_output_names_a_column_too_large_for_64_bits(tmp_path):
+    cfg = _gpkg_types_config(tmp_path, [{"to": "big", "expr": "(2::HUGEINT ** 70)::HUGEINT"}])
+    with pytest.raises(Exception, match="column 'big' of layer 'out' has a value too large"):
+        run_config(cfg)

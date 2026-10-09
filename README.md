@@ -118,6 +118,8 @@ has a recipe per scheduler and shows how to swap in the new file only after a go
   - **ducks in a row**, an interactive flow of sources → steps → layers: click a node to edit it in a side panel, insert steps with the **+** on a connection, drag steps to reorder them, and count the rows on every connection (on a sample or all the data)
   - a **SQL** tab with the SQL behind every source, step and output layer
   - a **History** tab with every past run, editor and scheduled CLI runs alike, and the rows each layer got
+  - runs you can cancel, and previews that keep working while a run goes on
+  - DuckDB runs in separate processes, so a crash inside DuckDB is reported as an error instead of taking the editor down
   - a SQL expression builder with live checks against sample data
   - import a pasted YAML, or export a pipeline as a standalone `.py` script
   - undo/redo, dark and light mode
@@ -386,9 +388,9 @@ default) and **file lookup** (csv path + key/value columns).
   exactly on the boundary between two overlapping ponds — silently keeps only one
   match's fields unless you deliberately opt into `on_multiple: largest_overlap` or
   `match: all` (see "Spatial join match resolution" above).
-- **Synchronous run.** `POST /api/run` blocks on the whole pipeline and returns
-  once it's done — no job queue, cancellation, or streamed logs for long-running
-  jobs. `check`/`run` in the CLI are likewise blocking, single-shot commands.
+- **No streamed run log.** `POST /api/run` returns once the run is done, with the
+  whole log; there's no job queue. A run can be cancelled (`POST /api/run/cancel`, the
+  editor's **cancel** button). `check`/`run` in the CLI are blocking, single-shot commands.
 - **Output is GeoPackage or GeoParquet only.**
 - **No variable substitution in the YAML.** Connection strings and URLs are stored as
   written. For PostgreSQL, leave the password out and set `PGPASSWORD` instead.

@@ -377,6 +377,7 @@ button.primary:hover { filter: brightness(1.15); box-shadow: 0 6px 20px rgb(var(
 button.ghost { background: transparent; border-color: transparent; }
 button.ghost:hover { background: rgb(var(--hi-rgb) / 0.05); border-color: var(--line); }
 button.mini { padding: 5px 10px; font-size: 11px; border-radius: var(--radius-sm); }
+#cancelRunBtn[hidden] { display: none; }
 button.danger:hover { border-color: var(--warn); color: var(--warn-hover); background: var(--warn-soft); }
 .addbtn {
   border-style: dashed; border-width: 1.5px; color: var(--muted); background: rgb(var(--accent-rgb) / 0.03); width: 100%;

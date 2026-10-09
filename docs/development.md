@@ -22,6 +22,7 @@ duck_soup/
   engine.py      builds the src_<id> → step_N → mapped view chain and writes the output
   derive.py      DuckDB bootstrap (extensions) + Python UDFs (to_mgrs)
   sql_util.py    identifier / literal quoting
+  worker.py      the editor's engine process: preview / counts / run, crash-isolated
   cli.py         check / run / serve / tutorial
   tutorial.py    copies the bundled tutorial (tutorial/) into a project folder
   web/
@@ -44,6 +45,26 @@ docs/            this site (MkDocs Material)
 3. The mapping compiles to a final `SELECT`, written with
    `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or `COPY … (FORMAT PARQUET)` for a `.parquet`
    output (GeoParquet, with the geometry cast to `GEOMETRY('<crs>')` so the CRS is embedded).
+
+### The engine worker
+
+The editor's server never opens a DuckDB connection itself: all DuckDB work happens in
+child processes (`worker.py`), so a native crash in DuckDB or its spatial extension kills only
+that process. The request answers with `crashed: true` and an error naming the exit code and
+the last log lines, and the next request starts a new worker.
+
+- **`ENGINE`** takes the interactive work: inspecting sources and listing their layers,
+  previews, row counts. One call at a time.
+- **`RUNNER`** takes runs, so a long run doesn't hold up previews. **cancel**
+  (`/api/run/cancel`) kills it; the next run starts a new one.
+- Converting a large CSV/Excel file to Parquet gets a **one-off worker** per file, since it
+  can take a minute and would otherwise hold up `ENGINE`.
+
+The server keeps everything that reports progress: it downloads remote files (for a run too,
+before handing it over) and tracks conversions, and the workers read the results from the
+shared cache folders. A worker exits by itself when the server process goes away. The CLI
+runs the engine in its own process, where a crash simply ends the run with a non-zero exit
+code.
 
 ## Frontend
 

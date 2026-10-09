@@ -8,7 +8,7 @@ import {
   Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
   Filter as FilterIcon, Combine, GitBranch, Camera,
   Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown,
-  Code, History, Hash
+  Code, History, Hash, Square
 } from 'lucide'
 
 const appIcons = {
@@ -19,11 +19,11 @@ const appIcons = {
   Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
   Filter: FilterIcon, Combine, GitBranch, Camera,
   Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown,
-  Code, History, Hash
+  Code, History, Hash, Square
 }
 import {
   fetchMeta, fetchPipelineNames, fetchPipeline, savePipeline,
-  validateConfig, previewConfig, runConfig, exportScript, fetchPlan, fetchCounts,
+  validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange } from './map'
 import { initLayout } from './layout'
@@ -278,12 +278,17 @@ async function validate(): Promise<void> {
   }
 }
 
+// A problem was reported and no preview has succeeded since (see setStatus, problemFixed).
+let problemOpen = false
+// The tab the problems panel replaced when it opened by itself, to return to once the
+// problem is fixed. Cleared when the user picks a tab themselves.
+let problemsReturnTab: string | null = null
+
 function setStatus(kind: 'idle' | 'ok' | 'bad' | 'busy', msg: string, detail?: string): void {
   const s = qs<HTMLButtonElement>('#status')!
   s.className = `status ${kind}`
   s.textContent = msg
 
-  const hadProblem = lastErrorDetail !== ''
   lastErrorDetail = kind === 'bad' ? (detail ?? msg) : ''
   s.title = lastErrorDetail
     ? `${lastErrorDetail}\n\n(click to open the problems panel)`
@@ -291,9 +296,30 @@ function setStatus(kind: 'idle' | 'ok' | 'bad' | 'busy', msg: string, detail?: s
 
   renderProblems()
 
-  // Reveal the panel when a problem first appears, but don't yank the user out of
-  // whatever tab they're on for every re-validate of an already-broken config.
-  if (kind === 'bad' && !hadProblem && activeTab() === 'table-tab') switchTab('problems-tab')
+  if (kind !== 'bad') return
+  // Reveal the panel when a problem first appears, but don't yank the user out of whatever
+  // tab they're on for every re-validate of an already-broken config. "valid" alone doesn't
+  // end the problem (problemFixed does): a config can validate and still fail to preview.
+  if (!problemOpen && activeTab() === 'table-tab') {
+    switchTab('problems-tab')
+    problemsReturnTab = 'table-tab'
+  }
+  problemOpen = true
+}
+
+/** A preview succeeded, so the config works. If the problems panel opened by itself and the
+ *  user is still on it, go back to the tab it replaced. Not on "valid" alone: a preview
+ *  follows it and can still fail, which would flip the tabs back and forth. */
+function problemFixed(): void {
+  if (problemOpen && problemsReturnTab && activeTab() === 'problems-tab') switchTab(problemsReturnTab)
+  problemOpen = false
+  problemsReturnTab = null
+}
+
+/** A tab change the user asked for: the problems panel no longer returns anywhere by itself. */
+function userSwitchTab(tabId: string): void {
+  problemsReturnTab = null
+  switchTab(tabId)
 }
 
 // ---- problems panel ----
@@ -458,6 +484,7 @@ async function runPreview(): Promise<void> {
     if (d.ok && d.rows) {
       updateMap(d.rows, activeStep, { fitBounds: !bboxMode })
       updateTable(d.rows as Record<string, unknown>[], previewLimit)
+      problemFixed()
     } else {
       setStatus('bad', d.error?.split('\n')[0] || 'preview failed', d.error || 'unknown error')
       showTableError(d.error || 'unknown error')
@@ -505,6 +532,7 @@ async function previewSource(sourceId: string, cfg: Config): Promise<void> {
       if (d.ok && d.rows) {
         updateMap(d.rows as PreviewRow[], undefined, { fitBounds: !bboxMode })
         updateTable(d.rows as Record<string, unknown>[], previewLimit)
+        problemFixed()
       } else {
         setStatus('bad', d.error?.split('\n')[0] || 'preview failed', d.error || 'unknown error')
         showTableError(d.error || 'unknown error')
@@ -634,6 +662,13 @@ async function run(): Promise<void> {
 
   const startedAt = Date.now()
   const stopTicker = startRunButtonTicker(runBtn, startedAt)
+  const cancelBtn = qs<HTMLButtonElement>('#cancelRunBtn')!
+  cancelBtn.hidden = false
+  cancelBtn.disabled = false
+  cancelBtn.onclick = () => {
+    cancelBtn.disabled = true
+    void cancelRun()
+  }
 
   const add = (t: string, cls = '', id = '') => appendLogLine(log, t, cls, id)
 
@@ -662,11 +697,15 @@ async function run(): Promise<void> {
       setStatus('ok', 'run complete')
       showToast('Run completed!', 'ok')
       showRunCounts(cfg, d.layers || [])
+    } else if (d.cancelled) {
+      add(`${d.error} [${elapsed}s]`, 'bad')
+      setStatus('idle', 'run cancelled')
+      showToast('Run cancelled.', 'info')
     } else {
       add(`ERROR: ${d.error}`, 'bad')
       if (d.trace) add(d.trace.split('\n').slice(-4).join('\n'), 'bad')
-      setStatus('bad', 'run failed', d.error || 'run failed')
-      showToast('Run failed — see the Run Logs tab.', 'bad')
+      setStatus('bad', d.crashed ? 'engine crashed' : 'run failed', d.error || 'run failed')
+      showToast(d.crashed ? 'The engine crashed — see the Run Logs tab.' : 'Run failed — see the Run Logs tab.', 'bad')
     }
   } catch (e) {
     add(`request failed: ${e}`, 'bad')
@@ -675,6 +714,7 @@ async function run(): Promise<void> {
   } finally {
     document.getElementById('log-pulse-line')?.remove()
     stopTicker()
+    cancelBtn.hidden = true
     runBtn.disabled = false
     runBtn.innerHTML = originalHtml
     setRunBusy(false)
@@ -1013,7 +1053,7 @@ function wireTabNav(): void {
   tabBtns.forEach((btn, i) => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset['tab']
-      if (tab) switchTab(tab)
+      if (tab) userSwitchTab(tab)
     })
     btn.addEventListener('keydown', e => {
       const map: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 }
@@ -1024,12 +1064,12 @@ function wireTabNav(): void {
       if (next < 0) return
       e.preventDefault()
       const target = tabBtns[next]
-      switchTab(target.dataset['tab'] ?? '')
+      userSwitchTab(target.dataset['tab'] ?? '')
       target.focus()
     })
   })
 
-  qs('#status')?.addEventListener('click', () => switchTab('problems-tab'))
+  qs('#status')?.addEventListener('click', () => userSwitchTab('problems-tab'))
 }
 
 function wireHeaderActions(): void {

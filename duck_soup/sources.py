@@ -121,21 +121,29 @@ def _url_lock(uri: str) -> threading.Lock:
 # long run in another process) re-opens its file as it goes, so it mustn't disappear at once.
 _SUPERSEDED_GRACE = 3600.0  # seconds
 
-# Set by fresh_downloads() for the duration of a run: a download made before this time is
-# fetched again.
+# Set by fresh_downloads() for the duration of a run: when it started (a download finished
+# before then is fetched again), and the downloads made during it, {uri: path}.
 _FRESH_AFTER: ContextVar[float | None] = ContextVar("duck_soup_fresh_after", default=None)
+_RUN_DOWNLOADS: ContextVar[dict[str, str] | None] = ContextVar("duck_soup_run_downloads", default=None)
 
 
 @contextmanager
-def fresh_downloads():
+def fresh_downloads(reuse: dict[str, str] | None = None):
     """Within this block (a run), remote file sources are downloaded again instead of reusing
     an earlier download, once per URL: a download made inside the block is reused, so a URL
-    read by several pipelines is still only fetched once."""
-    token = _FRESH_AFTER.set(time.time())
+    read by several pipelines is still only fetched once.
+
+    Yields the block's downloads, {uri: path}. `reuse` seeds it with downloads made for this
+    run elsewhere: the editor downloads a run's files itself, then hands them to its engine
+    worker (worker.py). Kept by path rather than compared by time, since Windows' clock
+    ticks too coarsely to order a download against the start of a run."""
+    done = dict(reuse or {})
+    tokens = (_FRESH_AFTER.set(time.time()), _RUN_DOWNLOADS.set(done))
     try:
-        yield
+        yield done
     finally:
-        _FRESH_AFTER.reset(token)
+        _FRESH_AFTER.reset(tokens[0])
+        _RUN_DOWNLOADS.reset(tokens[1])
 
 
 def _superseded_long_enough(path: Path) -> bool:
@@ -198,6 +206,32 @@ def should_download(uri: str, fmt: str) -> bool:
     return not (fmt == "shp" and urlparse(uri).path.lower().endswith(".shp"))
 
 
+# The formats read_expr downloads first when their uri is remote (see should_download).
+_DOWNLOADED_FORMATS = ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv", "json")
+
+
+def download_remote_sources(sources: list[Source], log: Callable[[str], None] | None = None) -> None:
+    """Download every remote file among `sources`, in parallel, the way read_expr would:
+    fresh inside fresh_downloads(), once per URL. The editor does this for a run before
+    handing it to its engine worker (worker.py), so the downloads keep showing their
+    progress and are shared with the editor's own reads of the same URLs."""
+    from concurrent.futures import ThreadPoolExecutor
+    from contextvars import copy_context
+
+    todo = {(s.uri, s.format) for s in sources
+            if s.format in _DOWNLOADED_FORMATS and should_download(s.uri, s.format)}
+    if not todo:
+        return
+    # copy_context: each thread sees this run's fresh_downloads() setting.
+    with ThreadPoolExecutor(max_workers=min(len(todo), 4)) as pool:
+        futures = [
+            pool.submit(copy_context().run, fetch_remote_file, uri, fmt, log, uri)
+            for uri, fmt in sorted(todo)
+        ]
+        for f in futures:
+            f.result()
+
+
 def remote_file_name(uri: str, fmt: str) -> str:
     """The local file name fetch_remote_file gives a download of `uri`: the URL's own name
     (query string dropped), plus the format's extension when it has none."""
@@ -254,9 +288,14 @@ def fetch_remote_file(
 
     Progress is published under `progress_key` (default: `uri`), see source_progress."""
     with _url_lock(uri):
+        run = _RUN_DOWNLOADS.get()
+        if run is not None and not fresh and uri in run and Path(run[uri]).is_file():
+            return run[uri]
         latest = latest_download(uri, fmt)
         fresh_after = _FRESH_AFTER.get()
-        if latest and not fresh and (fresh_after is None or download_time(latest) >= fresh_after):
+        if latest and not fresh and (fresh_after is None or download_time(latest) > fresh_after):
+            if run is not None:
+                run[uri] = str(latest)
             return str(latest)
 
         name = remote_file_name(uri, fmt)
@@ -305,6 +344,8 @@ def fetch_remote_file(
                 shutil.rmtree(old) if old.is_dir() else old.unlink()
             except OSError:
                 pass
+        if run is not None:
+            run[uri] = str(out)
         return str(out)
 
 
@@ -1245,7 +1286,7 @@ def _needs_preparing(src: Source) -> bool:
 
 
 def _prepare_job(src: Source, refresh: bool) -> None:
-    from .derive import DUCKDB_LOCK, load_extensions
+    from .worker import run_once
 
     key = src.uri
     try:
@@ -1256,15 +1297,10 @@ def _prepare_job(src: Source, refresh: bool) -> None:
             extra = _tabular_open_extra(src)
             target = _tabular_cache_path(local, src.layer, extra)
             if target is not None and not target[0].exists():
-                # Shown while waiting for the lock too: it's the next thing that happens.
                 _set_progress(key, "convert", bytes=_local_file_size(local))
-                with DUCKDB_LOCK:
-                    con = duckdb.connect()
-                    try:
-                        load_extensions(con)
-                        _tabular_parquet_cache(con, local, src.layer, extra, None, progress_key=key)
-                    finally:
-                        con.close()
+                # In a worker process of its own (see worker.py): GDAL reads the whole file
+                # here, and a native crash on some odd row mustn't take the editor down.
+                run_once("convert", {"path": local, "layer": src.layer, "extra": extra})
     except Exception as e:
         message = str(e) or type(e).__name__
         with _PREPARE_LOCK:

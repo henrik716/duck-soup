@@ -57,6 +57,10 @@ When the config is invalid, the **Problems** tab opens and its badge shows the n
 errors. Each problem shows the location (`pipelines.0.steps.2.source`) and the message. Click
 one to jump to the card it refers to: the editor expands it, scrolls to it and flashes it.
 
+The tab opens by itself only when a problem first appears while you're on **Data Table**, and
+once the preview works again it switches back there. If you move to another tab in between,
+or opened **Problems** yourself, the editor leaves the tabs alone.
+
 
 ![The Problems tab with one validation error](../assets/screenshots/problems-tab-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![The Problems tab with one validation error](../assets/screenshots/problems-tab-dark.png#only-dark){ .screenshot .narrow loading=lazy }
@@ -76,22 +80,29 @@ later from the **load** dropdown.
 ## Running
 
 **run** (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) runs every pipeline in the config and writes the
-output. While it runs, the button shows elapsed seconds. When it finishes, the
+output. While it runs, the button shows elapsed seconds and **cancel** appears next to it.
+Previews, row counts and source inspection keep working during a run. When it finishes, the
 **Run Logs** tab shows:
 
 - each source being read and each step being built, with timings,
 - the rows written to each layer, rejects layers included,
 - `→ wrote output/xyz.gpkg [12.3s]` on success,
-- the error and the last lines of the traceback on failure.
+- the error and the last lines of the traceback on failure. If DuckDB itself crashed, the
+  error says so; see [Crashes](../troubleshooting.md#crashes).
 
 ![Run Logs after a successful run](../assets/screenshots/run-logs-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![Run Logs after a successful run](../assets/screenshots/run-logs-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 New runs are appended under a divider so you can compare them. **clear** empties the log.
 
-!!! warning "Runs are synchronous"
-    A run is a single request: the log fills in when it completes, and there's no cancel
-    button. For long jobs, consider the command line or an exported script.
+**cancel** stops the run at once. Layers already written stay in the output, and the one
+being written when you cancelled may be incomplete, so run again before using the file. A run
+cancelled while it's still downloading its sources hasn't written anything; the downloads
+finish in the background and are reused by the next preview or run.
+
+!!! note "The log arrives at the end"
+    A run is a single request: the log fills in when it completes, not line by line. For
+    long jobs, consider the command line or an exported script.
 
 ## Run history
 

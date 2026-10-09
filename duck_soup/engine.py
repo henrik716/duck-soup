@@ -25,6 +25,7 @@ the editor's SQL tab) and counts() (tables, so each step is computed once and co
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import tempfile
 import textwrap
@@ -114,6 +115,53 @@ def _clear_parquet_output(out_path: Path, multi: bool) -> None:
             f.unlink()
 
 
+# Column types GDAL's GeoPackage writer crashes on (a native crash, no error; DuckDB spatial
+# through 1.5.x), at any depth inside a LIST/STRUCT/MAP: 128-bit integers, and the DECIMALs
+# wider than 18 digits that are stored as them. sum() of any integer or DECIMAL column
+# returns one, so a mapping expr can easily produce them.
+_GPKG_HUGE_INT = re.compile(r"\bU?HUGEINT\b")
+_GPKG_WIDE_DECIMAL = re.compile(r"\bDECIMAL\((\d+),\s*\d+\)")
+_INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
+
+
+def _gpkg_safe_type(dtype: str) -> str:
+    """`dtype` with those types swapped for what a GeoPackage stores anyway: a 64-bit
+    INTEGER and a REAL (it has no exact decimals: a DECIMAL(18, 2) is written as REAL too)."""
+    dtype = _GPKG_HUGE_INT.sub("BIGINT", dtype)
+    return _GPKG_WIDE_DECIMAL.sub(lambda m: "DOUBLE" if int(m[1]) > 18 else m[0], dtype)
+
+
+def _gpkg_safe_select(
+    con: duckdb.DuckDBPyConnection, select: str, layer: str, log: Callable[[str], None],
+) -> str:
+    """`select` with every column GeoPackage can't take cast by _gpkg_safe_type. A top-level
+    integer beyond 64 bits fails the write with an error naming the column."""
+    replace = []
+    for name, dtype, *_ in con.execute(f"DESCRIBE SELECT * FROM ({select})").fetchall():
+        dtype = str(dtype)
+        safe = _gpkg_safe_type(dtype)
+        if safe == dtype:
+            continue
+        col = _ident(name)
+        if safe == "BIGINT":
+            too_big = _lit(
+                f"column '{name}' of layer '{layer}' has a value too large for a GeoPackage "
+                f"integer (64 bits); cast it to DOUBLE in the mapping to write it"
+            )
+            expr = (
+                f"CASE WHEN {col} IS NULL THEN NULL "
+                f"WHEN {col} BETWEEN {_INT64_MIN} AND {_INT64_MAX} THEN {col}::BIGINT "
+                f"ELSE error({too_big}) END"
+            )
+        else:
+            expr = f"{col}::{safe}"
+        replace.append(f"{expr} AS {col}")
+        log(f"  column '{name}': {dtype} written as {safe} (GeoPackage has no {dtype})")
+    if not replace:
+        return select
+    return f"SELECT * REPLACE ({', '.join(replace)}) FROM ({select})"
+
+
 def _merge_gpkg_layer(main_path: Path, temp_path: Path) -> None:
     """Splice the single layer written to temp_path into main_path.
 
@@ -185,10 +233,10 @@ class Engine:
     def _emit(self, con: duckdb.DuckDBPyConnection | None, view: str, select: str, kind: str, **meta) -> None:
         """CREATE `view` AS `select` and record it in self.plan.
 
-        Steps are TEMP VIEWs, so DuckDB plans the whole chain as one query, except while
-        counting rows (counts()), where they're TEMP TABLEs: counting N views would compute
-        the chain up to each of them again, N times in total. Source views always stay views,
-        since a table would read every source in full. Without a connection (plan()) the
+        Steps are TEMP VIEWs, so DuckDB plans the whole chain as one query, except in runs
+        and while counting rows (counts()), where they're TEMP TABLEs: writing N layers or
+        counting N views would compute the chain up to each of them again, N times in total.
+        Source views always stay views, since a table would read every source in full. Without a connection (plan()) the
         view is only recorded.
         """
         self.plan.append({"kind": kind, "view": view, "sql": textwrap.dedent(select).strip(), **meta})
@@ -576,12 +624,18 @@ class Engine:
         )
         is_line = "ST_GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')"
         select = f"""
-        WITH a AS MATERIALIZED (
+        WITH p AS MATERIALIZED (
+            -- the running rows, read once: the lines below and the pass-through at the end
+            -- both come from here, since reading the previous view twice would compute it
+            -- (and every step before it) twice, doubling with each chained line_overlay
+            SELECT * FROM {_ident(prev)}
+        ),
+        a AS MATERIALIZED (
             -- one row per line part, so positions along it are well defined
             SELECT * EXCLUDE (__part), __part.geom AS geom, row_number() OVER () AS __a_row
             FROM (
                 SELECT * EXCLUDE (geom), unnest(ST_Dump(geom)) AS __part
-                FROM {_ident(prev)} WHERE {is_line}
+                FROM p WHERE {is_line}
             )
         ),
         b AS (
@@ -645,7 +699,7 @@ class Engine:
         FROM g JOIN a ON a.__a_row = g.__a_row
         UNION ALL BY NAME
         -- anything that isn't a line (or has no geometry) passes through untouched
-        SELECT * FROM {_ident(prev)} WHERE geom IS NULL OR NOT {is_line}
+        SELECT * FROM p WHERE geom IS NULL OR NOT {is_line}
         """
         suffix = f" (tolerance={step.tolerance})" if step.tolerance is not None else ""
         self.log(f"step {idx}: line_overlay {step.source}{suffix}")
@@ -1032,7 +1086,15 @@ class Engine:
 
             with tempfile.TemporaryDirectory() as tmp:
                 workdir = Path(tmp)
-                prev = self._prepare(con, workdir)
+                # Steps as TEMP TABLEs (see _emit): a run computes all of them anyway, and as
+                # views every layer's COPY (and every rejects layer's) would compute the whole
+                # chain again. What doesn't fit in memory spills to the run's temp folder.
+                con.execute(f"SET temp_directory = {_lit(str(workdir / 'spill'))}")
+                self._materialize = True
+                try:
+                    prev = self._prepare(con, workdir)
+                finally:
+                    self._materialize = False
 
                 deleted_paths: set[Path] = set()
                 out_paths: list[str] = []
@@ -1067,12 +1129,13 @@ class Engine:
                         # spliced into out_path at the SQLite level.
                         write_direct = not out_path.exists()
                         target = out_path if write_direct else (workdir / f"__layer_{i}.gpkg")
+                        self.log(f"writing {out_path} layer '{layer.layer}' ({layer.crs})")
+                        final_sql = _gpkg_safe_select(con, final_sql, layer.layer, self.log)
                         copy_sql = (
                             f"COPY ({final_sql}) TO {_lit(str(target))} "
                             f"(FORMAT GDAL, DRIVER 'GPKG', LAYER_NAME {_lit(layer.layer)}, "
                             f"SRS {_lit(layer.crs)})"
                         )
-                        self.log(f"writing {out_path} layer '{layer.layer}' ({layer.crs})")
                         (rows,) = con.execute(copy_sql).fetchone()
                         self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
                         if not write_direct:
@@ -1263,8 +1326,9 @@ def preview_pipeline(
     preview_until_step: int | None = None,
     bbox: tuple[float, float, float, float] | None = None,
     rejects: bool = False,
+    log: Callable[[str], None] | None = None,
 ) -> list[dict]:
-    engine = Engine(pipeline)
+    engine = Engine(pipeline, log=log)
     return engine.preview(
         limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
     )
@@ -1274,6 +1338,7 @@ def run_config(
     config: Config,
     log: Callable[[str], None] | None = None,
     written: list[dict] | None = None,
+    downloads: dict[str, str] | None = None,
 ) -> str:
     """Run all pipelines in a Config, appending each one's layers to the shared output.
 
@@ -1281,6 +1346,10 @@ def run_config(
     folder of per-layer files (several). When `written` is given, one entry per layer
     written is appended to it: {"pipeline", "layer", "rows", "kind", "path"}, `kind` being
     "layer" or "rejects".
+
+    `downloads` ({uri: path}) are remote files already downloaded for this run, used
+    rather than fetched again: the editor downloads a run's files itself, then hands the
+    run to its engine worker (see worker.py and sources.download_remote_sources).
     """
     out_path = Path(config.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1293,7 +1362,7 @@ def run_config(
         out_path.unlink()
     # A run reads current data: remote file sources are downloaded again (once per URL)
     # rather than reusing a preview's download — see sources.fresh_downloads.
-    with src_readers.fresh_downloads():
+    with src_readers.fresh_downloads(reuse=downloads):
         for pdef in config.pipelines:
             engine = Engine(pdef.to_pipeline(config.output), log=log, parquet_multi=multi)
             engine.run()
@@ -1317,11 +1386,12 @@ def preview_config_pipeline(
     preview_until_step: int | None = None,
     bbox: tuple[float, float, float, float] | None = None,
     rejects: bool = False,
+    log: Callable[[str], None] | None = None,
 ) -> list[dict]:
     """Preview one pipeline from a Config (defaults to the first)."""
     return preview_pipeline(
         _config_pipeline(config, pipeline_idx),
-        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
+        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects, log=log,
     )
 
 
@@ -1335,7 +1405,8 @@ def count_config_pipeline(
     pipeline_idx: int = 0,
     limit: int | None = None,
     bbox: tuple[float, float, float, float] | None = None,
+    log: Callable[[str], None] | None = None,
 ) -> dict:
     """Row counts after each step of one pipeline (see Engine.counts)."""
-    return Engine(_config_pipeline(config, pipeline_idx)).counts(limit=limit, bbox=bbox)
+    return Engine(_config_pipeline(config, pipeline_idx), log=log).counts(limit=limit, bbox=bbox)
 
