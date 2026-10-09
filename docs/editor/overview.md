@@ -19,6 +19,7 @@ The left side is where you **build**. The right side is where you **see** the re
 | **load** | Opens a config saved in the project folder's `pipelines/` directory. The editor reopens the last config you used on startup. |
 | **new** | Starts a blank config with one empty pipeline. |
 | **import** | Opens a dialog where you paste a pipeline YAML from anywhere (git, email, a colleague). It replaces what's open. |
+| **export .py** | Downloads the config as a standalone Python script that runs without the editor. See [Export as a Python script](preview-and-run.md#export-as-a-python-script). |
 | **save as** | The file name used by **save** (`pipelines/<name>.yaml`). It defaults to the config name. |
 | **validate** | Re-checks the config now. The editor already validates automatically shortly after every change. |
 | **save** | Writes the YAML. The button is highlighted when you have unsaved changes, and the editor warns before you navigate away and lose them. |
@@ -118,7 +119,7 @@ output.
 - **Map**: a MapLibre map of the current preview, with a Light/Dark basemap switch. Hover a
   feature to highlight it, and click it to see its attributes.
 - **Data Table**: the same preview rows as a sortable, filterable table.
-- **YAML Config**: the generated YAML with line numbers, plus **copy** and **export .py**.
+- **YAML Config**: the generated YAML with line numbers, plus **copy**.
 - **SQL**: the SQL behind each source, step and output layer of the current pipeline.
 - **Run Logs**: output from every run, so you can compare runs.
 - **History**: the config's past runs, from the editor and from `duck-soup run` (scheduled

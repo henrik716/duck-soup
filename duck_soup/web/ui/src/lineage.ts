@@ -62,11 +62,14 @@ function fitZoom(lineage: HTMLElement, outer: HTMLElement): number {
   outer.style.setProperty('zoom', '1')
   const width = outer.offsetWidth
   const height = outer.offsetHeight
-  const maxHeight = parseFloat(getComputedStyle(lineage).maxHeight) || Infinity
+  const style = getComputedStyle(lineage)
+  const maxHeight = parseFloat(style.maxHeight) || Infinity
   // The space the editing panel reserves doesn't count: opening it shouldn't shrink the flow
   // (to 50%, often), just let it scroll beside the panel.
-  const reserved = parseFloat(getComputedStyle(lineage).marginRight) || 0
-  const availW = lineage.clientWidth + reserved - 4
+  const reserved = parseFloat(style.marginRight) || 0
+  // clientWidth includes the side padding that keeps the first node off the clipping edge.
+  const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0)
+  const availW = lineage.clientWidth - padX + reserved - 4
   const availH = maxHeight - 24
   if (!width || !height || availW <= 0) return 1
   return clampZoom(Math.min(1, availW / width, availH / height))

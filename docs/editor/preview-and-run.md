@@ -133,13 +133,18 @@ or to copy the config somewhere else.
 ![The YAML Config tab](../assets/screenshots/yaml-tab-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![The YAML Config tab](../assets/screenshots/yaml-tab-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
-- **copy** puts the YAML on the clipboard.
-- **export .py** downloads a standalone Python script with the pipeline embedded. Run it with
-  `python my_pipeline.py` on any machine with `duck-soup-etl` installed: no server or editor
-  needed. Relative paths resolve against the folder you run it from.
+**copy** puts the YAML on the clipboard.
 
 ## Import
 
 **import** in the top bar opens a box to paste a full pipeline YAML. It's parsed and validated
 on the server, then replaces what's open in the editor (you're asked first if you have unsaved
 changes). Save it to keep it.
+
+## Export as a Python script
+
+**export .py** in the top bar downloads the config as a standalone Python script, with the
+pipeline YAML embedded. Run it with `python my_pipeline.py` on any machine with
+`duck-soup-etl` installed: no server or editor needed. Relative paths resolve against the
+folder you run it from. See [Scheduling](../scheduling.md#other-orchestrators) for using it
+from an orchestrator.

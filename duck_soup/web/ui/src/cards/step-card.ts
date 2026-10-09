@@ -100,7 +100,8 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
       ${kind === 'attribute_join' ? `
         <label class="field grow">left (upstream column or SQL literal)${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}
           <div class="expr-validation-msg" data-left-validation></div></label>
-        <label class="field grow">right (column on the join source)${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}</label>` : ''}
+        <label class="field grow">right (column on the join source)${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}
+          <div class="expr-validation-msg" aria-hidden="true"></div></label>` : ''}
     </div>`
     if (kind === 'merge') {
       bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['merge']}</p>`

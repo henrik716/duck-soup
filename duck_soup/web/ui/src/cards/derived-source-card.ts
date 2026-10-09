@@ -31,9 +31,7 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
       </label>
       <div class="row" style="margin-top:8px">
         <label class="field grow">buffer distance (optional, working CRS units)<input data-k="buffer" type="number" step="any" placeholder="none"></label>
-        <label class="field" style="flex:0 0 auto"><span>&nbsp;</span>
-          <span style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui;white-space:nowrap">
-            <input type="checkbox" data-k="make_valid" checked style="width:auto;margin:0"> repair invalid geometry</span></label>
+        <label class="field-check"><input type="checkbox" data-k="make_valid" checked> repair invalid geometry</label>
       </div>
       <p class="hint" style="margin-top:8px">A filtered/buffered view of an existing source, usable anywhere a step needs a "source" — fork part of a source, transform it, then join it back into the base flow.</p>
     </div>`

@@ -74,9 +74,7 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
           ${comboField('data-k="layer"', s.layer ?? '', [], '—')}
         </label>
         <label class="field grow">crs<span class="auto-chip" data-auto-crs hidden>detected</span>${comboField('data-k="crs"', s.crs ?? '', CRS_COMBO_OPTIONS, 'EPSG:4326')}</label>
-        <label class="field" style="flex:0 0 auto"><span>&nbsp;</span>
-          <span style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui;white-space:nowrap">
-            <input type="checkbox" data-k="make_valid" checked style="width:auto;margin:0"> repair invalid geometry</span></label>
+        <label class="field-check"><input type="checkbox" data-k="make_valid" checked> repair invalid geometry</label>
       </div>
       <div class="card-warning" data-crs-warning hidden>
         <i data-lucide="alert-triangle" style="width:12px;height:12px;flex-shrink:0"></i>

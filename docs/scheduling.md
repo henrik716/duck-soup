@@ -212,7 +212,7 @@ Airflow, Dagster, Prefect, Jenkins, Azure DevOps and similar tools can all run a
 command. Run `duck-soup run <file>` from the project folder, and treat a non-zero exit code as
 a failure.
 
-For a Python-based orchestrator, the editor's **export .py** button also helps. It writes one
+For a Python-based orchestrator, the **export .py** button in the editor's top bar also helps. It writes one
 `.py` file with the pipeline YAML embedded in it. The file needs `duck-soup-etl` installed, has
 no other files to keep in sync, and exits non-zero on failure like the CLI.
 

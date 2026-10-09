@@ -49,9 +49,7 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, available
   panel.innerHTML = `
     <div class="row">
       <label class="field grow">source column<input data-cl-source value="${esc(cl.source)}" placeholder="raw_category"></label>
-      <label class="field" style="flex:0 0 auto"><span>&nbsp;</span>
-        <span style="display:flex;align-items:center;gap:6px;color:var(--ink);font-family:system-ui">
-          <input type="checkbox" data-cl-ci ${cl.case_insensitive !== false ? 'checked' : ''} style="width:auto;margin:0"> case-insensitive</span></label>
+      <label class="field-check"><input type="checkbox" data-cl-ci ${cl.case_insensitive !== false ? 'checked' : ''}> case-insensitive</label>
     </div>
     <div class="codelist-toggle">
       <button type="button" data-mode="rules" class="${isFile ? '' : 'active'}">rules</button>

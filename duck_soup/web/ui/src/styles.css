@@ -257,7 +257,8 @@ h2.block-title b { color: var(--ink); font-weight: 700; }
   box-shadow: var(--shadow); transition: var(--transition);
 }
 .card:hover { border-color: var(--accent-soft-border); box-shadow: 0 12px 40px 0 rgb(var(--accent-rgb) / 0.08); }
-.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+/* Bottom-aligned, so the controls line up even when one field's label wraps onto two lines. */
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .row > * { min-width: 0; }
 .grow { flex: 1 1 140px; }
 
@@ -292,7 +293,7 @@ h2.block-title b { color: var(--ink); font-weight: 700; }
 .cfg-metadata-collapse.collapsed .cfg-metadata-collapse-inner { overflow: hidden; }
 .cfg-metadata-card:has(.cfg-metadata-collapse:not(.collapsed)) .meta-chevron { transform: rotate(180deg); }
 .cfg-metadata-body {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px; align-items: end;
   padding: 4px 18px 18px; border-top: 1px solid var(--line); margin-top: 0; padding-top: 14px;
 }
 @media (max-width: 640px) { .cfg-metadata-body { grid-template-columns: 1fr; } }
@@ -326,6 +327,10 @@ h2.block-title b { color: var(--ink); font-weight: 700; }
 
 label.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted);
   font-family: var(--mono); letter-spacing: .04em; flex: 1 1 120px; }
+/* A checkbox in a .row of fields: as tall as an input, so it centres on the inputs beside it. */
+label.field-check { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-height: 40px;
+  color: var(--ink); font-family: system-ui; font-size: 11px; white-space: nowrap; cursor: pointer; }
+label.field-check input { width: auto; margin: 0; }
 label.field.inline { flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto; }
 label.field.inline input { width: 150px; }
 
@@ -442,7 +447,7 @@ button.danger:hover { border-color: var(--warn); color: var(--warn-hover); backg
 .codelist-toggle button.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .codelist-toggle button:not(.active):hover { background: rgb(var(--hi-rgb) / 0.03); }
 
-.file-fields { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.file-fields { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; align-items: end; }
 
 /* Lineage Diagram */
 #lineage-diagram-container {
