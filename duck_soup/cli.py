@@ -6,10 +6,12 @@ import sys
 
 from .config import load_config
 from .engine import run_config
+from .version import __version__
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="duck-soup", description="Run a Duck Soup pipeline")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="Run a pipeline YAML")
@@ -41,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "serve":
         import uvicorn
+        print(f"duck soup {__version__}", flush=True)
+        _print_update_notice()
         uvicorn.run("duck_soup.web.app:app", host=args.host, port=args.port)
         return 0
 
@@ -58,6 +62,16 @@ def main(argv: list[str] | None = None) -> int:
         return _run(cfg, args)
 
     return 1
+
+
+def _print_update_notice() -> None:
+    """One line when PyPI has a newer release; silent when not, or when the check fails."""
+    from .version import is_newer, latest_version, upgrade_hint
+
+    latest = latest_version()
+    if is_newer(latest):
+        print(f"A newer duck soup is available: {latest} (you have {__version__}). "
+              f"Upgrade with: {upgrade_hint()}", flush=True)
 
 
 def _run(cfg, args) -> int:

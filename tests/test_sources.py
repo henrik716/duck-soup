@@ -1160,3 +1160,13 @@ def test_refresh_downloads_again_and_converts_in_background(
 def test_download_info_only_for_downloaded_sources(_remote_cache):
     assert sources_mod.download_info(Source(id="l", format="csv", uri="data/test_wkt.csv")) is None
     assert sources_mod.download_info(Source(id="r", format="csv", uri="https://example.com/none.csv")) is None
+
+
+def test_crs_extent_warning_accepts_geographic_crs_other_than_4326():
+    # ETRS89 (EPSG:4258) is lon/lat degrees too: Norwegian data in it isn't a mismatch.
+    warn = sources_mod.crs_extent_warning
+    assert warn("EPSG:4258", 9.0, 22.1, 59.1, 69.8) is None
+    assert warn("EPSG:4326", 9.0, 22.1, 59.1, 69.8) is None
+    assert "EPSG:4326" in warn("EPSG:25833", 9.0, 22.1, 59.1, 69.8)
+    assert "too large" in warn("EPSG:4258", 250000, 260000, 6640000, 6650000)
+    assert warn("EPSG:25833", 250000, 260000, 6640000, 6650000) is None

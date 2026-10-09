@@ -16,6 +16,7 @@ import type {
   RunResponse,
   Source,
   ValidateResponse,
+  VersionResponse,
 } from './types'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
@@ -36,6 +37,16 @@ async function okJson<T extends { ok: boolean; error?: string }>(r: Response, wh
 
 export async function fetchMeta(): Promise<MetaResponse> {
   return (await fetch('/api/meta')).json()
+}
+
+/** Null when the server predates /api/version (or the request failed): no badge then. */
+export async function fetchVersion(): Promise<VersionResponse | null> {
+  try {
+    const r = await fetch('/api/version')
+    return r.ok ? await r.json() : null
+  } catch {
+    return null
+  }
 }
 
 export async function fetchPipelineNames(): Promise<string[]> {

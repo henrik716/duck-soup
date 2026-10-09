@@ -565,6 +565,23 @@ def _normalize_crs(crs: str | None) -> str | None:
     return crs if _CRS_RE.match(crs) else None
 
 
+# Geographic CRSs (coordinates in degrees) common enough to expect as a working_crs — mostly
+# because working_crs defaults to the base source's CRS, and GeoJSON / ArcGIS REST / OGC API
+# sources are lon/lat. There's no CRS database in this codebase to ask "is this geographic?"
+# in general, so this is a list, not a lookup. Used by engine.py (working_crs) and
+# crs_extent_warning.
+GEOGRAPHIC_CRS = {
+    "EPSG:4326",  # WGS 84
+    "EPSG:4258",  # ETRS89
+    "EPSG:4269",  # NAD83
+    "EPSG:4267",  # NAD27
+    "EPSG:4230",  # ED50
+    "EPSG:4283",  # GDA94
+    "EPSG:4167",  # NZGD2000
+    "EPSG:4674",  # SIRGAS 2000
+}
+
+
 # Loose bounds for "this looks like WGS84 lon/lat degrees" — a bit past the true [-180,180]
 # x [-90,90] range to tolerate antimeridian-crossing extents and floating-point slop.
 _LONLAT_BOUND_X = 180.5
@@ -583,9 +600,9 @@ def crs_extent_warning(
 
     This is deliberately a magnitude heuristic, not real CRS validation — there's no CRS
     authority database in this codebase to check "is EPSG:25833 really a projected CRS"
-    against (see _normalize_crs), so it only ever compares against EPSG:4326, the one
-    geographic CRS this codebase already special-cases everywhere. The mismatch it catches
-    is the single most common real-world CRS mistake: a source labeled EPSG:4326 whose
+    against (see _normalize_crs), so "geographic" means one of the common lon/lat CRSs in
+    GEOGRAPHIC_CRS (EPSG:4326, ETRS89 EPSG:4258, NAD83, ...). The mismatch it catches is the
+    single most common real-world CRS mistake: a source labeled with a geographic CRS whose
     values are clearly meters (UTM/State Plane/etc.), or the reverse — a source labeled with
     some other CRS whose values are clearly lon/lat degrees. A real EPSG:4326 dataset with
     an oddly tiny extent, or a real projected dataset that happens to have small-magnitude
@@ -600,15 +617,15 @@ def crs_extent_warning(
         and -_LONLAT_BOUND_Y <= ymin <= _LONLAT_BOUND_Y
         and -_LONLAT_BOUND_Y <= ymax <= _LONLAT_BOUND_Y
     )
-    is_4326 = crs.upper() == "EPSG:4326"
+    geographic = crs.upper() in GEOGRAPHIC_CRS
     extent = f"x:[{xmin:.1f}, {xmax:.1f}] y:[{ymin:.1f}, {ymax:.1f}]"
-    if is_4326 and not looks_lonlat:
+    if geographic and not looks_lonlat:
         return (
             f"Coordinates range over {extent} — too large to be lon/lat degrees, but this "
-            "source's CRS is set to EPSG:4326. It's probably a projected CRS instead "
+            f"source's CRS is set to {crs}. It's probably a projected CRS instead "
             "(e.g. a UTM zone) — check the source data's real CRS."
         )
-    if not is_4326 and looks_lonlat:
+    if not geographic and looks_lonlat:
         return (
             f"Coordinates range over {extent} — that looks like lon/lat degrees, but this "
             f"source's CRS is set to {crs}. Did you mean EPSG:4326?"

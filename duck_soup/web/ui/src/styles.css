@@ -149,6 +149,9 @@ header.top {
 }
 .brand { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .5px; }
 .brand .dot { color: var(--accent); }
+.version-badge { font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; color: var(--muted); background: transparent; border: 1px solid var(--line-glow); cursor: pointer; }
+.version-badge.update { color: var(--accent); border-color: rgb(var(--accent-rgb) / 0.4); background: var(--accent-soft); }
+.version-badge.update::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent); vertical-align: middle; }
 .tagline { color: var(--muted); font-size: 13px; font-family: var(--mono); display: flex; align-items: center; }
 .top-right { margin-left: auto; display: flex; gap: 12px; align-items: center; }
 
@@ -324,6 +327,12 @@ h2.block-title b { color: var(--ink); font-weight: 700; }
 /* The tag/description half of a two-part option label (see cards/map-row.ts, schema.ts) —
    flex, not float, so a wrapped tag stays inside the hoverable box instead of overflowing it. */
 .combo-option [data-tag] { flex: 1 1 auto; min-width: 0; text-align: right; }
+/* A group heading in a combo list (ComboOptionDef.group), styled like .pool-group-head. */
+.combo-group {
+  font-family: var(--mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 8px 10px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.combo-group:first-child { padding-top: 4px; }
 
 label.field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted);
   font-family: var(--mono); letter-spacing: .04em; flex: 1 1 120px; }

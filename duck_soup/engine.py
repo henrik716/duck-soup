@@ -50,22 +50,6 @@ _PREDICATE_SQL = {
 }
 
 
-# Geographic CRSs (coordinates in degrees) common enough to expect as a working_crs — mostly
-# because working_crs defaults to the base source's CRS, and GeoJSON / ArcGIS REST / OGC API
-# sources are lon/lat. There's no CRS database in this codebase to ask "is this geographic?"
-# in general (see sources.crs_extent_warning), so this is a list, not a lookup.
-_GEOGRAPHIC_CRS = {
-    "EPSG:4326",  # WGS 84
-    "EPSG:4258",  # ETRS89
-    "EPSG:4269",  # NAD83
-    "EPSG:4267",  # NAD27
-    "EPSG:4230",  # ED50
-    "EPSG:4283",  # GDA94
-    "EPSG:4167",  # NZGD2000
-    "EPSG:4674",  # SIRGAS 2000
-}
-
-
 def _same_dimension(result: str, like: str) -> str:
     """`result` (an overlay result such as ST_Intersection) reduced to the parts with the
     same dimension as `like`: areas stay areas, lines stay lines, points stay points.
@@ -1083,7 +1067,7 @@ class Engine:
         metres becomes 500 degrees and Oslo–Bergen measures 5.45 — silently wrong rather
         than an error, which is why this is checked up front.
         """
-        if self.working_crs.upper() not in _GEOGRAPHIC_CRS:
+        if self.working_crs.upper() not in src_readers.GEOGRAPHIC_CRS:
             return
         uses: list[str] = []
         for i, step in enumerate(self.p.steps, start=1):

@@ -7,6 +7,9 @@ from pathlib import Path
 # user's home directory (the app's actual runtime default).
 os.environ.setdefault("DUCK_SOUP_ROOT", str(Path(__file__).resolve().parent.parent))
 
+# Never ask PyPI for the latest release from tests (duck_soup/version.py).
+os.environ["DUCK_SOUP_NO_UPDATE_CHECK"] = "1"
+
 import pytest  # noqa: E402
 
 

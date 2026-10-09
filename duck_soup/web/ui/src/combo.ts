@@ -11,6 +11,9 @@ export interface ComboOptionDef {
   // option's human name ("UTM zone 33N") so it's findable by typing something other than
   // the raw EPSG code. Never shown itself; `label` still controls what's displayed.
   search?: string
+  // Heading the option is listed under (e.g. the step a column comes from). Consecutive
+  // options with the same group share one heading; options without one get none.
+  group?: string
 }
 
 // An empty option list used to open as a blank box, which reads as broken rather than as
@@ -21,15 +24,30 @@ function comboOptionsHtml(options: (string | ComboOptionDef)[], emptyText = ''):
   if (options.length === 0) {
     return emptyText ? `<div class="combo-empty">${esc(emptyText)}</div>` : ''
   }
+  let group: string | undefined
   return options.map(o => {
     if (typeof o === 'string') {
       return `<div class="combo-option" role="option" data-value="${esc(o)}">${esc(o)}</div>`
     } else {
       const displayLabel = o.label || esc(o.value)
       const searchAttr = o.search ? ` data-search="${esc(o.search)}"` : ''
-      return `<div class="combo-option" role="option" data-value="${esc(o.value)}"${searchAttr}>${displayLabel}</div>`
+      // Also a non-.combo-option class, so the keyboard paths skip headings like .combo-empty.
+      const head = o.group && o.group !== group ? `<div class="combo-group" role="presentation">${esc(o.group)}</div>` : ''
+      group = o.group
+      return `${head}<div class="combo-option" role="option" data-value="${esc(o.value)}"${searchAttr}>${displayLabel}</div>`
     }
   }).join('')
+}
+
+// Hide a group heading whose options are all filtered out.
+function syncGroupHeads(list: HTMLElement): void {
+  list.querySelectorAll<HTMLElement>('.combo-group').forEach(head => {
+    let anyVisible = false
+    for (let el = head.nextElementSibling as HTMLElement | null; el && !el.classList.contains('combo-group'); el = el.nextElementSibling as HTMLElement | null) {
+      if (el.classList.contains('combo-option') && el.style.display !== 'none') { anyVisible = true; break }
+    }
+    head.style.display = anyVisible ? '' : 'none'
+  })
 }
 
 // attrHtml is the literal attribute text for the underlying <input>, e.g. `data-k="format"` or `class="pl-base"`
@@ -126,7 +144,7 @@ export function wireCombos(root: HTMLElement): void {
     }
 
     const showAll = () => {
-      list.querySelectorAll<HTMLElement>('.combo-option').forEach(o => { o.style.display = '' })
+      list.querySelectorAll<HTMLElement>('.combo-option, .combo-group').forEach(o => { o.style.display = '' })
     }
     const filter = () => {
       // Split into words and require each independently, rather than one exact substring —
@@ -137,6 +155,7 @@ export function wireCombos(root: HTMLElement): void {
         const haystack = `${o.dataset['value'] ?? ''} ${o.dataset['search'] ?? ''}`.toLowerCase()
         o.style.display = terms.length === 0 || terms.every(t => haystack.includes(t)) ? '' : 'none'
       })
+      syncGroupHeads(list)
       // The previously active option may have just been filtered out.
       const active = list.querySelector<HTMLElement>('.combo-option.active')
       if (active && active.style.display === 'none') setActive(null)

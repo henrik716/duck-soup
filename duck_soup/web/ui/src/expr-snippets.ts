@@ -19,7 +19,9 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
       { name: 'COALESCE(col, val)', code: 'COALESCE(column, 0)', doc: 'First non-NULL value in the list' },
       { name: 'CASE WHEN', code: 'CASE WHEN condition THEN true_val ELSE false_val END', doc: 'Branch on one or more conditions' },
       { name: 'NULLIF(a, b)', code: "NULLIF(column, '')", doc: 'NULL if the two values are equal, else the first' },
-      { name: 'IFF(cond, a, b)', code: 'IFF(condition, true_val, false_val)', doc: 'Inline if/else' }
+      { name: 'IFF(cond, a, b)', code: 'IFF(condition, true_val, false_val)', doc: 'Inline if/else' },
+      { name: 'BETWEEN', code: 'column BETWEEN 0 AND 100', doc: 'True if a value lies in a range (inclusive)' },
+      { name: 'IN (…)', code: "column IN ('a', 'b')", doc: 'True if a value is one of a list' }
     ]
   },
   {
@@ -29,14 +31,28 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
       { name: 'LOWER(str)', code: 'LOWER(column)', doc: 'Lowercase a string' },
       { name: 'UPPER(str)', code: 'UPPER(column)', doc: 'Uppercase a string' },
       { name: 'TRIM(str)', code: 'TRIM(column)', doc: 'Strip leading/trailing whitespace' },
+      { name: 'LENGTH(str)', code: 'LENGTH(column)', doc: 'Number of characters' },
+      { name: 'SUBSTRING(str, start, len)', code: 'SUBSTRING(column, 1, 3)', doc: 'Part of a string (1-based start)' },
+      { name: 'REPLACE(str, from, to)', code: "REPLACE(column, 'old', 'new')", doc: 'Replace every occurrence of a text' },
+      { name: 'LPAD(str, len, pad)', code: "LPAD(CAST(column AS VARCHAR), 4, '0')", doc: 'Left-pad to a fixed width, e.g. zero-padded codes' },
+      { name: 'CONCAT_WS(sep, a, b)', code: "CONCAT_WS(' ', col1, col2)", doc: 'Join with a separator, skipping NULLs' },
+      { name: 'CONTAINS(str, sub)', code: "CONTAINS(column, 'text')", doc: 'True if the string contains a text' },
+      { name: 'STARTS_WITH(str, pre)', code: "STARTS_WITH(column, 'prefix')", doc: 'True if the string starts with a text' },
       { name: 'REGEXP_REPLACE', code: "REGEXP_REPLACE(column, '[0-9]+', '')", doc: 'Replace text matching a regex' },
-      { name: 'SPLIT_PART', code: "SPLIT_PART(column, ',', 1)", doc: 'Nth field of a delimited string' }
+      { name: 'SPLIT_PART', code: "SPLIT_PART(column, ',', 1)", doc: 'Nth field of a delimited string' },
+      { name: 'REGEXP_EXTRACT', code: "REGEXP_EXTRACT(column, '([0-9]+)', 1)", doc: 'The text a regex group matched' },
+      { name: 'REGEXP_MATCHES', code: "REGEXP_MATCHES(column, '^[A-Z]')", doc: 'True if the string matches a regex' }
     ]
   },
   {
     category: 'Numeric',
     snippets: [
       { name: 'ROUND(val, dec)', code: 'ROUND(column, 2)', doc: 'Round to N decimal places' },
+      { name: 'LEAST(a, b, …)', code: 'LEAST(col1, col2)', doc: 'Smallest of the values (NULLs ignored)' },
+      { name: 'GREATEST(a, b, …)', code: 'GREATEST(col1, col2)', doc: 'Largest of the values (NULLs ignored)' },
+      { name: 'ABS(val)', code: 'ABS(column)', doc: 'Absolute value' },
+      { name: 'FLOOR(val)', code: 'FLOOR(column)', doc: 'Round down to a whole number' },
+      { name: 'CEIL(val)', code: 'CEIL(column)', doc: 'Round up to a whole number' },
       { name: 'CAST(val AS type)', code: 'CAST(column AS DOUBLE)', doc: 'Convert a value to another type' },
       { name: 'TRY_CAST(val AS type)', code: 'TRY_CAST(column AS DOUBLE)', doc: 'Convert, or NULL on failure' }
     ]
@@ -46,6 +62,8 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
     snippets: [
       { name: 'STRFTIME(date, fmt)', code: "STRFTIME(column, '%Y-%m-%d')", doc: 'Format a date/timestamp as text' },
       { name: 'DATE_TRUNC(part, date)', code: "DATE_TRUNC('month', column)", doc: 'Truncate a date to a unit' },
+      { name: 'STRPTIME(str, fmt)', code: "STRPTIME(column, '%d.%m.%Y')", doc: 'Parse text into a timestamp' },
+      { name: 'DATE_DIFF(part, a, b)', code: "DATE_DIFF('day', start_col, end_col)", doc: 'Units between two dates' },
       { name: 'EXTRACT(part FROM date)', code: 'EXTRACT(year FROM column)', doc: 'Pull one field out of a date' },
       { name: 'CURRENT_DATE', code: 'CURRENT_DATE', doc: "Today's date" }
     ]
@@ -55,9 +73,13 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
     snippets: [
       { name: 'ST_Area(geom)', code: 'ST_Area(geom)', doc: 'Polygon area in working_crs units' },
       { name: 'ST_Length(geom)', code: 'ST_Length(geom)', doc: 'Line length in working_crs units' },
+      { name: 'ST_Perimeter(geom)', code: 'ST_Perimeter(geom)', doc: 'Polygon perimeter in working_crs units' },
       { name: 'ST_X(geom)', code: 'ST_X(ST_Centroid(geom))', doc: 'Centroid X coordinate' },
       { name: 'ST_Y(geom)', code: 'ST_Y(ST_Centroid(geom))', doc: 'Centroid Y coordinate' },
       { name: 'ST_AsGeoJSON(geom)', code: 'ST_AsGeoJSON(geom)', doc: 'Geometry as a GeoJSON string' },
+      { name: 'ST_AsText(geom)', code: 'ST_AsText(geom)', doc: 'Geometry as WKT' },
+      { name: 'ST_GeometryType(geom)', code: 'ST_GeometryType(geom)', doc: 'POINT, LINESTRING, POLYGON, …' },
+      { name: 'ST_IsValid(geom)', code: 'ST_IsValid(geom)', doc: 'True if the geometry is valid' },
       { name: 'ST_Transform(geom, crs)', code: "ST_Transform(geom, 'EPSG:25833', 'EPSG:4326')", doc: 'Reproject a geometry' }
     ]
   },

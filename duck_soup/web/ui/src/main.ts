@@ -22,7 +22,7 @@ const appIcons = {
   Code, History, Hash, Square
 }
 import {
-  fetchMeta, fetchPipelineNames, fetchPipeline, savePipeline,
+  fetchMeta, fetchVersion, fetchPipelineNames, fetchPipeline, savePipeline,
   validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange } from './map'
@@ -974,6 +974,7 @@ async function init(): Promise<void> {
   wireThemeToggle()
   setStatus('busy', 'loading…')
 
+  void showVersion() // asks PyPI, so never awaited: it mustn't hold up loading
   const meta = await fetchMeta()
   Object.assign(META, meta)
 
@@ -997,6 +998,41 @@ async function init(): Promise<void> {
   await loadInitialConfig()
 
   createIcons({ icons: appIcons })
+}
+
+/** The version next to the brand; it turns into an "update available" badge when PyPI has
+ *  a newer release, and a click copies the upgrade command. */
+async function showVersion(): Promise<void> {
+  const info = await fetchVersion()
+  const badge = qs<HTMLButtonElement>('#versionBadge')
+  if (!info || !badge) return
+  badge.hidden = false
+  if (!info.update_available || !info.latest) {
+    badge.textContent = `v${info.version}`
+    badge.title = info.latest
+      ? `duck soup ${info.version}, the latest release. Click for the release notes.`
+      : `duck soup ${info.version}. Click for the release notes.`
+    badge.onclick = () => window.open(info.release_notes, '_blank', 'noopener')
+    return
+  }
+  const [cmd, ...others] = info.upgrade
+  badge.classList.add('update')
+  badge.textContent = `v${info.version} · update to ${info.latest}`
+  badge.title = [
+    `duck soup ${info.latest} is available (you have ${info.version}).`,
+    `Click to copy the upgrade command: ${cmd}`,
+    ...others.map(o => `  or: ${o}`),
+    'then restart duck soup.',
+  ].join('\n')
+  badge.onclick = async () => {
+    const notes = { label: 'release notes', onClick: () => window.open(info.release_notes, '_blank', 'noopener') }
+    try {
+      await navigator.clipboard.writeText(cmd)
+      showToast(`Copied "${cmd}". Run it in a terminal, then restart duck soup.`, 'ok', { action: notes, durationMs: 8000 })
+    } catch {
+      showToast(`To upgrade, run "${cmd}" in a terminal, then restart duck soup.`, 'info', { action: notes, durationMs: 0 })
+    }
+  }
 }
 
 // Track which pipeline card the user is actually working in, so the output preview

@@ -4,7 +4,7 @@ import { highlightExpr } from './expr-highlight'
 import { EXPR_SNIPPET_CATEGORIES, EXPR_FUNCTION_NAMES } from './expr-snippets'
 import { ExprAutocomplete, type AutocompleteItem } from './expr-autocomplete'
 import { attachLiveValidation, renderValidationMsg, type LiveValidationHandle } from './validation'
-import type { AvailableColumnDetail } from './schema'
+import { originLabel, type AvailableColumnDetail } from './schema'
 import type { Config } from './types'
 
 function insertAtCursor(textarea: HTMLTextAreaElement, text: string) {
@@ -15,6 +15,35 @@ function insertAtCursor(textarea: HTMLTextAreaElement, text: string) {
   textarea.selectionStart = textarea.selectionEnd = start + text.length
   textarea.focus()
   textarea.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+const INDENT = '  '
+
+// Tab indents and Shift+Tab outdents, as in a code editor, instead of moving focus to the
+// column list: the cursor's line, or every line the selection touches.
+function indentLines(ta: HTMLTextAreaElement, outdent: boolean) {
+  const { selectionStart: start, selectionEnd: end, value: val } = ta
+  if (!outdent && start === end) {
+    ta.setRangeText(INDENT, start, end, 'end')
+  } else {
+    const lineStart = val.lastIndexOf('\n', start - 1) + 1
+    // A bare cursor (Shift+Tab) covers its whole line; a selection, the lines it touches.
+    const nl = val.indexOf('\n', end)
+    const blockEnd = start === end ? (nl === -1 ? val.length : nl) : end
+    const lines = val.slice(lineStart, blockEnd).split('\n')
+    let firstShift = 0
+    const changed = lines.map((line, i) => {
+      // A selection ending at the very start of a line doesn't touch that line.
+      if (i > 0 && i === lines.length - 1 && line === '') return line
+      const shift = outdent ? -(line.match(/^ {1,2}/)?.[0].length ?? 0) : INDENT.length
+      if (i === 0) firstShift = shift
+      return outdent ? line.slice(-shift) : INDENT + line
+    }).join('\n')
+    ta.setRangeText(changed, lineStart, blockEnd)
+    ta.selectionStart = Math.max(lineStart, start + firstShift)
+    ta.selectionEnd = start === end ? ta.selectionStart : lineStart + changed.length
+  }
+  ta.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 // Auto-close these pairs while typing in the expression textarea; a selection gets wrapped
@@ -55,12 +84,12 @@ export function openExprDrawer(
               <textarea id="exprTextarea" spellcheck="false" placeholder="e.g. population / 1000"></textarea>
             </div>
             <div id="exprValidationMsg" class="expr-validation-msg"></div>
-            <div style="font-size: 10px; color: var(--muted); font-family: var(--display);">Ctrl+Enter to apply · Esc to cancel</div>
+            <div style="font-size: 10px; color: var(--muted); font-family: var(--display);">Ctrl+Enter to apply · Esc to cancel · Tab / Shift+Tab to indent</div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: 4px;">
             <div>
               <label style="font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 6px; font-family: var(--display);">Available Columns</label>
-              <div id="exprColList" style="display: flex; flex-direction: column; gap: 4px;"></div>
+              <div id="exprColList"></div>
             </div>
             <div>
               <label style="font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 6px; font-family: var(--display);">SQL Snippets</label>
@@ -122,6 +151,11 @@ export function openExprDrawer(
         close()
         return
       }
+      if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault()
+        indentLines(ta, e.shiftKey)
+        return
+      }
       // Typing a closing character that's already sitting right at the cursor (because it
       // was auto-inserted below) just steps over it, instead of adding a duplicate — the
       // standard "type-over" behavior real editors use for auto-closed pairs.
@@ -168,14 +202,24 @@ export function openExprDrawer(
 
   const colList = drawer.querySelector<HTMLElement>('#exprColList')!
   colList.innerHTML = ''
-  cols.forEach(c => {
-    const el = mkEl('div', { className: 'expr-badge' })
-    const rightLabel = c.origin === 'base' ? `${c.type || 'unknown'} [base]` : c.origin
-    el.innerHTML = `<span style="font-family:var(--mono);">${esc(c.name)}</span><span class="expr-badge-type">${esc(rightLabel)}</span>`
-    el.title = 'Click to insert'
-    el.onclick = () => insertAtCursor(ta, c.name)
-    colList.appendChild(el)
-  })
+  // One collapsible group per origin (base, step 1, …), in pipeline order, like the snippets.
+  const groups = new Map<string, AvailableColumnDetail[]>()
+  for (const c of cols) {
+    if (!groups.has(c.origin)) groups.set(c.origin, [])
+    groups.get(c.origin)!.push(c)
+  }
+  for (const [origin, groupCols] of groups) {
+    const details = mkEl('details', { className: 'expr-snippet-category', open: true })
+    details.appendChild(mkEl('summary', { textContent: `${originLabel(origin)} (${groupCols.length})` }))
+    groupCols.forEach(c => {
+      const el = mkEl('div', { className: 'expr-badge' })
+      el.innerHTML = `<span style="font-family:var(--mono);">${esc(c.name)}</span>${c.type ? `<span class="expr-badge-type">${esc(c.type)}</span>` : ''}`
+      el.title = 'Click to insert'
+      el.onclick = () => insertAtCursor(ta, c.name)
+      details.appendChild(el)
+    })
+    colList.appendChild(details)
+  }
   if (cols.length === 0) {
     colList.innerHTML = '<div style="color:var(--muted); font-size: 10px;">No columns available</div>'
   }

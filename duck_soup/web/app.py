@@ -32,7 +32,7 @@ from ..config import (
     load_config,
     load_config_dict,
 )
-from .. import history
+from .. import history, version
 from ..engine import plan_config_pipeline
 from ..sources import (
     cached_read_note,
@@ -77,6 +77,13 @@ def meta() -> dict:
         "funcs": MAP_FUNCS,
         "step_types": ["spatial_join", "attribute_join", "nearest_neighbor", "buffer", "centroid", "clip", "erase", "dissolve", "intersect_overlay", "line_overlay", "filter", "merge", "snapshot"],
     }
+
+
+@app.get("/api/version")
+def version_endpoint() -> dict:
+    """The running version and the newest on PyPI (a plain `def`, so the PyPI request runs
+    in the threadpool; the editor asks for it after it has loaded, never blocking on it)."""
+    return version.version_info()
 
 
 @app.get("/api/pipelines")

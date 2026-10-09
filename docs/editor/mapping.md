@@ -19,7 +19,8 @@ columns, see [Per-layer mapping](output-layers.md#per-layer-mapping).
 
 On the left is the **Available Source Fields** pool: every column available after the last
 step, grouped by where each column comes from (**base**, then **step 1 · spatial_join** and
-so on for fields pulled in by join steps). Hover a field to see its full name and type. On the right is the mapping grid, one row
+so on for fields pulled in by join steps). Hover a field to see its full name and type. A `from` row's
+column dropdown is grouped the same way. On the right is the mapping grid, one row
 per output column:
 
 | output column | value source | value | cast | |
@@ -56,10 +57,13 @@ that can't be cast become NULL rather than failing the run.
 Choosing `expr` and clicking the edit icon opens the expression builder, a side drawer with:
 
 - a SQL editor with syntax highlighting, auto-closing brackets/quotes and column/function
-  autocomplete,
-- **Available Columns**: click a column to insert it,
-- **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date, …),
-  click to insert,
+  autocomplete. <kbd>Tab</kbd> indents the line (or every selected line) and
+  <kbd>Shift</kbd>+<kbd>Tab</kbd> outdents; while the autocomplete list is open,
+  <kbd>Tab</kbd> picks the suggestion instead,
+- **Available Columns**: grouped like the field pool (**base**, **step 1 · spatial_join**, …);
+  click a column to insert it,
+- **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date, …,
+  e.g. `LEAST`/`GREATEST`, `CONCAT_WS`, `LPAD`, `REGEXP_EXTRACT`, `DATE_DIFF`), click to insert,
 - a **live check** that runs the expression against real sample rows from your pipeline and
   shows either sample results or the SQL error. A syntax error or unknown column shows at
   once. Sample results need the pipeline's steps to run on a few rows, which on a slow

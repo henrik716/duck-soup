@@ -1,7 +1,7 @@
 # Command line
 
 Installing `duck-soup-etl` gives you the `duck-soup` command. If it isn't on your `PATH`,
-`python -m duck_soup.cli` works the same way.
+`python -m duck_soup.cli` works the same way. `duck-soup --version` prints the installed version.
 
 ## `duck-soup check`
 
@@ -80,6 +80,13 @@ Starts the web editor.
 | Environment variable | Default | Meaning |
 |---|---|---|
 | `DUCK_SOUP_ROOT` | `~/duck-soup` (`/data` in Docker) | Project folder. Saved configs go in `<root>/pipelines/`, run history in `<root>/runs/`, and the file browser starts here. |
+| `DUCK_SOUP_NO_UPDATE_CHECK` | unset | Set to `1` to stop the editor asking PyPI whether a newer release exists. |
+
+On start, `serve` prints the version and, when PyPI has a newer release, the command to
+upgrade. The editor shows the version next to its name; when an update exists, that badge
+turns into "update to x.y.z", and clicking it copies the upgrade command. The check is a
+single request to `pypi.org`, repeated at most every 6 hours, and when it fails (offline,
+firewalled) nothing is shown.
 
 !!! danger "Don't expose the editor to untrusted networks"
     The editor can read and browse files on the server and run arbitrary SQL expressions. It

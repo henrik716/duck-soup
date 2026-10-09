@@ -181,6 +181,11 @@ function poolField(scope: Element, c: AvailableColumnDetail, plId: string): HTML
 
 export interface AvailableColumnDetail { name: string; type: string; origin: string }
 
+/** An AvailableColumnDetail origin as a group heading: `base`, `step 2 · spatial_join`. */
+export function originLabel(origin: string): string {
+  return origin.replace(/^(step \d+) \((.*)\)$/, '$1 · $2')
+}
+
 // Same column set as collectAvailableColumnsScoped, but resolved with type (for base-source
 // columns) and origin (`base` or `step N (type)`) — used anywhere a column picker wants to
 // show more than a bare name, e.g. the expression builder's column list.
@@ -226,18 +231,15 @@ export function updateDatalistsScoped(scope: Element): void {
 
   // Build rich ComboOptionDef list for mapping columns
   const details = collectAvailableColumnDetailsScoped(scope)
-  const availableOptions: ComboOptionDef[] = details.map(c => {
-    if (c.origin === 'base') {
-      return {
-        value: c.name,
-        label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--muted);background:rgb(var(--hi-rgb) / 0.03);border:1px solid var(--line);padding:1px 4px;border-radius:3px;">${esc(c.type || 'unknown')} [base]</span>`
-      }
-    }
-    return {
-      value: c.name,
-      label: `<span style="font-family:var(--mono);">${esc(c.name)}</span> <span data-tag style="font-size:10px;color:var(--accent);background:var(--accent-soft);border:1px solid rgb(var(--accent-rgb) / 0.2);padding:1px 4px;border-radius:3px;">${esc(c.origin)}</span>`
-    }
-  })
+  // Grouped by origin (base, step 1, …) like the field pool below, so a column's type is the
+  // only tag left on its row.
+  const availableOptions: ComboOptionDef[] = details.map(c => ({
+    value: c.name,
+    group: originLabel(c.origin),
+    label: `<span style="font-family:var(--mono);">${esc(c.name)}</span>` + (c.type
+      ? ` <span data-tag style="font-size:10px;color:var(--muted);">${esc(c.type)}</span>`
+      : ''),
+  }))
 
   // Render fields in the side visual schema mapper panel, grouped by where each column comes
   // from (base, step 1, …) so the origin is a group heading rather than a tag repeated on, and
@@ -251,7 +253,7 @@ export function updateDatalistsScoped(scope: Element): void {
       groups.get(c.origin)!.push(c)
     }
     for (const [origin, cols] of groups) {
-      fieldsListEl.appendChild(mkEl('div', { className: 'pool-group-head', textContent: origin === 'base' ? 'base' : origin.replace(/^(step \d+) \((.*)\)$/, '$1 · $2') }))
+      fieldsListEl.appendChild(mkEl('div', { className: 'pool-group-head', textContent: originLabel(origin) }))
       for (const c of cols) fieldsListEl.appendChild(poolField(scope, c, plId))
     }
 

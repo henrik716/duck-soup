@@ -214,6 +214,16 @@ export interface MetaResponse {
   step_types: string[]
 }
 
+export interface VersionResponse {
+  version: string
+  /** Newest release on PyPI; null when unknown (offline, or DUCK_SOUP_NO_UPDATE_CHECK). */
+  latest: string | null
+  update_available: boolean
+  /** Upgrade commands, the most likely install method first. */
+  upgrade: string[]
+  release_notes: string
+}
+
 export interface InspectColumn {
   name: string
   type: string
