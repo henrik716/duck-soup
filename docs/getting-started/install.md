@@ -1,36 +1,20 @@
 # Install
 
 duck soup is one Python package (`duck-soup-etl`) containing the engine, the command line
-and the web editor. Most people install it as a command with pipx or uv. Docker is the
+and the web editor. Most people install it as a command with uv (or pipx). Docker is the
 alternative for servers, scheduled jobs, or machines where you can't install Python.
 
 !!! note "Internet access on first run"
     The first time duck soup starts, DuckDB downloads its `spatial` extension from
     `extensions.duckdb.org`. After that it's cached and works offline.
 
-## Option 1: pipx or uv (recommended)
+## Option 1: uv or pipx (recommended)
 
 Both install duck soup as a command in its own isolated environment and put `duck-soup` on
-your `PATH`. Neither needs admin rights.
+your `PATH`. Neither needs admin rights. uv is the simpler choice: it doesn't need Python to
+be installed first.
 
-=== "pipx (you have Python 3.11+)"
-
-    ```bash
-    pipx install duck-soup-etl
-    duck-soup serve
-    ```
-
-    [pipx](https://pipx.pypa.io/) installs Python command-line apps. If you don't have it yet:
-
-    ```bash
-    python -m pip install --user pipx
-    python -m pipx ensurepath
-    # open a new terminal so the PATH change takes effect
-    ```
-
-    To upgrade: `pipx upgrade duck-soup-etl`.
-
-=== "uv (no Python needed)"
+=== "uv (recommended)"
 
     [uv](https://docs.astral.sh/uv/) downloads a matching Python by itself, so it works on a
     machine with no Python, or with one that's too old. Install uv:
@@ -51,6 +35,23 @@ your `PATH`. Neither needs admin rights.
 
     If `duck-soup` isn't found, run `uv tool update-shell` and open a new terminal.
     To upgrade: `uv tool upgrade duck-soup-etl`.
+
+=== "pipx (you have Python 3.11+)"
+
+    ```bash
+    pipx install duck-soup-etl
+    duck-soup serve
+    ```
+
+    [pipx](https://pipx.pypa.io/) installs Python command-line apps. If you don't have it yet:
+
+    ```bash
+    python -m pip install --user pipx
+    python -m pipx ensurepath
+    # open a new terminal so the PATH change takes effect
+    ```
+
+    To upgrade: `pipx upgrade duck-soup-etl`.
 
 Open <http://localhost:8000>.
 
@@ -79,7 +80,7 @@ that folder. Files outside it, such as another drive or a network share, are onl
 you mount them too (`-v D:/gis:/gis`).
 
 Docker suits servers and [scheduled runs](../scheduling.md#docker). On a desktop it's usually
-more setup than pipx or uv: Docker Desktop needs admin rights to install, and larger
+more setup than uv or pipx: Docker Desktop needs admin rights to install, and larger
 organisations need a paid Docker subscription to use it.
 
 To upgrade: `docker pull ghcr.io/henrik716/duck-soup`.
@@ -104,7 +105,7 @@ The built editor is committed, so you don't need Node.js unless you change the f
 
 The web editor works inside a **project folder**:
 
-| | pipx / uv / pip | Docker |
+| | uv / pipx / pip | Docker |
 |---|---|---|
 | Project folder | `~/duck-soup` (your home directory) | the folder you mounted as `/data` |
 | Override with | the `DUCK_SOUP_ROOT` environment variable | — |

@@ -31,7 +31,7 @@ first:
     === "Linux / macOS"
 
         ```bash
-        command -v duck-soup      # pipx: usually ~/.local/bin/duck-soup
+        command -v duck-soup      # uv / pipx: usually ~/.local/bin/duck-soup
         ```
 
     === "Windows"

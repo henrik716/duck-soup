@@ -16,15 +16,15 @@ Under the hood, everything runs inside DuckDB using the powerful **spatial** ext
 
 ## Run it
 
-Install the `duck-soup` command with **pipx** or **uv**. Both give it its own isolated
-environment and need no admin rights:
+Install the `duck-soup` command with **uv** (recommended) or **pipx**. Both give it its own
+isolated environment and need no admin rights:
 
 ```bash
-# pipx: if you already have Python 3.11+
-pipx install duck-soup-etl
-
-# uv: if you don't have Python (or it's too old); uv downloads a matching one itself
+# uv: works with or without Python installed; it downloads a matching one itself
 uv tool install duck-soup-etl
+
+# pipx: if you already have Python 3.11+ and prefer pipx
+pipx install duck-soup-etl
 ```
 
 Then start the editor and open http://localhost:8000:
@@ -35,20 +35,20 @@ duck-soup serve
 
 Internet access is needed on first run so DuckDB can download its `spatial` extension.
 
-Don't have pipx or uv yet?
+Don't have uv or pipx yet?
 
 ```bash
-# pipx
-python -m pip install --user pipx
-python -m pipx ensurepath          # then open a new terminal
-
 # uv, on Windows (PowerShell)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 # uv, on macOS / Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# pipx
+python -m pip install --user pipx
+python -m pipx ensurepath          # then open a new terminal
 ```
 
-To upgrade: `pipx upgrade duck-soup-etl` or `uv tool upgrade duck-soup-etl`.
+To upgrade: `uv tool upgrade duck-soup-etl` or `pipx upgrade duck-soup-etl`.
 
 If you used plain `pip install duck-soup-etl` and `duck-soup` isn't found, that's a
 `PATH` issue, not a broken install. `python -m duck_soup.cli serve` always works.

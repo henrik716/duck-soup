@@ -84,10 +84,10 @@ def in_docker() -> bool:
 
 
 def upgrade_commands() -> list[str]:
-    """How to upgrade, the most likely install method first (README recommends pipx)."""
+    """How to upgrade, the most likely install method first (README recommends uv)."""
     if in_docker():
         return ["docker pull ghcr.io/henrik716/duck-soup"]
-    return [f"pipx upgrade {DIST_NAME}", f"uv tool upgrade {DIST_NAME}", f"pip install -U {DIST_NAME}"]
+    return [f"uv tool upgrade {DIST_NAME}", f"pipx upgrade {DIST_NAME}", f"pip install -U {DIST_NAME}"]
 
 
 def upgrade_hint() -> str:

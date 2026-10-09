@@ -22,7 +22,7 @@ One command copies the Pondsworth data and a config with every tutorial example 
 `data/tutorial/` holds the datasets, and `pipelines/pondsworth.yaml` the config. Run it in the
 editor's project folder (by default `~/duck-soup`), so the editor finds the config too:
 
-=== "pipx / uv / pip"
+=== "uv / pipx / pip"
 
     ```bash
     mkdir -p ~/duck-soup      # the editor's default project folder

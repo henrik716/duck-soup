@@ -3,8 +3,9 @@
 ## Installation and startup
 
 ??? failure "`duck-soup: command not found` after `pip install`"
-    The script folder isn't on your `PATH`. Use `pipx install duck-soup-etl` instead, or run
-    `python -m duck_soup.cli serve`. See [Install](getting-started/install.md#option-1-pipx-or-uv-recommended).
+    The script folder isn't on your `PATH`. Use `uv tool install duck-soup-etl` (or
+    `pipx install duck-soup-etl`) instead, or run `python -m duck_soup.cli serve`. See
+    [Install](getting-started/install.md#option-1-uv-or-pipx-recommended).
 
 ??? failure "Error loading the `spatial` extension on first run"
     DuckDB downloads `spatial` from `extensions.duckdb.org` the first time. Check internet
