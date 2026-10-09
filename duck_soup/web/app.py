@@ -6,6 +6,7 @@ Then open http://127.0.0.1:8000
 from __future__ import annotations
 
 import asyncio
+import itertools
 import os
 import tempfile
 import threading
@@ -13,6 +14,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 import shutil
 
 import yaml
@@ -46,7 +48,7 @@ from ..sources import (
     list_oapif_collections,
     list_wfs_layers,
 )
-from ..worker import ENGINE, RUNNER, EngineCancelled, EngineCrashed
+from ..worker import ENGINE, RUNNER, EngineCancelled, EngineCrashed, EngineSuperseded
 
 ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
 PIPELINE_DIR = ROOT / "pipelines"
@@ -403,6 +405,29 @@ class PreviewRequest(BaseModel):
     bbox: tuple[float, float, float, float] | None = None
     # With preview_until_step: show that step's rejects instead of the rows it passes on.
     rejects: bool = False
+    # Who's asking (an editor tab): a newer preview from the same client makes this one
+    # pointless, so it's skipped or interrupted (see _preview_ticket).
+    client: str | None = None
+
+
+# The newest preview ticket per client (PreviewRequest.client). Editing a slow pipeline
+# sends a preview per pause in typing; without this they'd all run, one after another, each
+# for as long as the pipeline takes, long after the editor stopped wanting them.
+_PREVIEW_TICKETS: dict[str, int] = {}
+_PREVIEW_TICKETS_LOCK = threading.Lock()
+_preview_counter = itertools.count(1)
+
+
+def _preview_ticket(client: str | None) -> Callable[[], bool] | None:
+    """Make this the client's newest preview, and stop the one it was running. Returns a
+    check for whether this preview has itself been superseded since (None: no client)."""
+    if not client:
+        return None
+    with _PREVIEW_TICKETS_LOCK:
+        ticket = next(_preview_counter)
+        _PREVIEW_TICKETS[client] = ticket
+    ENGINE.interrupt(("preview", client))
+    return lambda: _PREVIEW_TICKETS.get(client) != ticket
 
 
 @app.post("/api/preview")
@@ -412,6 +437,7 @@ def preview(req: PreviewRequest) -> dict:
     except Exception as e:
         raise HTTPException(422, f"invalid config: {e}")
 
+    stale = _preview_ticket(req.client)
     pending = _pending_response(cfg.pipelines[min(req.pipeline_idx, len(cfg.pipelines) - 1)].sources)
     if pending:
         return pending
@@ -419,6 +445,7 @@ def preview(req: PreviewRequest) -> dict:
         rows = ENGINE.call(
             "preview", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit,
             preview_until_step=req.preview_until_step, bbox=req.bbox, rejects=req.rejects,
+            tag=("preview", req.client) if req.client else None, stale=stale,
         )
         # Sanitize values to ensure JSON serializability (handles non-UTF-8 strings, bytes, etc.)
         safe_rows = []
@@ -434,6 +461,8 @@ def preview(req: PreviewRequest) -> dict:
             safe_rows.append(safe_row)
         return {"ok": True, "rows": safe_rows}
     except Exception as e:
+        if isinstance(e, EngineSuperseded):
+            return {"ok": False, "stale": True, "error": str(e)}
         return {
             "ok": False,
             "error": str(e),

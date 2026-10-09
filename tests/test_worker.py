@@ -184,3 +184,50 @@ def test_cancel_during_downloads_answers_at_once(tmp_path, monkeypatch):
     body, elapsed = asyncio.run(main())
     assert elapsed < 2
     assert body["cancelled"] is True and body["error"] == "Cancelled."
+
+
+_ENDLESS = "(SELECT count(*) FROM range(100000000) a, range(100000) b WHERE a.range + b.range > 0)"
+
+
+def test_interrupt_stops_a_tagged_call_and_keeps_the_worker(tmp_path):
+    import threading
+    import time
+
+    from duck_soup.worker import EngineSuperseded
+
+    worker = EngineWorker()
+    try:
+        assert [r["v"] for r in worker.call("preview", _config(tmp_path), limit=5)] == ["A"]
+        pid = worker._proc.pid
+        threading.Timer(1.5, lambda: worker.interrupt(("preview", "tab"))).start()
+        started = time.monotonic()
+        with pytest.raises(EngineSuperseded):
+            worker.call("preview", _config(tmp_path, _ENDLESS), limit=5, tag=("preview", "tab"))
+        assert time.monotonic() - started < 6
+        assert worker._proc.pid == pid  # interrupted, not restarted
+        assert not worker.interrupt(("preview", "tab"))  # nothing running any more
+
+        # A call already stale once the worker is free doesn't run at all.
+        with pytest.raises(EngineSuperseded):
+            worker.call("preview", _config(tmp_path, _ENDLESS), limit=5, stale=lambda: True)
+        assert [r["v"] for r in worker.call("preview", _config(tmp_path), limit=5)] == ["A"]
+    finally:
+        worker.close()
+
+
+def test_a_newer_preview_from_the_same_tab_drops_the_older_ones(tmp_path):
+    import time
+
+    client = TestClient(app)
+    slow = {"config": _config(tmp_path, _ENDLESS), "limit": 5, "client": "tab-1"}
+    started = time.monotonic()
+    first, a = _post_in_background(client, "/api/preview", slow)
+    time.sleep(1.5)  # running by now
+    second, b = _post_in_background(client, "/api/preview", slow)
+    time.sleep(0.5)  # waiting behind the first
+    body = client.post("/api/preview", json={"config": _config(tmp_path), "limit": 5, "client": "tab-1"}).json()
+    first.join(10)
+    second.join(10)
+    assert a["stale"] is True and b["stale"] is True
+    assert body["ok"] is True and [r["v"] for r in body["rows"]] == ["A"]
+    assert time.monotonic() - started < 15

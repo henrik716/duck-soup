@@ -6,6 +6,7 @@ small Python UDF backed by the `mgrs` library.
 from __future__ import annotations
 
 import threading
+import weakref
 
 import duckdb
 import mgrs as _mgrs_lib
@@ -15,6 +16,11 @@ import mgrs as _mgrs_lib
 # duckdb#13208, duckdb#17971). Serialize all engine work through this lock so
 # only one thread ever touches the extension at a time.
 DUCKDB_LOCK = threading.Lock()
+
+# Every connection set up by load_extensions, so a query in progress can be stopped from
+# another thread (interrupt_all, used by worker.py) without the engine handing its
+# connections around. Weak: a closed and dropped connection leaves by itself.
+_CONNECTIONS: weakref.WeakSet = weakref.WeakSet()
 
 _converter = _mgrs_lib.MGRS()
 _PRECISION = 5  # 5 = 1 m MGRS precision
@@ -50,6 +56,17 @@ def load_extensions(con) -> None:
     """
     con.execute("INSTALL spatial; LOAD spatial;")
     con.execute("INSTALL postgres; LOAD postgres;")
+    _CONNECTIONS.add(con)
+
+
+def interrupt_all() -> None:
+    """Interrupt the query running on every connection: it fails with an InterruptException,
+    and the connection stays usable."""
+    for con in list(_CONNECTIONS):
+        try:
+            con.interrupt()
+        except Exception:
+            pass  # closed meanwhile
 
 
 def init_duckdb(con) -> None:

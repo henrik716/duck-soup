@@ -61,7 +61,10 @@ Choosing `expr` and clicking the edit icon opens the expression builder, a side 
 - **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date, …),
   click to insert,
 - a **live check** that runs the expression against real sample rows from your pipeline and
-  shows either sample results or the SQL error.
+  shows either sample results or the SQL error. A syntax error or unknown column shows at
+  once. Sample results need the pipeline's steps to run on a few rows, which on a slow
+  pipeline takes some seconds; the check counts them meanwhile. It doesn't stop or delay the
+  main preview.
 
 ![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-light.png#only-light){ .screenshot loading=lazy }
 ![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-dark.png#only-dark){ .screenshot loading=lazy }

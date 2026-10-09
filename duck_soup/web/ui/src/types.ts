@@ -283,6 +283,8 @@ export interface PreviewResponse {
   progress?: SourceProgress
   // Every pending source, each with its `source` id (progress is the first of them).
   pending_sources?: SourceProgress[]
+  // A newer preview from this tab replaced this one before it finished: ignore it.
+  stale?: boolean
   rows?: PreviewRow[]
   error?: string
 }

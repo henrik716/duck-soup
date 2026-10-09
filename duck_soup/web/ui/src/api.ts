@@ -78,6 +78,15 @@ export async function validateConfig(config: Config): Promise<ValidateResponse> 
   return r.json()
 }
 
+// Identifies this editor tab to the server, which drops a tab's previews once a newer one
+// arrives instead of computing every one of them in turn (see _preview_ticket in app.py).
+// crypto.randomUUID needs a secure context, which an editor opened over plain http on a
+// LAN address isn't.
+export function newClientId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+const CLIENT_ID = newClientId()
+
 export async function previewConfig(
   config: Config,
   pipeline_idx = 0,
@@ -85,11 +94,14 @@ export async function previewConfig(
   preview_until_step?: number,
   bbox?: [number, number, number, number],
   rejects = false,
+  /** Who's asking: previews from the same client replace each other (default: this tab's
+   *  main preview). A live check passes its own, so it doesn't stop the main preview. */
+  client = CLIENT_ID,
 ): Promise<PreviewResponse> {
   const r = await fetch('/api/preview', {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects }),
+    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects, client }),
   })
   return r.json()
 }

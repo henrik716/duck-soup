@@ -565,3 +565,37 @@ def test_gpkg_output_names_a_column_too_large_for_64_bits(tmp_path):
     cfg = _gpkg_types_config(tmp_path, [{"to": "big", "expr": "(2::HUGEINT ** 70)::HUGEINT"}])
     with pytest.raises(Exception, match="column 'big' of layer 'out' has a value too large"):
         run_config(cfg)
+
+
+def _mapping_error(tmp_path, mapping, run=False):
+    from duck_soup.engine import MappingError
+
+    point = {"type": "Point", "coordinates": [10.75, 59.91]}
+    uri = _write_geojson(tmp_path / "pts.geojson", [("a", point)])
+    cfg = load_config_dict({
+        "name": "t", "working_crs": "EPSG:25833", "base": "pts", "steps": [],
+        "sources": [{"id": "pts", "format": "geojson", "uri": uri, "crs": "EPSG:4326"}],
+        "mapping": mapping,
+        "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out", "crs": "EPSG:25833"},
+    })
+    with pytest.raises(MappingError) as info:
+        run_config(cfg) if run else preview_config_pipeline(cfg, limit=5)
+    return str(info.value).split("\n")
+
+
+def test_mapping_errors_name_the_row_and_its_path(tmp_path):
+    ok = [{"to": "name", "from": "name"}, {"to": "upper", "expr": "SELECT upper(name)"}]
+
+    head, path, detail = _mapping_error(tmp_path, ok + [{"to": "w", "expr": "least(1, 2"}])
+    assert head.startswith("mapping 'w' (expr): Parser Error: syntax error at end of input")
+    assert path == "pipelines.0.mapping.2"  # the shape the Problems tab links to the row
+
+    head, path, _ = _mapping_error(tmp_path, ok + [{"to": "c", "from": "nmae"}])
+    assert head.startswith("mapping 'c' (from): Binder Error") and '"nmae"' in head
+    assert path == "pipelines.0.mapping.2"  # not the valid `SELECT upper(name)` before it
+
+
+def test_run_reports_a_mapping_error_before_writing(tmp_path):
+    head, path, _ = _mapping_error(tmp_path, [{"to": "x", "expr": "nope + 1"}], run=True)
+    assert head.startswith("mapping 'x' (expr): Binder Error") and path == "pipelines.0.mapping.0"
+    assert not (tmp_path / "out.gpkg").exists()

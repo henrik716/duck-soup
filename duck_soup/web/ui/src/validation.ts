@@ -1,4 +1,4 @@
-import { previewConfig } from './api'
+import { newClientId, previewConfig } from './api'
 import type { Config } from './types'
 
 export type ValidationState = 'idle' | 'pending' | 'ok' | 'bad'
@@ -35,6 +35,9 @@ export function attachLiveValidation(opts: LiveValidationOptions): LiveValidatio
   let timer: ReturnType<typeof setTimeout> | undefined
   let seq = 0
   let disposed = false
+  // This check's own client id: a newer check replaces an older one on the server, without
+  // touching the main preview (or another field's check).
+  const client = newClientId()
 
   const run = async () => {
     const draft = getValue().trim()
@@ -42,21 +45,33 @@ export function attachLiveValidation(opts: LiveValidationOptions): LiveValidatio
     const cfg = buildPreviewConfig(draft)
     if (!cfg) { render('idle'); return }
     const mySeq = ++seq
-    render('pending', 'Checking…')
+    // A check runs the pipeline's steps on a few rows: on a slow pipeline that's seconds,
+    // so count them rather than leave a "Checking…" that looks stuck.
+    const started = Date.now()
+    const pending = () => {
+      const secs = Math.floor((Date.now() - started) / 1000)
+      render('pending', secs < 2 ? 'Checking…' : `Checking against sample data… ${secs}s (runs the pipeline's steps)`)
+    }
+    pending()
+    const ticker = setInterval(() => { if (disposed || mySeq !== seq) clearInterval(ticker); else pending() }, 1000)
     try {
-      const d = await previewConfig(cfg, 0, 5)
-      if (disposed || mySeq !== seq) return
+      const d = await previewConfig(cfg, 0, 5, undefined, undefined, false, client)
+      if (disposed || mySeq !== seq || d.stale) return
       if (d.ok && d.rows) {
         const sample = opts.extractSample
           ? opts.extractSample(d.rows as Record<string, unknown>[], previewCol)
           : d.rows.map(r => JSON.stringify((r as Record<string, unknown>)[previewCol])).join(', ')
         render('ok', sample ? `✓ valid — sample: ${sample}` : '✓ valid')
       } else {
-        render('bad', d.error || 'invalid')
+        // A mapping error names the throwaway column the check maps into and its config path
+        // (see MappingError in engine.py): only the error itself means anything here.
+        render('bad', (d.error || 'invalid').split('\n')[0].replace(/^mapping '[^']*' \(\w+\): /, ''))
       }
     } catch {
       if (disposed || mySeq !== seq) return
       render('bad', 'validation request failed')
+    } finally {
+      clearInterval(ticker)
     }
   }
 

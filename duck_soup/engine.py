@@ -124,6 +124,24 @@ _GPKG_WIDE_DECIMAL = re.compile(r"\bDECIMAL\((\d+),\s*\d+\)")
 _INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 
 
+class MappingError(ValueError):
+    """A mapping item that doesn't parse or bind (see Engine._check_mapping).
+
+    The message starts with a line naming the item, for the editor's status, followed by
+    the item's config path and the error on the next line: the shape of a validation error,
+    which the editor's Problems tab turns into a link to the mapping row."""
+
+    def __init__(self, path: str, item, error: Exception):
+        detail = str(error).splitlines()[0].strip()
+        kind = next(
+            k.rstrip("_") for k in ("expr", "from_", "func", "codelist", "const")
+            if getattr(item, k, None) is not None
+        )
+        head = f"mapping '{item.to}' ({kind}): {detail}"
+        super().__init__("\n".join([head, path, f"  {detail}"]))
+        self.path = path
+
+
 def _gpkg_safe_type(dtype: str) -> str:
     """`dtype` with those types swapped for what a GeoPackage stores anyway: a 64-bit
     INTEGER and a REAL (it has no exact decimals: a DECIMAL(18, 2) is written as REAL too)."""
@@ -211,12 +229,15 @@ class Engine:
         pipeline: Pipeline,
         log: Callable[[str], None] | None = None,
         parquet_multi: bool | None = None,
+        pipeline_index: int = 0,
     ):
         """`parquet_multi` says whether a GeoParquet output gets one file per layer
         (see parquet_layer_path). run_config sets it from the layer count across *all*
         its pipelines, since they share one output; left None, it's derived from this
         pipeline's own layers."""
         self.p = pipeline
+        # Its position in the config, for the `pipelines.<i>.mapping.<j>` paths of MappingError.
+        self.pipeline_index = pipeline_index
         self.working_crs = pipeline.effective_working_crs
         self.log = log or (lambda m: None)
         self.parquet_multi = parquet_multi
@@ -964,6 +985,38 @@ class Engine:
             return "(ST_Length(geom) + ST_Perimeter(geom))"
         raise ValueError(f"unknown func: {func}")
 
+    def _check_mapping(self, con: duckdb.DuckDBPyConnection, prev: str, layer: OutputLayer) -> None:
+        """Plan (not run) the SELECT written for `layer`; if a mapping item doesn't parse or
+        refers to a column that isn't there, raise MappingError naming that item.
+
+        Otherwise such an error only names generated SQL ("syntax error at or near AS", for an
+        expr missing its closing bracket) and not the mapping row, and a run reports it only
+        after computing every step. Planning is cheap: nothing is read or computed."""
+        try:
+            con.execute(f"DESCRIBE {self._final_select(prev, layer)}")
+            return
+        except (duckdb.ParserException, duckdb.BinderException) as whole:
+            failure = whole
+        own = bool(layer.mapping)
+        mapping = layer.mapping if own else self.p.mapping
+        layer_idx = self.p.outputs[0].layers.index(layer) if own and layer in self.p.outputs[0].layers else 0
+        for j, item in enumerate(mapping):
+            try:
+                con.execute(f"DESCRIBE {self._final_select(prev, layer.model_copy(update={'mapping': [item]}))}")
+                continue
+            except (duckdb.ParserException, duckdb.BinderException) as e:
+                error = e
+            if item.expr is not None and isinstance(error, duckdb.ParserException):
+                # Parsed on its own (bracketed, as _map_expr does), so the message points
+                # into the expression rather than at the generated `AS "<to>"` after it.
+                try:
+                    con.extract_statements(f"SELECT ({item.expr})")
+                except duckdb.ParserException as own_error:
+                    error = own_error
+            where = f"layers.{layer_idx}.mapping.{j}" if own else f"mapping.{j}"
+            raise MappingError(f"pipelines.{self.pipeline_index}.{where}", item, error)
+        raise failure
+
     def _final_select(self, prev: str, layer: OutputLayer, raw: bool = False) -> str:
         """The SELECT written for `layer`. `raw` skips the mapping (every column as-is), for
         a rejects layer: its rows leave the chain mid-way, before columns the mapping may
@@ -1120,6 +1173,11 @@ class Engine:
                     prev = self._prepare(con, workdir)
                 finally:
                     self._materialize = False
+                # Before writing anything, so a mapping error names its row (MappingError)
+                # instead of failing halfway through the output.
+                for out in self.p.outputs:
+                    for layer in out.layers:
+                        self._check_mapping(con, prev, layer)
 
                 deleted_paths: set[Path] = set()
                 out_paths: list[str] = []
@@ -1270,6 +1328,7 @@ class Engine:
                     )
                 else:
                     layer = self.p.outputs[0].layers[0]
+                    self._check_mapping(con, prev, layer)
                     final_sql = self._final_select(prev, layer)
                     preview_sql = self._preview_rows_sql(
                         f"({final_sql})", layer.crs,
@@ -1352,8 +1411,9 @@ def preview_pipeline(
     bbox: tuple[float, float, float, float] | None = None,
     rejects: bool = False,
     log: Callable[[str], None] | None = None,
+    pipeline_index: int = 0,
 ) -> list[dict]:
-    engine = Engine(pipeline, log=log)
+    engine = Engine(pipeline, log=log, pipeline_index=pipeline_index)
     return engine.preview(
         limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
     )
@@ -1388,8 +1448,10 @@ def run_config(
     # A run reads current data: remote file sources are downloaded again (once per URL)
     # rather than reusing a preview's download — see sources.fresh_downloads.
     with src_readers.fresh_downloads(reuse=downloads):
-        for pdef in config.pipelines:
-            engine = Engine(pdef.to_pipeline(config.output), log=log, parquet_multi=multi)
+        for i, pdef in enumerate(config.pipelines):
+            engine = Engine(
+                pdef.to_pipeline(config.output), log=log, parquet_multi=multi, pipeline_index=i,
+            )
             engine.run()
             if written is not None:
                 written.extend({"pipeline": pdef.name, **w} for w in engine.written)
@@ -1417,6 +1479,7 @@ def preview_config_pipeline(
     return preview_pipeline(
         _config_pipeline(config, pipeline_idx),
         limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects, log=log,
+        pipeline_index=pipeline_idx,
     )
 
 

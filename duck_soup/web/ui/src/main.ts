@@ -472,15 +472,28 @@ async function runPreview(): Promise<void> {
   const bbox = bboxMode ? getMapBounds() ?? undefined : undefined
 
   setPreviewBusy(true)
+  // A slow pipeline's preview takes seconds: count them in the status rather than leave it
+  // on "valid" while nothing seems to happen. Not while it shows a source's download or
+  // conversion progress (awaitPrepared), which says more.
+  const started = Date.now()
+  let ticking = false
+  let progressAt = 0
+  const ticker = window.setInterval(() => {
+    const secs = Math.floor((Date.now() - started) / 1000)
+    if (seq !== previewSeq || secs < 1 || Date.now() - progressAt < 2500) return
+    ticking = true
+    setStatus('busy', `previewing… ${secs}s`)
+  }, 1000)
   try {
     let waited = false
     const d = await awaitPrepared(
       () => previewConfig(cfg, pipelineIdx, previewLimit, preview_until_step, bbox, rejects),
-      text => { waited = true; setStatus('busy', text) },
+      text => { waited = true; progressAt = Date.now(); setStatus('busy', text) },
       () => seq !== previewSeq, // a newer edit superseded this request
     )
-    if (!d) return
-    if (waited) setStatus('ok', 'valid')
+    clearInterval(ticker)
+    if (!d || d.stale) return
+    if (waited || ticking) setStatus('ok', 'valid')
     if (d.ok && d.rows) {
       updateMap(d.rows, activeStep, { fitBounds: !bboxMode })
       updateTable(d.rows as Record<string, unknown>[], previewLimit)
@@ -494,6 +507,7 @@ async function runPreview(): Promise<void> {
     setStatus('bad', 'preview request failed', String(e))
     showTableError(String(e))
   } finally {
+    clearInterval(ticker)
     setPreviewBusy(false)
   }
 }
@@ -527,7 +541,7 @@ async function previewSource(sourceId: string, cfg: Config): Promise<void> {
         text => { waited = true; setStatus('busy', text) },
         () => seq !== previewSeq,
       )
-      if (!d) return
+      if (!d || d.stale) return
       if (waited) setStatus('ok', 'valid')
       if (d.ok && d.rows) {
         updateMap(d.rows as PreviewRow[], undefined, { fitBounds: !bboxMode })

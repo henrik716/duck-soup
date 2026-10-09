@@ -13,6 +13,17 @@ change, the editor:
 2. if it's valid, **previews** it. The map and the **Data Table** show the first rows of the
    current pipeline's output.
 
+On a slow pipeline a preview can take a while. After a second the status shows
+`previewing… 8s`, counting up, until the preview is done. A change made in the meantime
+replaces it: the running preview is stopped and only the newest one is computed, so a burst of
+edits costs one preview, not one per edit.
+
+Validation checks the config's structure, not the SQL inside it. A mapping expression that
+doesn't parse, or a column that doesn't exist, shows up when the preview runs, as an error
+naming the mapping row, e.g. `mapping 'width' (expr): Parser Error: syntax error at end of
+input`. These appear within a second, before any step is computed. An error that only
+happens while computing values, such as a failed cast, appears once the steps have run.
+
 The preview follows whichever pipeline card you're working in. Steps and sources can also be
 previewed on their own:
 
@@ -56,6 +67,8 @@ type in the filter box to search all columns. **export csv** downloads what's sh
 When the config is invalid, the **Problems** tab opens and its badge shows the number of
 errors. Each problem shows the location (`pipelines.0.steps.2.source`) and the message. Click
 one to jump to the card it refers to: the editor expands it, scrolls to it and flashes it.
+Mapping errors from the preview link to their mapping row the same way
+(`pipelines.0.mapping.1`).
 
 The tab opens by itself only when a problem first appears while you're on **Data Table**, and
 once the preview works again it switches back there. If you move to another tab in between,

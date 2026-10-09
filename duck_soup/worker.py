@@ -74,6 +74,14 @@ class EngineCancelled(RuntimeError):
         super().__init__("Cancelled.")
 
 
+class EngineSuperseded(RuntimeError):
+    """A newer call made this one pointless (see EngineWorker.call's `stale`, and interrupt):
+    it was skipped, or interrupted while running."""
+
+    def __init__(self) -> None:
+        super().__init__("Superseded by a newer request.")
+
+
 class EngineTaskError(RuntimeError):
     """A task raised an ordinary exception in the worker. `trace` is the worker's traceback,
     `partial` whatever the task had produced so far (a run: the layers written)."""
@@ -216,9 +224,26 @@ def _apply_context(ctx: dict) -> None:
         setattr(sources, name, value)
 
 
-def _serve(conn) -> None:
-    """The worker's loop: one call at a time until the server closes the pipe."""
+def _serve(conn, interrupt_event, interrupt_target) -> None:
+    """The worker's loop: one call at a time until the server closes the pipe.
+
+    EngineWorker.interrupt sets `interrupt_target` to the id of the call to stop and then
+    `interrupt_event`; a watcher thread interrupts the running DuckDB query if that call is
+    still the current one (derive.interrupt_all). By id, so an interrupt that arrives late
+    can't hit the next call instead."""
+    from .derive import interrupt_all
+
     faulthandler.enable()  # a native crash prints a Python traceback to the server's console
+    current = [0]
+
+    def watch_interrupts() -> None:
+        while True:
+            interrupt_event.wait()
+            interrupt_event.clear()
+            if interrupt_target.value == current[0] != 0:
+                interrupt_all()
+
+    threading.Thread(target=watch_interrupts, daemon=True).start()
     # A worker busy in a long query only notices a closed pipe once it's done: when the
     # server is gone (killed, crashed), stop at once rather than keep computing for nobody.
     server = mp.parent_process()
@@ -227,16 +252,19 @@ def _serve(conn) -> None:
     conn.send(("ready",))
     while True:
         try:
-            task, payload, ctx, kwargs = conn.recv()
+            call_id, task, payload, ctx, kwargs = conn.recv()
         except (EOFError, OSError):
             return
         partial: dict = {}
+        current[0] = call_id
         try:
             _apply_context(ctx)
             result = _TASKS[task](payload, lambda line: conn.send(("log", line)), partial, **kwargs)
             conn.send(("ok", result))
         except Exception as e:
             conn.send(("error", str(e), traceback.format_exc(), partial))
+        finally:
+            current[0] = 0
 
 
 # -- server side --------------------------------------------------------------
@@ -258,15 +286,26 @@ class EngineWorker:
     def __init__(self, name: str = "duck-soup-engine") -> None:
         self.name = name
         self._lock = threading.Lock()
+        # Guards which call is running (_call_id, _tag, _busy) against interrupt().
+        self._state = threading.Lock()
         self._proc = None
         self._conn = None
         self._busy = False
         self._cancelled = False
+        self._call_id = 0
+        self._tag: Any = None  # the running call's tag, see interrupt
+        self._interrupted = False
+        self._interrupt_event = None
+        self._interrupt_target = None
 
     def _start(self) -> None:
         ctx = mp.get_context("spawn")
         ours, theirs = ctx.Pipe()
-        proc = ctx.Process(target=_serve, args=(theirs,), daemon=True, name=self.name)
+        self._interrupt_event, self._interrupt_target = ctx.Event(), ctx.Value("q", 0)
+        proc = ctx.Process(
+            target=_serve, args=(theirs, self._interrupt_event, self._interrupt_target),
+            daemon=True, name=self.name,
+        )
         proc.start()
         # Only the worker may hold its end: closed here, so a dead worker reads as EOF.
         theirs.close()
@@ -305,19 +344,29 @@ class EngineWorker:
             proc.join()
         return proc.exitcode
 
-    def call(self, task: str, payload: Any, log: Callable[[str], None] | None = None, **kwargs) -> Any:
+    def call(
+        self, task: str, payload: Any, log: Callable[[str], None] | None = None, *,
+        tag: Any = None, stale: Callable[[], bool] | None = None, **kwargs,
+    ) -> Any:
         """Run `task` on `payload` (a config dict, a source dict, ...) in the worker and
         return its result. Raises EngineTaskError when the task fails, EngineCrashed when the
-        worker dies, EngineCancelled when cancel() stopped it."""
+        worker dies, EngineCancelled when cancel() stopped it, EngineSuperseded when `stale()`
+        was already true once the worker was free (the call is skipped) or interrupt(`tag`)
+        stopped it."""
         with self._lock:
-            self._cancelled = False
+            if stale is not None and stale():
+                raise EngineSuperseded()
+            self._cancelled = self._interrupted = False
             if self._proc is None or not self._proc.is_alive():
                 self._discard()
                 self._start()
             lines: list[str] = []
-            self._busy = True
+            with self._state:
+                self._call_id += 1
+                self._tag = tag
+                self._busy = True
             try:
-                self._conn.send((task, payload, _context(), kwargs))
+                self._conn.send((self._call_id, task, payload, _context(), kwargs))
                 while True:
                     msg = self._recv()
                     if msg[0] == "log":
@@ -326,6 +375,8 @@ class EngineWorker:
                             log(msg[1])
                     elif msg[0] == "ok":
                         return msg[1]
+                    elif self._interrupted:
+                        raise EngineSuperseded()
                     else:
                         raise EngineTaskError(*msg[1:])
             except (EOFError, OSError):
@@ -334,7 +385,21 @@ class EngineWorker:
                     raise EngineCancelled(lines) from None
                 raise EngineCrashed(exitcode, lines) from None
             finally:
-                self._busy = False
+                with self._state:
+                    self._busy = False
+                    self._tag = None
+
+    def interrupt(self, tag: Any) -> bool:
+        """Interrupt the running call if it was made with `tag` (e.g. an editor tab's previous
+        preview): its DuckDB query stops, the worker stays up, and the call raises
+        EngineSuperseded. True when there was one to stop."""
+        with self._state:
+            if tag is None or not self._busy or self._tag != tag or self._interrupt_event is None:
+                return False
+            self._interrupted = True
+            self._interrupt_target.value = self._call_id
+            self._interrupt_event.set()
+            return True
 
     def cancel(self) -> bool:
         """Stop the call in progress by killing the worker (the next call starts a new one).
