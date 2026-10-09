@@ -742,6 +742,8 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     if (val(c, 'geom_field')) s.geom_field = val(c, 'geom_field')
     const mv = c.querySelector<HTMLInputElement>('[data-k="make_valid"]')
     if (mv && !mv.checked) s.make_valid = false
+    const f2d = c.querySelector<HTMLInputElement>('[data-k="force_2d"]')
+    if (f2d?.checked) s.force_2d = true
     return s as Source
   }).filter(s => s.id && s.uri)
 

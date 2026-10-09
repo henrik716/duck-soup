@@ -11,6 +11,30 @@
 | `crs` | CRS | — | The source's CRS, e.g. `EPSG:4326`. |
 | `geometry` | bool | by format | Force the source to be treated as spatial (`true`) or tabular (`false`). |
 | `make_valid` | bool | `true` | Repair invalid geometry with `ST_MakeValid` when loading. |
+| `force_2d` | bool | `false` | Drop Z (height) and M values with `ST_Force2D` when loading. See [3D geometry](#3d-geometry). |
+
+### 3D geometry
+
+Z and M values are kept by default and flow through to the output; `line_overlay`, for
+instance, keeps the heights of the lines it cuts. Set
+`force_2d: true` to flatten a source when loading it. This is worth doing when:
+
+- the output should be 2D, or your target schema expects 2D;
+- 3D and 2D sources end up in the same layer (through `merge`, or overlays that build new
+  geometry). GeoPackage readers expect one geometry type per layer;
+- the heights don't survive processing in a meaningful way. `intersect_overlay`, `dissolve`
+  and `erase` build new geometry, and their Z values are interpolated or dropped.
+
+```yaml
+- id: roads
+  format: csv
+  uri: https://nvdb-eksport.atlas.vegvesen.no/vegnett/veglenkesekvenser/segmentert.csv?fylke=03
+  crs: EPSG:25833
+  geom_field: GEO.WKT
+  force_2d: true
+```
+
+Derived sources take their geometry from their source, so flatten that source.
 
 ## Format-specific fields
 

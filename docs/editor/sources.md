@@ -66,6 +66,7 @@ in Docker, that's the container, so only mounted folders are visible.
 | **layer / typename / sheet / collection** | Filled with the layers, feature types, sheets, collections or tables found in the source. Pick one. |
 | **crs** | Detected from the data where possible (marked *detected*). Searchable list of common EPSG codes. |
 | **repair invalid geometry** | `make_valid`: on by default. |
+| **force 2D** | `force_2d`: drop Z (height) and M values on load. Off by default. See [3D geometry](../reference/sources.md#3d-geometry). |
 
 Once the uri and layer are set, the editor **inspects** the source. It shows a badge with the
 column count and lists the columns and their types at the bottom of the card. Those columns

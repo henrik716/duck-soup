@@ -14,6 +14,7 @@ export interface Source {
   crs?: string
   geometry?: boolean
   make_valid?: boolean
+  force_2d?: boolean
   where?: string
   page_size?: number
   header_row?: boolean

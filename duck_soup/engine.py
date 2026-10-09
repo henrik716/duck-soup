@@ -239,6 +239,8 @@ class Engine:
                 # this same working_crs geometry rather than re-transforming from the source
                 # CRS, so there's a single reprojection chain per feature (no double rounding).
                 geom = _transform("geom", crs, self.working_crs)
+                if s.force_2d:
+                    geom = f"ST_Force2D({geom})"
                 if s.make_valid:
                     geom = f"ST_MakeValid({geom})"
                 select = (
@@ -587,8 +589,11 @@ class Engine:
             FROM {src_view}
         ),
         stretch AS (
-            SELECT a.__a_row, a.geom AS __a, b.geom AS __b, {{{f_struct}}} AS __f,
-                   unnest(ST_Dump(ST_CollectionExtract(ST_Intersection(a.geom, b.__buf), 2))).geom AS __s
+            -- Positions are found on a 2D copy of the line: ST_LineLocatePoint crashes the
+            -- process on lines with Z or M (NVDB exports are 3D). ST_LineSubstring measures
+            -- along the line in 2D too, so the cut below still keeps the line's own Z.
+            SELECT a.__a_row, ST_Force2D(a.geom) AS __a, b.geom AS __b, {{{f_struct}}} AS __f,
+                   unnest(ST_Dump(ST_CollectionExtract(ST_Intersection(ST_Force2D(a.geom), b.__buf), 2))).geom AS __s
             FROM a JOIN b ON ST_Intersects(a.geom, b.__buf)
         ),
         span AS (

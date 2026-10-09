@@ -346,6 +346,46 @@ def test_line_overlay_source_ending_near_a_line_end_leaves_no_sliver(tmp_path):
     assert rows == [("x", "LINESTRING (0 0, 10 0)")]
 
 
+def test_line_overlay_handles_3d_lines_and_keeps_their_z(tmp_path):
+    # ST_LineLocatePoint used to crash the whole process (no Python error) on lines with Z,
+    # which is what NVDB's road network exports are.
+    base = [("main", _line((0, 0, 0), (10, 0, 0), (20, 0, 100)))]
+    other = [("x", _line((5, 0, 7), (15, 0, 7)))]
+    rows = _step_output(
+        tmp_path, base, other,
+        [{"type": "line_overlay", "source": "other", "fields": {"ds2": "name"}}],
+        "SELECT ds2, ST_AsText(geom) FROM t ORDER BY ST_XMin(geom)",
+    )
+    # Cut 2D positions along the line, so the pieces keep the base line's own heights.
+    assert rows == [
+        (None, "LINESTRING Z (0 0 0, 5 0 0)"),
+        ("x", "LINESTRING Z (5 0 0, 10 0 0, 15 0 50)"),
+        (None, "LINESTRING Z (15 0 50, 20 0 100)"),
+    ]
+
+
+def test_force_2d_drops_z_on_load(tmp_path):
+    import duckdb
+
+    from duck_soup.derive import init_duckdb
+
+    uri = _write_geojson(tmp_path / "base.geojson", [("main", _line((0, 0, 3), (10, 0, 5)))])
+
+    def geom(**opts):
+        cfg = load_config_dict({
+            "name": "t", "working_crs": "EPSG:25833", "base": "base", "steps": [], "mapping": [],
+            "sources": [{"id": "base", "format": "geojson", "uri": uri, "crs": "EPSG:25833", **opts}],
+            "output": {"path": str(tmp_path / "unused.gpkg"), "layer": "out", "crs": "EPSG:25833"},
+        })
+        con = duckdb.connect()
+        init_duckdb(con)
+        Engine(cfg.pipelines[0].to_pipeline(cfg.output))._prepare(con, tmp_path)
+        return con.execute("SELECT ST_AsText(geom) FROM src_base").fetchone()[0]
+
+    assert geom() == "LINESTRING Z (0 0 3, 10 0 5)"
+    assert geom(force_2d=True) == "LINESTRING (0 0, 10 0)"
+
+
 def _config(tmp_path: Path, base: list, steps: list[dict], mapping: list[dict], **pipeline):
     src = {"id": "base", "format": "geojson", "uri": _write_geojson(tmp_path / "base.geojson", base),
            "crs": pipeline.pop("base_crs", "EPSG:25833")}

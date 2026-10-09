@@ -75,6 +75,7 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
         </label>
         <label class="field grow">crs<span class="auto-chip" data-auto-crs hidden>detected</span>${comboField('data-k="crs"', s.crs ?? '', CRS_COMBO_OPTIONS, 'EPSG:4326')}</label>
         <label class="field-check"><input type="checkbox" data-k="make_valid" checked> repair invalid geometry</label>
+        <label class="field-check" title="Drop Z (height) and M values on load"><input type="checkbox" data-k="force_2d"> force 2D</label>
       </div>
       <div class="card-warning" data-crs-warning hidden>
         <i data-lucide="alert-triangle" style="width:12px;height:12px;flex-shrink:0"></i>
@@ -170,11 +171,12 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   })
 
   for (const [k, v] of Object.entries(s)) {
-    if (k === 'make_valid') continue
+    if (k === 'make_valid' || k === 'force_2d') continue
     const inp = c.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)
     if (inp && v != null) inp.value = String(v)
   }
   c.querySelector<HTMLInputElement>('[data-k="make_valid"]')!.checked = s.make_valid !== false
+  c.querySelector<HTMLInputElement>('[data-k="force_2d"]')!.checked = s.force_2d === true
 
   c.querySelector<HTMLButtonElement>('.data-browse-btn')!.onclick = (e) => {
     e.stopPropagation()

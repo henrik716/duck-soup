@@ -131,7 +131,8 @@ other piece is kept with those fields NULL. The output is still the complete net
 Each piece becomes its own feature: a line covered in the middle comes out as three lines,
 not one multi-line. Neighbouring pieces share their end points exactly, and the geometry stays
 the running line's own; the source lines only decide where the cuts go and which attributes a
-piece gets. Lines that only cross a source line are not cut there. Where several source lines
+piece gets. 3D lines keep their heights: positions along the line are measured in 2D, and
+each piece carries the Z values of the original line. Lines that only cross a source line are not cut there. Where several source lines
 lie on the same stretch, the first one (in source order) wins. Source lines with no running
 line under them are not added.
 

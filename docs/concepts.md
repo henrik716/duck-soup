@@ -56,8 +56,8 @@ sources:
     crs: EPSG:32631
 ```
 
-Every source is read once. Invalid geometry is repaired on load (`make_valid`, on by default)
-and reprojected into the pipeline's working CRS. Tabular sources (CSV, Excel, JSON, or anything with
+Every source is read once. Invalid geometry is repaired on load (`make_valid`, on by default),
+optionally flattened to 2D (`force_2d`), and reprojected into the pipeline's working CRS. Tabular sources (CSV, Excel, JSON, or anything with
 `geometry: false`) can still be used for attribute joins and codelists. See
 [Source formats](reference/sources.md) for every format.
 

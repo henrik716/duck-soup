@@ -263,7 +263,8 @@ the [user guide](https://henrik716.github.io/duck-soup/reference/yaml/).
 | `xlsx`, `csv` | `ST_Read` (tabular) | optional geometry from `x_field`+`y_field` (→ `ST_Point`) or `geom_field` (WKT or hex-WKB, auto-detected); `header_row` controls header detection |
 
 Every source also accepts an optional `make_valid: true` to repair invalid geometry via
-`ST_MakeValid` before it flows into any joins.
+`ST_MakeValid` before it flows into any joins, and `force_2d: true` to drop Z/M values
+(`ST_Force2D`) on load.
 
 ### Step types
 

@@ -75,6 +75,9 @@ class Source(BaseModel):
     make_valid: bool = Field(
         True, description="Repair invalid geometry (ST_MakeValid) when loading"
     )
+    force_2d: bool = Field(
+        False, description="Drop Z and M values from the geometry (ST_Force2D) when loading"
+    )
     # ArcGIS REST tuning
     where: str = Field("1=1", description="ArcGIS REST 'where' filter")
     page_size: int = Field(2000, description="Records per request (ArcGIS REST) or per page (OGC API - Features)")

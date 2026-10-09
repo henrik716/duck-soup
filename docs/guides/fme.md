@@ -53,6 +53,7 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 | Clipper (*outside* output) | [`erase`](../reference/steps.md#erase) |
 | Dissolver, Aggregator | [`dissolve`](../reference/steps.md#dissolve) |
 | GeometryValidator (repair) | `make_valid`, on by default for every source |
+| 2DForcer | [`force_2d: true`](../reference/sources.md#3d-geometry) on the source |
 | Reprojector | Automatic: sources are reprojected into the working CRS, and layers into their own `crs` |
 
 ### Rows
