@@ -36,6 +36,19 @@
   margin-left: 0.2rem;
 }
 
+/* The editor's wordmark ends in an accent-coloured full stop ("duck soup."); give the header's
+   site name the same one. Only the first topic is the site name, the second the page title.
+   On the topic (a flex box) rather than its span, whose trailing whitespace would show. */
+.md-header__topic:first-child::after {
+  content: ".";
+  color: var(--ds-accent);
+}
+
+/* The light scheme's header is the violet itself: use a paler one there. */
+[data-md-color-scheme="default"] .md-header__topic:first-child::after {
+  color: #c4b0ff;
+}
+
 /* Material hides the header logo below its desktop breakpoint (it only shows in the drawer).
    Keep a small duck there, placed after the hamburger button. */
 @media screen and (max-width: 76.234375em) {
@@ -70,6 +83,14 @@
 
 .md-typeset .ds-hero h1 {
   margin: 0.3rem 0 0.4rem;
+}
+
+.ds-hero h1 .ds-dot {
+  color: var(--ds-accent);
+}
+
+[data-md-color-scheme="default"] .ds-hero h1 .ds-dot {
+  color: #5b3fd6;
 }
 
 .ds-hero img {

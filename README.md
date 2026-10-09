@@ -1,4 +1,4 @@
-# <img src="duck_soup/web/static/favicon.png" width="32" height="32" align="absmiddle"> duck soup
+# <img src="duck_soup/web/static/favicon.png" width="32" height="32" align="absmiddle"> duck soup.
 
 [![DuckDB](https://img.shields.io/badge/Powered%20by-DuckDB-orange.svg)](https://duckdb.org/)
 [![Output](https://img.shields.io/badge/Output-GeoPackage%20%7C%20GeoParquet-blue.svg)](https://www.geopackage.org/)

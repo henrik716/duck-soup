@@ -19,6 +19,7 @@ W, H = 1200, 630
 
 TITLE = "duck soup"
 TAGLINE = "geodata ETL on DuckDB"
+ACCENT = (157, 133, 255)  # --accent in duck_soup/web/ui/src/styles.css
 
 
 def _font(names: list[str], size: int) -> ImageFont.FreeTypeFont:
@@ -41,7 +42,11 @@ def main() -> None:
     draw = ImageDraw.Draw(card)
     title_font = _font(["SpaceGrotesk-Bold.ttf", "segoeuib.ttf", "DejaVuSans-Bold.ttf"], 86)
     tag_font = _font(["SpaceGrotesk-Regular.ttf", "segoeui.ttf", "DejaVuSans.ttf"], 34)
-    draw.text((W // 2, 470), TITLE, font=title_font, fill=(255, 255, 255), anchor="mm")
+    # The editor's wordmark: the name plus a full stop in the accent colour, centred together.
+    title_w = draw.textlength(TITLE + ".", font=title_font)
+    x = (W - title_w) / 2
+    draw.text((x, 470), TITLE, font=title_font, fill=(255, 255, 255), anchor="lm")
+    draw.text((x + draw.textlength(TITLE, font=title_font), 470), ".", font=title_font, fill=ACCENT, anchor="lm")
     draw.text((W // 2, 548), TAGLINE, font=tag_font, fill=(196, 176, 255), anchor="mm")
 
     card.save(OUT, optimize=True)

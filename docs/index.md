@@ -7,7 +7,7 @@ hide:
 
 ![duck soup logo](assets/favicon.png)
 
-# duck soup
+# duck soup<span class="ds-dot">.</span>
 
 <p class="tagline">Config-driven geodata ETL on DuckDB — as easy as… well, duck soup.</p>
 
