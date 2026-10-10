@@ -103,6 +103,21 @@ folder. Re-run it after changing the engine or the examples, and commit the outp
 python scripts/build_tutorial.py
 ```
 
+The editor screenshots in `docs/assets/screenshots/` (a light and a dark version of each) come
+from `scripts/build_screenshots.py`. It sets up a throwaway project from the tutorial data,
+starts the editor from inside it and captures every shot with Playwright. Retake them when the
+UI they show changes:
+
+```bash
+pip install -e ".[screenshots]"
+python scripts/build_screenshots.py                     # every shot, ~2 minutes
+python scripts/build_screenshots.py overview yaml-tab   # just these
+```
+
+It drives your installed Microsoft Edge (`--browser chrome` for Chrome), so there's no
+`playwright install` step. Playwright's bundled Chromium draws the map with software WebGL so
+slowly that the capture times out.
+
 ## CI
 
 `.github/workflows/ci.yml` runs `pytest` and the frontend build on every push and PR. On

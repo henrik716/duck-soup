@@ -16,6 +16,7 @@ The left side is where you **build**. The right side is where you **see** the re
 
 | Control | What it does |
 |---|---|
+| **version** | The badge next to the name (e.g. `v1.3.3`). Click it for the release notes. When PyPI has a newer release it reads `update to …`, and a click copies the upgrade command (see [Install](../getting-started/install.md)); run it, then restart duck soup. |
 | **load** | Opens a config saved in the project folder's `pipelines/` directory. The editor reopens the last config you used on startup. |
 | **new** | Starts a blank config with one empty pipeline. |
 | **import** | Opens a dialog where you paste a pipeline YAML from anywhere (git, email, a colleague). It replaces what's open. |

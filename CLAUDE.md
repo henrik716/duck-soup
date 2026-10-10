@@ -36,6 +36,11 @@ that affects step or mapping output, and commit the regenerated files. The tutor
 config ship in the package (`duck_soup/tutorial/`, listed in `pyproject.toml` package-data);
 `duck-soup tutorial` (`duck_soup/tutorial.py`) copies them into a project folder as
 `data/tutorial/` + `pipelines/pondsworth.yaml`.
+The editor screenshots (`docs/assets/screenshots/*-light/dark.png`) come from
+`python scripts/build_screenshots.py [shot ...]` (`pip install -e ".[screenshots]"`). It drives
+the installed Edge (`--browser chrome` for Chrome), never Playwright's bundled Chromium, which
+is too slow with MapLibre and times out. Retake the affected shots after a UI change; the top
+bar is in editor-overview, resized-panels and flow-editor.
 
 **Tests**
 ```bash
