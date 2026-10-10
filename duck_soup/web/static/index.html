@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/static/assets/index-Dkj5xEV7.js"></script>
-  <link rel="stylesheet" crossorigin href="/static/assets/index-noYdmW3l.css">
+  <script type="module" crossorigin src="/static/assets/index-CANgzYZb.js"></script>
+  <link rel="stylesheet" crossorigin href="/static/assets/index-Bt27A0Kh.css">
 </head>
 <body>
 <div id="toast-container" class="toast-container"></div>
@@ -100,6 +100,7 @@
     <button id="saveBtn" class="ghost mini" title="Ctrl+S"><i data-lucide="save" style="width:13px;height:13px"></i> save</button>
     <button id="runBtn" class="primary mini" title="Ctrl+Enter"><i data-lucide="play" style="width:13px;height:13px"></i> run</button>
     <button id="cancelRunBtn" class="ghost mini" title="Stop the run" hidden><i data-lucide="square" style="width:13px;height:13px"></i> cancel</button>
+    <a class="docs-btn" id="docsBtn" target="_blank" rel="noopener" title="Open the duck soup docs in a new tab"><i data-lucide="book-open" style="width:13px;height:13px"></i> docs</a>
     <button type="button" class="ghost mini theme-toggle" id="themeBtn" aria-label="Toggle light/dark mode" title="Switch to light mode">
       <i data-lucide="sun" class="theme-icon-sun" style="width:14px;height:14px"></i>
       <i data-lucide="moon" class="theme-icon-moon" style="width:14px;height:14px"></i>
@@ -114,7 +115,7 @@
     <!-- "Ducks in a row": the pipeline flow diagram (src/lineage.ts) -->
     <div id="lineage-diagram-container" class="card" style="margin-bottom:24px;padding:14px 18px;border-color:rgb(var(--accent-rgb) / 0.25);">
       <div class="lineage-header" style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;display:flex;justify-content:space-between;align-items:center;">
-        <span class="lineage-title" title="Getting your ducks in a row: the base's features waddle through every step, in order, and file into the output. Click a duck to edit it, or a + to add one.">ducks in a row <span class="lineage-title-sub">· pipeline flow</span></span>
+        <span class="lineage-title" title="Getting your ducks in a row: the base's features waddle through every step, in order, and file into the output. Click a duck to edit it, or a + to add one.">ducks in a row <span class="lineage-title-sub">· pipeline flow</span> <a class="help-link" id="lineageHelp" target="_blank" rel="noopener" title="Help: the pipeline flow (opens the docs)" aria-label="Help: the pipeline flow (opens the docs in a new tab)"><i data-lucide="circle-help"></i></a></span>
         <span class="lineage-header-tools">
           <span id="lineageCountStatus" class="lineage-count-status" aria-live="polite"></span>
           <span class="lineage-count-btns lineage-zoom" role="group" aria-label="Zoom the diagram">
@@ -264,7 +265,7 @@
 
       <div id="problems-tab" class="tab-content problems-wrap" role="tabpanel" aria-labelledby="tab-btn-problems" style="flex:1;overflow:auto;padding:12px 16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <h3 style="margin:0;font-size:10px;">problems</h3>
+          <h3 style="margin:0;font-size:10px;">problems <a class="help-link" id="problemsHelp" target="_blank" rel="noopener" title="Help: troubleshooting (opens the docs)" aria-label="Help: troubleshooting (opens the docs in a new tab)"><i data-lucide="circle-help"></i></a></h3>
         </div>
         <div id="problemsLocators" class="problem-locators"></div>
         <pre id="problemsDetail" style="flex:1;margin:0;">No problems — the config is valid.</pre>
@@ -272,6 +273,6 @@
     </div>
   </aside>
 </div>
-
+
 </body>
 </html>

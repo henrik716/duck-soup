@@ -1,5 +1,5 @@
 import { createIcons, X, ChevronDown, Plus, Folder, ArrowUp, ArrowDown } from 'lucide'
-import { mkEl, appIcons, esc } from '../dom'
+import { mkEl, appIcons, esc, helpLink } from '../dom'
 import { comboField, wireCombos } from '../combo'
 import { openFileExplorer } from '../file-explorer'
 import { openOverlay, closeOverlay } from '../overlay'
@@ -149,7 +149,7 @@ export function openCodelistDrawer(
     drawer.innerHTML = `
       <div class="drawer-card fullscreen">
         <div class="drawer-header">
-          <h3><i data-lucide="sliders" style="width:16px;height:16px;color:var(--accent)"></i> Configure Codelist</h3>
+          <h3><i data-lucide="sliders" style="width:16px;height:16px;color:var(--accent)"></i> Configure Codelist ${helpLink('reference/mapping/', 'codelists', 'codelists')}</h3>
           <button class="mini ghost" id="closeDrawerBtn" aria-label="Close drawer"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="drawer-body" id="drawerBody" style="align-items:center;"></div>
@@ -173,7 +173,7 @@ export function openCodelistDrawer(
   drawerBody.innerHTML = ''
 
   drawer.querySelector('.drawer-header h3')!.innerHTML =
-    `<i data-lucide="sliders" style="width:16px;height:16px;color:var(--accent)"></i> Codelist: <span style="color:var(--ink);font-family:var(--mono);font-size:13px">${title}</span>`
+    `<i data-lucide="sliders" style="width:16px;height:16px;color:var(--accent)"></i> Codelist: <span style="color:var(--ink);font-family:var(--mono);font-size:13px">${title}</span> ${helpLink('reference/mapping/', 'codelists', 'codelists')}`
 
   const panel = codelistPanel(initCodelist, () => {}, availableColumns)
   drawerBody.appendChild(panel)

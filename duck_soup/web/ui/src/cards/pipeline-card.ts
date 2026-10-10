@@ -1,6 +1,6 @@
 import { createIcons, Loader, UploadCloud } from 'lucide'
 import { uploadFile } from '../api'
-import { mkEl, val, refreshIcons, getDragAfterElement, esc, qs, wireCollapse } from '../dom'
+import { mkEl, val, refreshIcons, getDragAfterElement, esc, qs, wireCollapse, helpLink } from '../dom'
 import { mutate } from '../history'
 import { EXT_FORMAT } from '../state'
 import { wireCombos } from '../combo'
@@ -178,6 +178,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
             <span class="spacer"></span>
             <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
             <button class="addbtn pl-add-source" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
+            ${helpLink('editor/sources/', '', 'sources')}
           </div>
           <input type="hidden" class="pl-base" value="${esc(pdef.base)}">
           <p class="hint" style="margin-top:6px">Add sources below, then click <strong>★ base</strong> on the one the pipeline starts from — its features flow through every step to the output.</p>
@@ -208,6 +209,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
         <div class="pl-panel" data-sec="derived_sources" id="pl-panel-derived_sources-${plId}" role="tabpanel" aria-labelledby="pl-tab-derived_sources-${plId}">
           <div class="pl-panel-actions">
             <button class="addbtn pl-add-derived" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
+            ${helpLink('editor/sources/', 'derived-sources', 'derived sources')}
           </div>
           <div class="pl-derived-sources"></div>
           <div class="section-empty-hint" data-empty="derived_sources" hidden>
@@ -221,6 +223,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
         <div class="pl-panel" data-sec="steps" id="pl-panel-steps-${plId}" role="tabpanel" aria-labelledby="pl-tab-steps-${plId}">
           <div class="pl-panel-actions">
             <button class="addbtn pl-add-step" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add step</button>
+            ${helpLink('editor/steps/', '', 'steps')}
           </div>
           <div class="pl-steps"></div>
           <div class="section-empty-hint" data-empty="steps" hidden>
@@ -235,6 +238,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
           <div class="pl-panel-actions">
             <button class="addbtn pl-add-map" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> column</button>
             <button class="mini ghost pl-auto-map" style="border:1px dashed var(--line);color:var(--muted);padding:3px 9px;" title="Auto-map all available columns" aria-label="Map every available source column"><i data-lucide="sparkles" style="width:11px;height:11px"></i></button>
+            ${helpLink('editor/mapping/', '', 'mapping')}
           </div>
           <div class="auto-map-banner-container"></div>
           <div class="mapping-container-layout" style="display: flex; gap: 20px; align-items: stretch; min-height: 200px;">
@@ -268,6 +272,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
         <div class="pl-panel" data-sec="output" id="pl-panel-output-${plId}" role="tabpanel" aria-labelledby="pl-tab-output-${plId}">
           <div class="pl-panel-actions">
             <button class="addbtn pl-add-layer" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add layer</button>
+            ${helpLink('editor/output-layers/', '', 'output layers')}
           </div>
           <div class="pl-output-layers"></div>
           <p class="hint" style="margin-top:6px">Each layer writes the same upstream chain, optionally narrowed by its own filter — e.g. one layer for matched rows, another for unmatched.</p>

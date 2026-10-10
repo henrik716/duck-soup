@@ -25,6 +25,7 @@ The left side is where you **build**. The right side is where you **see** the re
 | **save** | Writes the YAML. The button is highlighted when you have unsaved changes, and the editor warns before you navigate away and lose them. |
 | **run** | Runs every pipeline and writes the output file. The log appears in **Run Logs**. |
 | **cancel** | Shown while a run is going. Stops it at once; see [Running](preview-and-run.md#running). |
+| **docs** | Opens these docs in a new browser tab. |
 | **☀ / ☾** | Switches the editor between dark and light mode. It follows your OS setting until you click it, and then remembers your choice. The map's basemap switches with it. |
 | **status** | Shows `valid`, `validating…`, `previewing… 8s` on a slow preview, `running…`, what a preview is waiting on (e.g. `segmentert: downloading… 23.4 MB`), or the first line of an error. Click it to open the **Problems** tab. |
 
@@ -114,6 +115,19 @@ shows a short summary of what it contains:
 
 **+ add pipeline** at the bottom adds another independent pipeline that writes into the same
 output.
+
+## Help links
+
+Most panels have a small **?** icon that opens the matching page of these docs in a new tab:
+
+- each pipeline card's section tabs (sources, derived sources, steps, mapping, output layers),
+- each step card, which links to its step type's [reference](../reference/steps.md),
+- each source card, which links to the reference section for its current
+  [format](../reference/sources.md),
+- the step gallery, the [expression builder](mapping.md#expression-builder) and the
+  [codelist panel](mapping.md#codelist-panel),
+- the pipeline flow's title, and the **Problems** tab, which links to
+  [Troubleshooting](../troubleshooting.md).
 
 ## Right-hand panel
 

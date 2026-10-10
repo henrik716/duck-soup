@@ -1,5 +1,5 @@
 import { createIcons } from 'lucide'
-import { mkEl, appIcons } from './dom'
+import { mkEl, appIcons, helpLink } from './dom'
 import { openOverlay, closeOverlay } from './overlay'
 import type { Step } from './types'
 
@@ -10,7 +10,7 @@ export function openStepGalleryModal(onSelect: (type: Step['type']) => void): vo
     modal.innerHTML = `
       <div class="modal-card step-gallery-modal">
         <div class="modal-header">
-          <h3><i data-lucide="git-merge" style="width:16px;height:16px;color:var(--accent)"></i> Select Operation</h3>
+          <h3><i data-lucide="git-merge" style="width:16px;height:16px;color:var(--accent)"></i> Select Operation ${helpLink('reference/steps/', '', 'step types')}</h3>
           <button class="mini ghost" id="closeStepModalBtn" aria-label="Close modal"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="modal-body">

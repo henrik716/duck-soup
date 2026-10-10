@@ -1,5 +1,5 @@
 import { createIcons } from 'lucide'
-import { mkEl, appIcons, esc } from './dom'
+import { mkEl, appIcons, esc, helpLink } from './dom'
 import { highlightExpr } from './expr-highlight'
 import { EXPR_SNIPPET_CATEGORIES, EXPR_FUNCTION_NAMES } from './expr-snippets'
 import { ExprAutocomplete, type AutocompleteItem } from './expr-autocomplete'
@@ -73,7 +73,7 @@ export function openExprDrawer(
     drawer.innerHTML = `
       <div class="drawer-card fullscreen">
         <div class="drawer-header">
-          <h3><i data-lucide="edit-3" style="width:16px;height:16px;color:var(--accent)"></i> Expression Builder</h3>
+          <h3><i data-lucide="edit-3" style="width:16px;height:16px;color:var(--accent)"></i> Expression Builder ${helpLink('editor/mapping/', 'expression-builder', 'the expression builder')}</h3>
           <button class="mini ghost" id="closeExprDrawerBtn" aria-label="Close drawer"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="drawer-body" style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; padding: 24px 32px;">

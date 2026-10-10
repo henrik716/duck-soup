@@ -31,7 +31,7 @@ import { updateLineageDiagram, setLineageCounts, clearLineageCounts } from './li
 import { closeFlowEditor, syncFlowEditor } from './flow-editor'
 import { renderSqlPlan, renderSqlPlanError, revealPlanStep, sqlPlanText } from './sql-plan'
 import { renderRunHistory } from './run-history'
-import { qs, mkEl, esc, wireCollapse } from './dom'
+import { qs, mkEl, esc, wireCollapse, docsUrl } from './dom'
 import { META } from './state'
 import { pipelineCard } from './cards/pipeline-card'
 import { buildMetadataSection } from './metadata'
@@ -1123,6 +1123,17 @@ function wireTabNav(): void {
 }
 
 function wireHeaderActions(): void {
+  // The static help links in index.html; their URLs come from docsUrl like every other one.
+  const docsLinks: [string, string, string?][] = [
+    ['#docsBtn', ''],
+    ['#lineageHelp', 'editor/overview/', 'ducks-in-a-row-the-pipeline-flow'],
+    ['#problemsHelp', 'troubleshooting/'],
+  ]
+  for (const [sel, page, anchor] of docsLinks) {
+    const a = qs<HTMLAnchorElement>(sel)
+    if (a) a.href = docsUrl(page, anchor)
+  }
+
   // mount metadata section
   const metaMount = qs<HTMLElement>('#cfg-metadata-mount')
   if (metaMount) metaMount.appendChild(buildMetadataSection({}, sync))

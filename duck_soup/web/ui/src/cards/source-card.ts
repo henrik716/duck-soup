@@ -1,6 +1,6 @@
-import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw } from 'lucide'
+import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw, CircleHelp } from 'lucide'
 import { inspectSource, inspectFile, refreshSource } from '../api'
-import { mkEl, val, wireCollapse } from '../dom'
+import { mkEl, val, wireCollapse, helpLink, docsUrl } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS, EXT_FORMAT } from '../state'
 import { comboField, wireCombos, setComboOptions, ensureComboOption } from '../combo'
@@ -20,6 +20,15 @@ import type { Source } from '../types'
 const FORMAT_LABELS: Record<string, string> = {
   oapif: '<span title="OGC API - Features">OAPIF</span>',
   postgres: '<span title="PostgreSQL / PostGIS">Postgres</span>',
+}
+
+// Heading ids in the docs' sources reference (docs/reference/sources.md), per format.
+const FORMAT_DOCS_ANCHORS: Record<string, string> = {
+  gpkg: 'geopackage-geojson-shapefile-flatgeobuf-gml', geojson: 'geopackage-geojson-shapefile-flatgeobuf-gml',
+  shp: 'geopackage-geojson-shapefile-flatgeobuf-gml', flatgeobuf: 'geopackage-geojson-shapefile-flatgeobuf-gml',
+  gml: 'geopackage-geojson-shapefile-flatgeobuf-gml', fgdb: 'file-geodatabase', parquet: 'parquet-geoparquet',
+  csv: 'csv-and-excel', xlsx: 'csv-and-excel', json: 'json', postgres: 'postgresql-postgis',
+  wfs: 'wfs', oapif: 'ogc-api-features', arcgis_rest: 'arcgis-rest',
 }
 
 const TABULAR_GEOM_FORMATS = ['xlsx', 'csv', 'json']
@@ -49,6 +58,7 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="schema-badge" style="margin-left:8px;"></span>
       <span class="spacer"></span>
+      ${helpLink('reference/sources/', 'formats-at-a-glance', 'source formats')}
       <button type="button" class="mini ghost" data-source-preview title="Preview this source" aria-label="Preview this source's raw features, before any steps or mapping"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
       <button type="button" class="mini ghost set-base-btn" data-set-base title="Set as base source" aria-label="Set as base source" aria-pressed="false"><i data-lucide="star" style="width:12px;height:12px"></i> base</button>
       <button class="mini danger ghost" data-del aria-label="Remove this source"><i data-lucide="trash-2" style="width:12px;height:12px"></i> remove</button>
@@ -235,7 +245,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
-  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw } })
+  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw, CircleHelp } })
   return c
 }
 
@@ -610,6 +620,20 @@ const URI_PLACEHOLDERS: Record<string, string> = {
 function wireFormatToggles(
   c: HTMLElement, fmt: HTMLInputElement, s: Partial<Source>, syncFn: () => void,
 ) {
+  // The header's help link goes to the chosen format's section of the sources reference.
+  // Also refreshed on hover/focus, since auto-detection sets the format without an event.
+  const help = c.querySelector<HTMLAnchorElement>('.item-head .help-link')!
+  const updateHelp = () => {
+    const anchor = FORMAT_DOCS_ANCHORS[fmt.value]
+    help.href = docsUrl('reference/sources/', anchor ?? 'formats-at-a-glance')
+    help.title = `Help: ${anchor ? `the ${fmt.value} format` : 'source formats'} (opens the docs)`
+  }
+  fmt.addEventListener('input', updateHelp)
+  fmt.addEventListener('change', updateHelp)
+  help.addEventListener('pointerenter', updateHelp)
+  help.addEventListener('focus', updateHelp)
+  updateHelp()
+
   const uriPlaceholderInp = c.querySelector<HTMLInputElement>('[data-uri-placeholder]')!
   const updateUriPlaceholder = () => {
     uriPlaceholderInp.placeholder = URI_PLACEHOLDERS[fmt.value] ?? 'data/places.gpkg'

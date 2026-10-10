@@ -8,7 +8,7 @@ import {
   Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
   FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
   Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star, DatabaseZap,
-  Code, History, Hash, CornerDownRight, RefreshCw,
+  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen,
 } from 'lucide'
 
 // Superset of icons used across form-card modules; refreshed wholesale after
@@ -22,7 +22,20 @@ export const appIcons = {
   Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
   FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
   Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star, DatabaseZap,
-  Code, History, Hash, CornerDownRight, RefreshCw
+  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen
+}
+
+/** The docs site (GitHub Pages). Every help link in the editor goes through `docsUrl`. */
+export const DOCS_URL = 'https://henrik716.github.io/duck-soup/'
+
+/** A docs page, e.g. `docsUrl('reference/steps/', 'buffer')`; `anchor` is a heading id on it. */
+export function docsUrl(page = '', anchor = ''): string {
+  return DOCS_URL + page + (anchor ? `#${anchor}` : '')
+}
+
+/** A small "?" link to a docs page, opening in a new tab. `what` finishes "Help: …". */
+export function helpLink(page: string, anchor: string, what: string): string {
+  return `<a class="help-link" href="${esc(docsUrl(page, anchor))}" target="_blank" rel="noopener" title="Help: ${esc(what)} (opens the docs)" aria-label="Help: ${esc(what)} (opens the docs in a new tab)"><i data-lucide="circle-help"></i></a>`
 }
 
 export const qs = <T extends Element = Element>(sel: string, root: Document | Element = document): T | null =>

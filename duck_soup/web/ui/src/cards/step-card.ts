@@ -1,9 +1,9 @@
 import {
   createIcons, MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser,
   Layers, GitMerge, Split, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
-  Filter as FilterIcon, Combine, Camera, GripVertical, Code,
+  Filter as FilterIcon, Combine, Camera, GripVertical, Code, CircleHelp,
 } from 'lucide'
-import { mkEl, esc, wireCollapse } from '../dom'
+import { mkEl, esc, wireCollapse, helpLink } from '../dom'
 import { META } from '../state'
 import { comboField, wireCombos } from '../combo'
 import { mutate } from '../history'
@@ -188,6 +188,7 @@ function buildStepCardMarkup(kind: Step['type'], bodyHtml: string): string {
       <span class="tag" title="${STEP_HINTS[kind]}"><i data-lucide="${STEP_ICONS[kind]}" style="width:12px;height:12px;margin-right:2px"></i>${STEP_LABELS[kind]}</span>
       <span class="item-title" style="font-family:var(--mono); font-size:11px; font-weight:600; margin-left:8px; color:var(--ink);"></span>
       <span class="spacer"></span>
+      ${helpLink('reference/steps/', kind, `the ${STEP_LABELS[kind]} step`)}
       <button class="mini ghost data-step-preview" title="Preview the result of this step" aria-label="Preview the data after this step and all steps before it"><i data-lucide="eye" style="width:12px;height:12px"></i></button>
       <button class="mini ghost" data-step-sql title="Show the SQL this step runs" aria-label="Show the SQL this step runs"><i data-lucide="code" style="width:12px;height:12px"></i></button>
       <button class="mini ghost" data-up title="Move up (Alt+Up)" aria-label="Move this step earlier"><i data-lucide="arrow-up" style="width:12px;height:12px"></i></button>
@@ -269,7 +270,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
   c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
 
-  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical, Code } })
+  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical, Code, CircleHelp } })
   return c
 }
 
