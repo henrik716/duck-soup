@@ -129,7 +129,7 @@ has a recipe per scheduler and shows how to swap in the new file only after a go
 - **Flexible joins:** Spatial joins (intersects/contains/within; keep the first match, the largest overlap, or all matches), attribute joins, and nearest-neighbour searches with an optional distance cap.
 - **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union), chainable like any join step, with `snapshot` to fork the chain into named branches.
 - **Derived sources:** Build a filtered/buffered view of any source and reuse it as a join source, without a dedicated step.
-- **Rich attribute mapping:** Rename, cast, compute coordinates/MGRS/area/length, generate UUIDs/timestamps, write SQL expressions, or apply rule-based/CSV-based codelist lookups.
+- **Rich attribute mapping:** Rename, cast, compute coordinates/MGRS/geohash/area/length, geometry as WKT/WKB, generate UUIDs/row numbers/timestamps, write SQL expressions, or apply rule-based/CSV-based codelist lookups.
 
 ## How it works
 
@@ -152,7 +152,7 @@ An `output` ending in `.parquet` (or `.geoparquet`) is written as GeoParquet ins
 via DuckDB's native `COPY … (FORMAT PARQUET)` with the layer CRS embedded in the `geo`
 metadata. GeoParquet has no layers, so a single layer is written to that file and
 several go to a folder of `<layer>.parquet` files named after it.
-lon/lat/mgrs/wkb/area/length are always derived from the same working-CRS geometry
+lon/lat/x/y/mgrs/geohash/wkb/wkt/area/length are always derived from the same working-CRS geometry
 used for the joins, so there's no extra reprojection.
 
 Most formats go through DuckDB's `ST_Read` (which uses GDAL), so adding a format is
@@ -223,7 +223,7 @@ pipelines:
       - { to: longitude,      func: lon }      # ST_X of EPSG:4326 geometry
       - { to: latitude,       func: lat }      # ST_Y of EPSG:4326 geometry
       - { to: mgrs,           func: mgrs }     # for ducks who need a proper grid reference
-      - { to: spottedDate,    func: today }    # also: now, uuid, wkb, area, length
+      - { to: spottedDate,    func: today }    # also: now, uuid, seq, x, y, geohash, wkb, wkt, geom_type, area, length
       - { to: pond_label,     expr: "upper(s_pond_name)" }   # raw SQL on the row, e.g. "MURKY LAGOON"
 
     layers:                       # one or more output layers from the same chain above
@@ -323,7 +323,7 @@ of picking a single one.
 | `from`     | copy a column from the (joined) row                            |
 | `const`    | a literal value                                                 |
 | `expr`     | raw SQL expression evaluated against the row                    |
-| `func`     | `lon`, `lat`, `mgrs`, `wkb`, `area`, `length`, `uuid`, `now`, `today` |
+| `func`     | `lon`, `lat`, `x`, `y`, `mgrs`, `geohash`, `wkb`, `wkt`, `geom_type`, `area`, `length`, `uuid`, `seq`, `now`, `today` |
 | `codelist` | translate a column's value via rules or a CSV lookup table      |
 | `cast`     | optional; wraps the result in `TRY_CAST(… AS TYPE)`              |
 
@@ -394,8 +394,8 @@ default) and **file lookup** (csv path + key/value columns).
 - **Output is GeoPackage or GeoParquet only.**
 - **No variable substitution in the YAML.** Connection strings and URLs are stored as
   written. For PostgreSQL, leave the password out and set `PGPASSWORD` instead.
-- **Small `func` set on purpose** (`lon`, `lat`, `mgrs`, `wkb`, `area`, `length`,
-  `uuid`, `now`, `today`); anything else can be an `expr`. New ones go in
+- **Small `func` set on purpose** (`lon`, `lat`, `x`, `y`, `mgrs`, `geohash`, `wkb`,
+  `wkt`, `geom_type`, `area`, `length`, `uuid`, `seq`, `now`, `today`); anything else can be an `expr`. New ones go in
   `engine.py:_func_expr` (SQL) or `derive.py` (python UDF).
 
 ---

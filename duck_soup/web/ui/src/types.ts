@@ -4,7 +4,8 @@ export type SourceFormat =
 
 export type JoinPredicate = 'intersects' | 'contains' | 'within'
 
-export type MapFunc = 'uuid' | 'now' | 'today' | 'lat' | 'lon' | 'mgrs' | 'wkb' | 'area' | 'length'
+export type MapFunc = 'uuid' | 'seq' | 'now' | 'today' | 'lat' | 'lon' | 'x' | 'y' | 'mgrs' | 'geohash'
+  | 'wkb' | 'wkt' | 'geom_type' | 'area' | 'length'
 
 export interface Source {
   id: string

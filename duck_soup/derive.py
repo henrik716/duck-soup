@@ -1,7 +1,8 @@
 """Scalar UDFs registered into DuckDB so the engine can stay mostly-SQL.
 
-MGRS conversion isn't available in DuckDB's spatial extension, so we register a
-small Python UDF backed by the `mgrs` library.
+MGRS and geohash conversion aren't available in DuckDB's spatial extension, so we
+register small Python UDFs: `to_mgrs` backed by the `mgrs` library, `to_geohash`
+self-contained.
 """
 from __future__ import annotations
 
@@ -35,11 +36,40 @@ def _to_mgrs(lon: float | None, lat: float | None) -> str | None:
         return None
 
 
+_GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
+_GEOHASH_LENGTH = 12  # ~4 cm cells
+
+
+def _to_geohash(lon: float | None, lat: float | None) -> str | None:
+    if lon is None or lat is None or not (-180 <= lon <= 180 and -90 <= lat <= 90):
+        return None
+    lon_lo, lon_hi, lat_lo, lat_hi = -180.0, 180.0, -90.0, 90.0
+    chars, bits, value, even = [], 0, 0, True  # bits interleave lon, lat, lon, …
+    while len(chars) < _GEOHASH_LENGTH:
+        if even:
+            mid = (lon_lo + lon_hi) / 2
+            value = value * 2 + (lon >= mid)
+            lon_lo, lon_hi = (mid, lon_hi) if lon >= mid else (lon_lo, mid)
+        else:
+            mid = (lat_lo + lat_hi) / 2
+            value = value * 2 + (lat >= mid)
+            lat_lo, lat_hi = (mid, lat_hi) if lat >= mid else (lat_lo, mid)
+        even, bits = not even, bits + 1
+        if bits == 5:
+            chars.append(_GEOHASH_BASE32[value])
+            bits, value = 0, 0
+    return "".join(chars)
+
+
 def register_udfs(con) -> None:
     """Register UDFs on a DuckDB connection (idempotent)."""
     try:
         con.create_function(
             "to_mgrs", _to_mgrs, ["DOUBLE", "DOUBLE"], "VARCHAR",
+            null_handling="special",
+        )
+        con.create_function(
+            "to_geohash", _to_geohash, ["DOUBLE", "DOUBLE"], "VARCHAR",
             null_handling="special",
         )
     except (duckdb.CatalogException, duckdb.NotImplementedException):

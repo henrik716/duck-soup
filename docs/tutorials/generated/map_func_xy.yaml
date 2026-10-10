@@ -1,0 +1,7 @@
+mapping:
+- {to: name, from: name}
+- {to: easting, func: x}
+- {to: northing, func: y}
+- {to: cell, func: geohash}
+- {to: kind, func: geom_type}
+- {to: geom_wkt, func: wkt}

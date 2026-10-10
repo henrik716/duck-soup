@@ -12,14 +12,20 @@ import type { CodeList, Config, MapItem } from '../types'
 // ---- map row ----
 const FUNC_DESCRIPTIONS: Record<string, string> = {
   uuid: 'Generates a unique UUIDv4 per row',
+  seq: 'Row number 1, 2, 3… in output order',
   now: 'Current date and time timestamp',
   today: 'Current date',
   lon: 'Centroid longitude in EPSG:4326',
   lat: 'Centroid latitude in EPSG:4326',
+  x: 'Centroid easting in the working CRS',
+  y: 'Centroid northing in the working CRS',
   mgrs: 'MGRS spatial coordinate string',
+  geohash: 'Geohash of the centroid',
   wkb: 'Well-Known Binary geometry format',
-  area: 'Calculated area in metric units',
-  length: 'Calculated perimeter/length in metric units'
+  wkt: 'Well-Known Text geometry, in EPSG:4326',
+  geom_type: 'Geometry type (POINT, POLYGON, …)',
+  area: 'Calculated area in working CRS units',
+  length: 'Calculated perimeter/length in working CRS units'
 }
 
 export interface MapRowElement extends HTMLElement {
@@ -96,12 +102,18 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     if (k === 'func') {
       const FUNC_CATEGORIES: Record<string, { name: string, color: string, bg: string }> = {
         uuid: { name: 'ID', color: 'var(--accent)', bg: 'var(--accent-soft)' },
+        seq: { name: 'ID', color: 'var(--accent)', bg: 'var(--accent-soft)' },
         now: { name: 'TIME', color: 'var(--accent)', bg: 'var(--accent-soft)' },
         today: { name: 'TIME', color: 'var(--accent)', bg: 'var(--accent-soft)' },
         lon: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
         lat: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        x: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        y: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
         mgrs: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        geohash: { name: 'COORD', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
         wkb: { name: 'GEOM', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        wkt: { name: 'GEOM', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
+        geom_type: { name: 'GEOM', color: 'var(--spatial)', bg: 'rgb(var(--spatial-rgb) / 0.08)' },
         area: { name: 'MEAS', color: 'var(--ok)', bg: 'var(--ok-soft)' },
         length: { name: 'CALC', color: 'var(--ok)', bg: 'var(--ok-soft)' }
       }

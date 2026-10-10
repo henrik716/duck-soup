@@ -155,7 +155,7 @@
   can cut it short. Prefer `oapif` where the service offers it.
 - **Output is GeoPackage or GeoParquet only.** GeoParquet has no layers, so a multi-layer
   config writes a folder with one `.parquet` file per layer.
-- **Small `func` set** (`uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`,
-  `length`). Anything else can be done with `expr` and DuckDB SQL.
+- **Small `func` set** (`uuid`, `seq`, `now`, `today`, `lon`, `lat`, `x`, `y`, `mgrs`,
+  `geohash`, `wkb`, `wkt`, `geom_type`, `area`, `length`). Anything else can be done with `expr` and DuckDB SQL.
 
 Found a bug? [Open an issue](https://github.com/henrik716/duck-soup/issues).

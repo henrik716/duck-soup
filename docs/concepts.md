@@ -94,7 +94,7 @@ one of these:
 | `from` | `{to: name, from: duck_name}` | copy a column |
 | `const` | `{to: source, const: "Annual Duck Census"}` | a fixed value |
 | `expr` | `{to: label, expr: "upper(duck_name)"}` | any DuckDB SQL expression |
-| `func` | `{to: id, func: uuid}` | a built-in: `uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`, `length` |
+| `func` | `{to: id, func: uuid}` | a built-in: `uuid`, `seq`, `now`, `today`, `lon`, `lat`, `x`, `y`, `mgrs`, `geohash`, `wkb`, `wkt`, `geom_type`, `area`, `length` |
 | `codelist` | see [Codelists](reference/mapping.md#codelists) | translate codes via rules or a CSV |
 
 Any of them can add `cast: INTEGER` (or another SQL type). The geometry column is always
@@ -126,8 +126,8 @@ reprojected into it when read, and each layer is reprojected out of it when writ
   in working-CRS units. duck soup **refuses to run** these in a geographic (degree) CRS such
   as EPSG:4326, because "buffer 500" would mean 500 degrees. Pick a projected CRS in metres
   (for example the UTM zone covering your data, such as EPSG:32633 for UTM zone 33N).
-- `lon`, `lat` and `mgrs` are always computed in EPSG:4326 from the centroid, whatever the
-  working CRS is.
+- `lon`, `lat`, `mgrs` and `geohash` are always computed in EPSG:4326 from the centroid,
+  whatever the working CRS is; `x` and `y` give the same centroid in the working CRS.
 
 ## Branches and derived sources
 

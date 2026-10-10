@@ -948,6 +948,8 @@ class Engine:
         # __centroid4326 (point representation), provided by the final CTE
         if func == "uuid":
             return "uuid()::VARCHAR"
+        if func == "seq":
+            return "row_number() OVER ()"
         if func == "now":
             return "current_timestamp"
         if func == "today":
@@ -956,10 +958,20 @@ class Engine:
             return "ROUND(ST_X(__centroid4326), 7)"
         if func == "lat":
             return "ROUND(ST_Y(__centroid4326), 7)"
+        if func == "x":
+            return "ROUND(ST_X(ST_Centroid(geom)), 3)"
+        if func == "y":
+            return "ROUND(ST_Y(ST_Centroid(geom)), 3)"
         if func == "mgrs":
             return "to_mgrs(ST_X(__centroid4326), ST_Y(__centroid4326))"
+        if func == "geohash":
+            return "to_geohash(ST_X(__centroid4326), ST_Y(__centroid4326))"
         if func == "wkb":
             return "ST_AsHEXWKB(__geom4326)"
+        if func == "wkt":
+            return "ST_AsText(__geom4326)"
+        if func == "geom_type":
+            return "ST_GeometryType(geom)::VARCHAR"
         if func == "area":
             return "ST_Area(geom)"
         if func == "length":
@@ -1007,7 +1019,9 @@ class Engine:
         use exist."""
         has_geom = self.p.base_source.has_geometry
         mapping = [] if raw else (layer.mapping or self.p.mapping)
-        geom_funcs = {"lon", "lat", "mgrs", "wkb", "area", "length"}
+        geom_funcs = {
+            "lon", "lat", "x", "y", "mgrs", "geohash", "wkb", "wkt", "geom_type", "area", "length",
+        }
         used = {m.func for m in mapping if m.func}
         if not has_geom and (used & geom_funcs):
             raise ValueError(
@@ -1022,9 +1036,9 @@ class Engine:
             return f"SELECT\n            {cols if cols else '*'}\n        FROM {source}"
 
         geom_out = _transform("geom", self.working_crs, layer.crs)
-        # geom (working_crs, for area/length in projected units), __geom4326
-        # (full geometry, for wkb) and __centroid4326 (point, for lon/lat/mgrs
-        # on lines and polygons too) are all available here; geometry written as 'geom'.
+        # geom (working_crs, for area/length/x/y/geom_type), __geom4326 (full geometry,
+        # for wkb/wkt) and __centroid4326 (point, for lon/lat/mgrs/geohash on lines and
+        # polygons too) are all available here; geometry written as 'geom'.
         # __geom4326 is transformed from `geom`, which is already in working_crs (see
         # _create_source_views) — i.e. one chained reprojection (source CRS -> working_crs
         # -> EPSG:4326) per feature, not a second independent transform from the source CRS.

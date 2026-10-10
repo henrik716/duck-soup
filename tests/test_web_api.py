@@ -38,6 +38,7 @@ def test_meta_lists_formats_predicates_and_funcs(client):
     assert "gpkg" in body["formats"]
     assert "intersects" in body["predicates"]
     assert "mgrs" in body["funcs"]
+    assert {"seq", "x", "y", "geohash", "wkt", "geom_type"} <= set(body["funcs"])
 
 
 def test_list_pipelines_includes_fixtures(client):

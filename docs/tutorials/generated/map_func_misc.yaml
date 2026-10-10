@@ -1,5 +1,6 @@
 mapping:
 - {to: name, from: name}
+- {to: row_no, func: seq}
 - {to: id, func: uuid}
 - {to: loaded_at, func: now}
 - {to: loaded_on, func: today}

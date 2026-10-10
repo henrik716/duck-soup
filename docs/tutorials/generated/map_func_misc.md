@@ -1,5 +1,5 @@
-| `name` | `id` | `loaded_at` | `loaded_on` |
-|---|---|---|---|
-| Mallard Museum | 6366912a-910f-44fc-8951-d3d1a9f088d7 | 2026-10-07 20:58:43 | 2026-10-07 |
-| Puddle Lane Café | 0e239776-e013-4df9-be15-daeccda50096 | 2026-10-07 20:58:43 | 2026-10-07 |
-| Quackington Library | 76c6bff4-e30f-4e8e-a494-bd7c3471f390 | 2026-10-07 20:58:43 | 2026-10-07 |
+| `name` | `row_no` | `id` | `loaded_at` | `loaded_on` |
+|---|---|---|---|---|
+| Mallard Museum | 1 | 906a21b4-bc39-44b9-9883-4c061c25c6fc | 2026-10-10 12:35:53 | 2026-10-10 |
+| Puddle Lane Café | 2 | d028599e-cc97-4f11-86c8-cb4660ec1bbd | 2026-10-10 12:35:53 | 2026-10-10 |
+| Quackington Library | 3 | d78d4f75-3dc4-462f-a973-b6ac3ca40d64 | 2026-10-10 12:35:53 | 2026-10-10 |

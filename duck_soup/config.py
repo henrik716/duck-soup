@@ -43,7 +43,10 @@ TABULAR_GEOM_FORMATS = ("xlsx", "csv", "json")
 JOIN_PREDICATES = ["intersects", "contains", "within"]
 
 # Mapping value functions computed by the engine.
-MAP_FUNCS = ["uuid", "now", "today", "lat", "lon", "mgrs", "wkb", "area", "length"]
+MAP_FUNCS = [
+    "uuid", "seq", "now", "today", "lat", "lon", "x", "y", "mgrs", "geohash",
+    "wkb", "wkt", "geom_type", "area", "length",
+]
 
 CASE_MATCH_TYPES = ["match", "like", "regex"]
 

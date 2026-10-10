@@ -45,7 +45,7 @@ per output column:
 | `from` | pick an upstream column | `duck_name` |
 | `const` | type a literal | `Annual Duck Census` |
 | `expr` | a SQL expression, edited in the expression builder | `upper(duck_name)` |
-| `func` | pick a built-in | `uuid`, `now`, `today`, `lon`, `lat`, `mgrs`, `wkb`, `area`, `length` |
+| `func` | pick a built-in | `uuid`, `seq`, `now`, `today`, `lon`, `lat`, `x`, `y`, `mgrs`, `geohash`, `wkb`, `wkt`, `geom_type`, `area`, `length` |
 | `codelist` | opens the codelist panel | see below |
 
 **cast** wraps the value in `TRY_CAST(… AS type)`. The list offers `INTEGER`, `DOUBLE`,

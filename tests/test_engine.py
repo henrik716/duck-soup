@@ -447,6 +447,51 @@ def test_lon_lat_use_centroid_taken_in_working_crs(tmp_path):
     assert (row["lon"], row["lat"]) == pytest.approx(expected)
 
 
+def test_geometry_funcs_x_y_geohash_wkt_geom_type(tmp_path):
+    cfg = _config(
+        tmp_path, [("p", _point(262000.5, 6649000.25))], [],
+        [{"to": f, "func": f} for f in ("x", "y", "geohash", "wkt", "geom_type")],
+        working_crs="EPSG:25833",
+    )
+    (row,) = preview_config_pipeline(cfg, limit=10)
+    assert (row["x"], row["y"]) == (262000.5, 6649000.25)  # working CRS, not lon/lat
+    assert row["geohash"].startswith("u4xsu")  # central Oslo
+    assert row["wkt"].startswith("POINT (10.7")  # EPSG:4326, lon first
+    assert row["geom_type"] == "POINT"
+
+
+def test_geohash_matches_reference():
+    from duck_soup.derive import _to_geohash
+
+    assert _to_geohash(10.40744, 57.64911) == "u4pruydqqvj8"  # Wikipedia's example, + 1 char
+    assert _to_geohash(None, 1.0) is None and _to_geohash(200.0, 0.0) is None
+
+
+def test_seq_numbers_rows_in_preview_and_run(tmp_path):
+    base = [(n, _point(i * 10, 0)) for i, n in enumerate("abc")]
+    cfg = _config(tmp_path, base, [], [{"to": "name", "from": "name"}, {"to": "n", "func": "seq"}])
+    assert sorted(r["n"] for r in preview_config_pipeline(cfg, limit=10)) == [1, 2, 3]
+    out = run_config(cfg)
+    with sqlite3.connect(out) as con:
+        assert sorted(n for (n,) in con.execute('SELECT n FROM "out"')) == [1, 2, 3]
+
+
+def test_seq_works_without_geometry_but_x_does_not(tmp_path):
+    csv = tmp_path / "plain.csv"
+    csv.write_text("name\na\nb\n", encoding="utf-8")
+
+    def cfg(func):
+        return load_config_dict({
+            "name": "t", "sources": [{"id": "base", "format": "csv", "uri": str(csv)}], "base": "base",
+            "mapping": [{"to": "v", "func": func}],
+            "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out"},
+        })
+
+    assert sorted(r["v"] for r in preview_config_pipeline(cfg("seq"), limit=10)) == [1, 2]
+    with pytest.raises(ValueError, match="has no geometry"):
+        preview_config_pipeline(cfg("x"), limit=10)
+
+
 def test_preview_of_branch_step_shows_that_branch(tmp_path):
     # A step on a snapshot branch (here: buffer the snapshot) leaves the main chain
     # untouched; previewing that step has to show the branch, or edits to it never

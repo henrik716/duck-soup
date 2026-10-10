@@ -101,6 +101,19 @@ type.
 | `mgrs` | an [MGRS](https://en.wikipedia.org/wiki/Military_Grid_Reference_System) grid reference to 1 m | From the same centroid. `31UET0019900649` is zone `31U`, square `ET`, then a 5-digit easting and northing. |
 | `wkb` | the geometry as hex-encoded WKB, in EPSG:4326 | The full geometry (not the centroid), for systems that expect geometry in a text column. |
 
+```yaml
+--8<-- "docs/tutorials/generated/map_func_xy.yaml"
+```
+
+--8<-- "docs/tutorials/generated/map_func_xy.md"
+
+| `func` | Gives | How it's calculated |
+|---|---|---|
+| `x`, `y` | easting / northing in the working CRS, 3 decimals | The same centroid as `lon`/`lat`, before it's converted. Use these when the target system wants projected coordinates (UTM, say) rather than lon/lat. |
+| `geohash` | a [geohash](https://en.wikipedia.org/wiki/Geohash) of the centroid | Nearby features share a prefix, so it works as a sortable location code or for grouping by area. |
+| `geom_type` | the geometry type: `POINT`, `LINESTRING`, `POLYGON`, `MULTIPOLYGON`, … | Handy when a source mixes geometry types and the target needs to tell them apart. |
+| `wkt` | the geometry as WKT text, in EPSG:4326 | Like `wkb`, but readable. |
+
 These work whatever the working CRS is, and need a base source with geometry.
 
 ### IDs and timestamps
@@ -113,6 +126,7 @@ These work whatever the working CRS is, and need a base source with geometry.
 
 | `func` | Gives |
 |---|---|
+| `seq` | a row number, 1, 2, 3, … in the order rows are written, counted separately for each output layer. Like `uuid`, it follows the data, not the feature: if the source order changes, so do the numbers. |
 | `uuid` | a random [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier) (version 4) per row, new on every run. Use it when a target system needs unique IDs, but note that it won't stay the same for a feature between runs. |
 | `now` | the date and time the run started, the same on every row |
 | `today` | the date the run started |

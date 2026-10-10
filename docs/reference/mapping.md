@@ -61,12 +61,18 @@ instead of failing the run.
 | `func` | Output |
 |---|---|
 | `uuid` | A random UUIDv4 string per row. |
+| `seq` | Row number (1, 2, 3, …) in output order, counted per layer. |
 | `now` | Current timestamp. |
 | `today` | Current date. |
 | `lon` | Longitude (EPSG:4326) of the feature's centroid, 7 decimals. |
 | `lat` | Latitude (EPSG:4326) of the feature's centroid, 7 decimals. |
+| `x` | Easting (working CRS) of the feature's centroid, 3 decimals. |
+| `y` | Northing (working CRS) of the feature's centroid, 3 decimals. |
 | `mgrs` | MGRS grid reference of the centroid. |
+| `geohash` | Geohash of the centroid. |
 | `wkb` | The geometry in EPSG:4326 as hex WKB. |
+| `wkt` | The geometry in EPSG:4326 as WKT. |
+| `geom_type` | The geometry type, e.g. `POINT`, `MULTIPOLYGON`. |
 | `area` | `ST_Area` in working-CRS units (m² in a metric CRS). |
 | `length` | `ST_Length` in working-CRS units: perimeter for polygons. |
 

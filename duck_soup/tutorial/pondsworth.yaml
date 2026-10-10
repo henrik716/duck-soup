@@ -852,6 +852,60 @@ pipelines:
   - {to: geom_wkb, func: wkb}
   layers:
   - {layer: map_func_geo, crs: 'EPSG:32631'}
+- name: map_func_xy
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  base: places
+  steps:
+  - type: spatial_join
+    source: districts
+    fields: {district: district_name}
+  mapping:
+  - {to: name, from: name}
+  - {to: easting, func: x}
+  - {to: northing, func: y}
+  - {to: cell, func: geohash}
+  - {to: kind, func: geom_type}
+  - {to: geom_wkt, func: wkt}
+  layers:
+  - {layer: map_func_xy, crs: 'EPSG:32631'}
 - name: map_func_misc
   working_crs: EPSG:32631
   sources:
@@ -899,6 +953,7 @@ pipelines:
     fields: {district: district_name}
   mapping:
   - {to: name, from: name}
+  - {to: row_no, func: seq}
   - {to: id, func: uuid}
   - {to: loaded_at, func: now}
   - {to: loaded_on, func: today}
