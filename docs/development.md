@@ -19,7 +19,8 @@ pytest -v
 duck_soup/
   config.py      Pydantic schema for the YAML (the source of truth for every option)
   sources/       one reader per format → a SQL table expression (mostly ST_Read)
-  engine.py      builds the src_<id> → step_N → mapped view chain and writes the output
+  engine.py      builds the src_<id> → step_N → mapped view chain
+  output.py      writes the layers: GeoPackage (GDAL) or GeoParquet (DuckDB)
   derive.py      DuckDB bootstrap (extensions) + Python UDFs (to_mgrs, to_geohash)
   sql_util.py    identifier / literal quoting
   worker.py      the editor's engine process: preview / counts / run, crash-isolated

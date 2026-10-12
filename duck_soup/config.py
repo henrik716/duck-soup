@@ -514,7 +514,7 @@ def is_parquet_path(path: str | Path) -> bool:
 
 def _check_parquet_layer_names(path: str, names: list[str]) -> None:
     """GeoParquet has no layers: each layer becomes its own `<layer>.parquet` file
-    (see engine.parquet_layer_path), so layer names must be valid, distinct filenames.
+    (see output.parquet_layer_path), so layer names must be valid, distinct filenames.
     In a GeoPackage a duplicate name is just a second table; here it would silently
     overwrite the first layer's file."""
     if not is_parquet_path(path):

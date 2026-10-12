@@ -437,7 +437,8 @@ The user guide is MkDocs Material, in `docs/`. `mkdocs serve` previews it, and
 duck_soup/           # Python package
   config.py          # YAML schema (pydantic) + load/save
   sources/           # one reader per format (mostly DuckDB ST_Read / GDAL)
-  engine.py          # builds a chain of SQL views, writes GeoPackage/GeoParquet
+  engine.py          # builds a chain of SQL views
+  output.py          # writes the layers to GeoPackage / GeoParquet
   derive.py          # DuckDB bootstrap (extensions) + python UDFs (MGRS)
   sql_util.py        # identifier / literal quoting
   cli.py             # duck-soup check / run / serve / tutorial

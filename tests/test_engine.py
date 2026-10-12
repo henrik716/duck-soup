@@ -565,7 +565,7 @@ def test_tutorial_config_runs(tmp_path, monkeypatch):
 
 
 # GDAL's GeoPackage writer crashes the whole process on these column types (see
-# engine._gpkg_safe_select), so they're cast to what a GeoPackage stores before writing.
+# output.gpkg_safe_select), so they're cast to what a GeoPackage stores before writing.
 _GPKG_UNSAFE_EXPRS = {
     "total": "sum(1::INTEGER) OVER ()",  # HUGEINT
     "unsigned": "1::UHUGEINT",

@@ -7,7 +7,7 @@ chain of SQL views: base -> step1 -> step2 -> ... -> mapped. DuckDB plans the
 whole chain as one query, so joins and projections stay fast and stream from
 GDAL where possible. The final view is written straight to GeoPackage via
 COPY ... (FORMAT GDAL, DRIVER 'GPKG'), or, for a .parquet/.geoparquet output path,
-to GeoParquet via DuckDB's native COPY ... (FORMAT PARQUET) (see _write_parquet_layer).
+to GeoParquet via DuckDB's native COPY ... (FORMAT PARQUET) (see output.write_parquet_layer).
 
 Spatial joins, nearest-neighbor joins and clips keep a single best match per base
 feature (see Engine._best_match_select), so each base feature stays a single row
@@ -25,8 +25,6 @@ the editor's SQL tab) and counts() (tables, so each step is computed once and co
 """
 from __future__ import annotations
 
-import re
-import sqlite3
 import tempfile
 import textwrap
 from pathlib import Path
@@ -41,6 +39,13 @@ from .config import (
     OutputLayer, PipelineDef, Snapshot, SpatialJoin, is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
+from .output import (
+    clear_parquet_output,
+    parquet_layer_path,
+    parquet_output_root,
+    write_gpkg_layer,
+    write_parquet_layer,
+)
 from .sql_util import quote_ident as _ident, quote_literal as _lit
 
 _PREDICATE_SQL = {
@@ -75,39 +80,6 @@ def _transform(col: str, from_crs: str, to_crs: str) -> str:
     return f"ST_Transform({col}, {_lit(from_crs)}, {_lit(to_crs)}, always_xy := true)"
 
 
-def parquet_output_root(out_path: Path, multi: bool) -> Path:
-    """Where a GeoParquet output lands: the file itself for a single layer, otherwise
-    the folder `<out_path without suffix>/` holding one `<layer>.parquet` per layer."""
-    return out_path.with_suffix("") if multi else out_path
-
-
-def parquet_layer_path(out_path: Path, layer_name: str, multi: bool) -> Path:
-    if not multi:
-        return out_path
-    return parquet_output_root(out_path, multi) / f"{layer_name}.parquet"
-
-
-def _clear_parquet_output(out_path: Path, multi: bool) -> None:
-    """Overwrite for a GeoParquet output: remove the file, or the layer files in its
-    folder. Only `*.parquet` files directly in the folder go; anything else is left."""
-    root = parquet_output_root(out_path, multi)
-    if not multi:
-        if root.is_file():
-            root.unlink()
-    elif root.is_dir():
-        for f in root.glob("*.parquet"):
-            f.unlink()
-
-
-# Column types GDAL's GeoPackage writer crashes on (a native crash, no error; DuckDB spatial
-# through 1.5.x), at any depth inside a LIST/STRUCT/MAP: 128-bit integers, and the DECIMALs
-# wider than 18 digits that are stored as them. sum() of any integer or DECIMAL column
-# returns one, so a mapping expr can easily produce them.
-_GPKG_HUGE_INT = re.compile(r"\bU?HUGEINT\b")
-_GPKG_WIDE_DECIMAL = re.compile(r"\bDECIMAL\((\d+),\s*\d+\)")
-_INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
-
-
 class MappingError(ValueError):
     """A mapping item that doesn't parse or bind (see Engine._check_mapping).
 
@@ -124,87 +96,6 @@ class MappingError(ValueError):
         head = f"mapping '{item.to}' ({kind}): {detail}"
         super().__init__("\n".join([head, path, f"  {detail}"]))
         self.path = path
-
-
-def _gpkg_safe_type(dtype: str) -> str:
-    """`dtype` with those types swapped for what a GeoPackage stores anyway: a 64-bit
-    INTEGER and a REAL (it has no exact decimals: a DECIMAL(18, 2) is written as REAL too)."""
-    dtype = _GPKG_HUGE_INT.sub("BIGINT", dtype)
-    return _GPKG_WIDE_DECIMAL.sub(lambda m: "DOUBLE" if int(m[1]) > 18 else m[0], dtype)
-
-
-def _gpkg_safe_select(
-    con: duckdb.DuckDBPyConnection, select: str, layer: str, log: Callable[[str], None],
-) -> str:
-    """`select` with every column GeoPackage can't take cast by _gpkg_safe_type. A top-level
-    integer beyond 64 bits fails the write with an error naming the column."""
-    replace = []
-    for name, dtype, *_ in con.execute(f"DESCRIBE SELECT * FROM ({select})").fetchall():
-        dtype = str(dtype)
-        safe = _gpkg_safe_type(dtype)
-        if safe == dtype:
-            continue
-        col = _ident(name)
-        if safe == "BIGINT":
-            too_big = _lit(
-                f"column '{name}' of layer '{layer}' has a value too large for a GeoPackage "
-                f"integer (64 bits); cast it to DOUBLE in the mapping to write it"
-            )
-            expr = (
-                f"CASE WHEN {col} IS NULL THEN NULL "
-                f"WHEN {col} BETWEEN {_INT64_MIN} AND {_INT64_MAX} THEN {col}::BIGINT "
-                f"ELSE error({too_big}) END"
-            )
-        else:
-            expr = f"{col}::{safe}"
-        replace.append(f"{expr} AS {col}")
-        log(f"  column '{name}': {dtype} written as {safe} (GeoPackage has no {dtype})")
-    if not replace:
-        return select
-    return f"SELECT * REPLACE ({', '.join(replace)}) FROM ({select})"
-
-
-def _merge_gpkg_layer(main_path: Path, temp_path: Path) -> None:
-    """Splice the single layer written to temp_path into main_path.
-
-    DuckDB's `COPY ... TO x.gpkg (FORMAT GDAL, ...)` recreates the whole file
-    on every call (no working append/update mode as of duckdb 1.5.4), so
-    writing N layers into one GeoPackage means writing each to its own
-    single-layer file and merging all but the first in at the SQLite level —
-    a GeoPackage is just a SQLite database. The R-tree spatial index isn't
-    recreated for merged-in layers: it's an optional GeoPackage extension
-    (gpkg_extensions), not required to read the layer, just to accelerate
-    spatial queries against it directly in a GIS tool.
-    """
-    con = sqlite3.connect(str(main_path))
-    try:
-        con.execute("ATTACH DATABASE ? AS src", (str(temp_path),))
-        (table_name,) = con.execute("SELECT table_name FROM src.gpkg_contents LIMIT 1").fetchone()
-        (create_sql,) = con.execute(
-            "SELECT sql FROM src.sqlite_master WHERE type = 'table' AND name = ?", (table_name,)
-        ).fetchone()
-        con.execute(create_sql)
-        con.execute(f'INSERT INTO "{table_name}" SELECT * FROM src."{table_name}"')
-        con.execute(
-            "INSERT INTO gpkg_contents SELECT * FROM src.gpkg_contents WHERE table_name = ?", (table_name,)
-        )
-        con.execute(
-            "INSERT INTO gpkg_geometry_columns SELECT * FROM src.gpkg_geometry_columns WHERE table_name = ?",
-            (table_name,),
-        )
-        con.execute("INSERT OR IGNORE INTO gpkg_spatial_ref_sys SELECT * FROM src.gpkg_spatial_ref_sys")
-        has_ogr_contents = con.execute(
-            "SELECT 1 FROM src.sqlite_master WHERE type = 'table' AND name = 'gpkg_ogr_contents'"
-        ).fetchone()
-        if has_ogr_contents:
-            con.execute(
-                "INSERT INTO gpkg_ogr_contents SELECT * FROM src.gpkg_ogr_contents WHERE table_name = ?",
-                (table_name,),
-            )
-        con.commit()
-    finally:
-        con.execute("DETACH DATABASE src")
-        con.close()
 
 
 class Engine:
@@ -752,6 +643,23 @@ class Engine:
             id=name, step=step, title=f"branch '{name}' after step {step}",
         )
 
+    # The builder of each step type's SELECT (a snapshot only names a view, see
+    # _build_step_views). After the methods, since the class body refers to them directly.
+    _STEP_BUILDERS = {
+        SpatialJoin: _apply_spatial_join,
+        AttributeJoin: _apply_attribute_join,
+        NearestNeighbor: _apply_nearest_neighbor,
+        Buffer: _apply_buffer,
+        Centroid: _apply_centroid,
+        Clip: _apply_clip,
+        Erase: _apply_erase,
+        Dissolve: _apply_dissolve,
+        IntersectOverlay: _apply_intersect_overlay,
+        LineOverlay: _apply_line_overlay,
+        Filter: _apply_filter,
+        Merge: _apply_merge,
+    }
+
     @staticmethod
     def _pulled_columns(step) -> list[str]:
         """Columns a join step adds, which are always NULL on its rejects."""
@@ -826,32 +734,10 @@ class Engine:
 
             target = step.branch or self._MAIN_BRANCH
             cur = chains[target]
-            if isinstance(step, SpatialJoin):
-                sql, new_view = self._apply_spatial_join(cur, step, i)
-            elif isinstance(step, AttributeJoin):
-                sql, new_view = self._apply_attribute_join(cur, step, i)
-            elif isinstance(step, NearestNeighbor):
-                sql, new_view = self._apply_nearest_neighbor(cur, step, i)
-            elif isinstance(step, Buffer):
-                sql, new_view = self._apply_buffer(cur, step, i)
-            elif isinstance(step, Centroid):
-                sql, new_view = self._apply_centroid(cur, step, i)
-            elif isinstance(step, Clip):
-                sql, new_view = self._apply_clip(cur, step, i)
-            elif isinstance(step, Erase):
-                sql, new_view = self._apply_erase(cur, step, i)
-            elif isinstance(step, Dissolve):
-                sql, new_view = self._apply_dissolve(cur, step, i)
-            elif isinstance(step, IntersectOverlay):
-                sql, new_view = self._apply_intersect_overlay(cur, step, i)
-            elif isinstance(step, LineOverlay):
-                sql, new_view = self._apply_line_overlay(cur, step, i)
-            elif isinstance(step, Filter):
-                sql, new_view = self._apply_filter(cur, step, i)
-            elif isinstance(step, Merge):
-                sql, new_view = self._apply_merge(cur, step, i)
-            else:  # pragma: no cover
+            build = self._STEP_BUILDERS.get(type(step))
+            if build is None:  # pragma: no cover
                 raise ValueError(f"unknown step type: {step}")
+            sql, new_view = build(self, cur, step, i)
             self._emit_step(con, step, i, sql, new_view)
             chains[target] = new_view
             self.step_views[i] = new_view
@@ -1185,29 +1071,17 @@ class Engine:
                     multi = self._parquet_multi()
                     for layer, final_sql, kind in writes:
                         target = parquet_layer_path(out_path, layer.layer, multi)
-                        rows = self._write_parquet_layer(con, final_sql, layer, target)
+                        rows = write_parquet_layer(
+                            con, final_sql, layer, target, self.p.base_source.has_geometry, self.log,
+                        )
                         self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
                     return str(parquet_output_root(out_path, multi))
 
                 for i, (layer, final_sql, kind) in enumerate(writes):
-                    # The GDAL writer recreates out_path on every call, so only the very
-                    # first layer written to a not-yet-existing file can go straight there;
-                    # every layer after that (in this pipeline, or an earlier pipeline
-                    # sharing the output) is written to its own temp file and spliced into
-                    # out_path at the SQLite level.
-                    write_direct = not out_path.exists()
-                    target = out_path if write_direct else (workdir / f"__layer_{i}.gpkg")
-                    self.log(f"writing {out_path} layer '{layer.layer}' ({layer.crs})")
-                    final_sql = _gpkg_safe_select(con, final_sql, layer.layer, self.log)
-                    copy_sql = (
-                        f"COPY ({final_sql}) TO {_lit(str(target))} "
-                        f"(FORMAT GDAL, DRIVER 'GPKG', LAYER_NAME {_lit(layer.layer)}, "
-                        f"SRS {_lit(layer.crs)})"
+                    rows = write_gpkg_layer(
+                        con, final_sql, layer, out_path, workdir / f"__layer_{i}.gpkg", self.log,
                     )
-                    (rows,) = con.execute(copy_sql).fetchone()
                     self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
-                    if not write_direct:
-                        _merge_gpkg_layer(out_path, target)
                 return str(out_path)
 
     def _parquet_multi(self) -> bool:
@@ -1216,30 +1090,6 @@ class Engine:
         if self.parquet_multi is not None:
             return self.parquet_multi
         return len(self.p.layers) + len(reject_layer_names(self.p.steps)) > 1
-
-    def _write_parquet_layer(self, con, final_sql: str, layer: OutputLayer, target: Path) -> int:
-        """Write one layer as GeoParquet via DuckDB's native Parquet writer.
-
-        The spatial extension adds GeoParquet's `geo` metadata for any GEOMETRY column,
-        but only names a CRS when the column's *type* carries one. A plain GEOMETRY gets
-        no `crs` entry, which per the GeoParquet spec means OGC:CRS84, so a UTM layer
-        would be read back as lon/lat. Hence the cast to GEOMETRY('<layer.crs>'). The
-        intermediate ::GEOMETRY drops any CRS the column already has (e.g. from a typed
-        GeoParquet source), since DuckDB refuses to cast between two different CRSs; the
-        engine tracks the actual CRS itself, and `geom` is in layer.crs at this point.
-        """
-        target.parent.mkdir(parents=True, exist_ok=True)
-        sql = final_sql
-        if self.p.base_source.has_geometry:
-            sql = (
-                f"SELECT * REPLACE (geom::GEOMETRY::GEOMETRY({_lit(layer.crs)}) AS geom) "
-                f"FROM ({final_sql})"
-            )
-        self.log(f"writing {target} ({layer.crs})")
-        (rows,) = con.execute(
-            f"COPY ({sql}) TO {_lit(str(target))} (FORMAT PARQUET, COMPRESSION ZSTD)"
-        ).fetchone()
-        return rows
 
     @staticmethod
     def _bbox_filter(bbox: tuple[float, float, float, float] | None, crs: str) -> str:
@@ -1404,7 +1254,7 @@ def run_config(
     if is_parquet_path(out_path):
         multi = config.layer_count > 1
         if config.overwrite:
-            _clear_parquet_output(out_path, multi)
+            clear_parquet_output(out_path, multi)
     elif config.overwrite and out_path.exists():
         out_path.unlink()
     # A run reads current data: remote file sources are downloaded again (once per URL)
