@@ -667,9 +667,14 @@ body.resizing-y { cursor: row-resize; }
 
 /* Mapping tab: field pool (schema.ts poolField) */
 .pl-available-fields-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; max-height: 60vh; padding-right: 4px; }
+/* flex-shrink: 0, or a list long enough to scroll squeezes the headings (overflow: hidden
+   lets a flex item shrink below its text) down to their padding. Sticky, so a long group
+   keeps its heading in view while scrolling (on the same solid colour as .pl-available-pool,
+   so the headings show no band). */
 .pool-group-head {
   font-family: var(--mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em;
   padding: 8px 2px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 0; position: sticky; top: 0; z-index: 1; background: var(--panel2-solid);
 }
 .pool-group-head:first-child { padding-top: 0; }
 .pool-field {

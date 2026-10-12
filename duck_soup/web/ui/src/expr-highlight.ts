@@ -2,7 +2,7 @@ import { esc } from './dom'
 
 // SQL keywords worth coloring distinctly from functions/columns in the expression editor.
 // Deliberately small — this is a hand-rolled overlay highlighter, not a real SQL parser.
-const KEYWORDS = new Set([
+export const KEYWORDS = new Set([
   'case', 'when', 'then', 'else', 'end', 'and', 'or', 'not', 'is', 'null',
   'in', 'like', 'ilike', 'between', 'as', 'distinct', 'asc', 'desc',
   'true', 'false', 'interval', 'cast'

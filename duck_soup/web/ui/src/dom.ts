@@ -8,7 +8,7 @@ import {
   Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
   FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
   Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star, DatabaseZap,
-  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen,
+  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen, AlignLeft,
 } from 'lucide'
 
 // Superset of icons used across form-card modules; refreshed wholesale after
@@ -22,7 +22,7 @@ export const appIcons = {
   Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
   FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
   Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star, DatabaseZap,
-  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen
+  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen, AlignLeft
 }
 
 /** The docs site (GitHub Pages). Every help link in the editor goes through `docsUrl`. */

@@ -19,7 +19,8 @@ columns, see [Per-layer mapping](output-layers.md#per-layer-mapping).
 
 On the left is the **Available Source Fields** pool: every column available after the last
 step, grouped by where each column comes from (**base**, then **step 1 · spatial_join** and
-so on for fields pulled in by join steps). Hover a field to see its full name and type. A `from` row's
+so on for fields pulled in by join steps). In a long list the heading of the group you're
+scrolling through stays at the top. Hover a field to see its full name and type. A `from` row's
 column dropdown is grouped the same way. On the right is the mapping grid, one row
 per output column:
 
@@ -72,6 +73,21 @@ Choosing `expr` and clicking the edit icon opens the expression builder, a side 
 
 ![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-light.png#only-light){ .screenshot loading=lazy }
 ![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-dark.png#only-dark){ .screenshot loading=lazy }
+
+**Format** (<kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>) tidies the expression: keywords in
+upper case, one space between words, and line breaks where they help. A `CASE` with two or
+more `WHEN`s gets one line per branch, a function call too long for one line gets one
+argument per line, and a condition that's still too long breaks before each `AND` / `OR`.
+Short expressions stay on one line. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it. An expression
+with unbalanced brackets or a `--` comment is left as it is.
+
+```sql
+CASE
+  WHEN waddle_m > 100 THEN 'far'
+  WHEN waddle_m > 10 THEN 'mid'
+  ELSE 'near'
+END
+```
 
 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> applies the expression and <kbd>Esc</kbd> cancels.
 Multi-line expressions keep their formatting in the saved YAML.

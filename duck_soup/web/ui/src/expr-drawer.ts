@@ -1,6 +1,8 @@
 import { createIcons } from 'lucide'
 import { mkEl, appIcons, esc, helpLink } from './dom'
 import { highlightExpr } from './expr-highlight'
+import { formatExpr } from './expr-format'
+import { showToast } from './toast'
 import { EXPR_SNIPPET_CATEGORIES, EXPR_FUNCTION_NAMES } from './expr-snippets'
 import { ExprAutocomplete, type AutocompleteItem } from './expr-autocomplete'
 import { attachLiveValidation, renderValidationMsg, type LiveValidationHandle } from './validation'
@@ -78,13 +80,16 @@ export function openExprDrawer(
         </div>
         <div class="drawer-body" style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; padding: 24px 32px;">
           <div style="display: flex; flex-direction: column; gap: 8px;">
-            <label style="font-size: 11px; color: var(--muted); font-weight: 500; font-family: var(--mono);">SQL EXPRESSION</label>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <label style="font-size: 11px; color: var(--muted); font-weight: 500; font-family: var(--mono);">SQL EXPRESSION</label>
+              <button type="button" class="ghost mini" id="formatExprBtn" title="Format the expression (Shift+Alt+F)"><i data-lucide="align-left" style="width:12px;height:12px"></i> Format</button>
+            </div>
             <div class="expr-editor-wrap">
               <pre id="exprHighlight" aria-hidden="true"></pre>
               <textarea id="exprTextarea" spellcheck="false" placeholder="e.g. population / 1000"></textarea>
             </div>
             <div id="exprValidationMsg" class="expr-validation-msg"></div>
-            <div style="font-size: 10px; color: var(--muted); font-family: var(--display);">Ctrl+Enter to apply · Esc to cancel · Tab / Shift+Tab to indent</div>
+            <div style="font-size: 10px; color: var(--muted); font-family: var(--display);">Ctrl+Enter to apply · Esc to cancel · Tab / Shift+Tab to indent · Shift+Alt+F to format</div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: 4px;">
             <div>
@@ -138,8 +143,31 @@ export function openExprDrawer(
     ta.addEventListener('scroll', () => { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft })
     ta.addEventListener('blur', () => { validation!.runNow() })
 
+    // Replaces the whole text through insertText rather than setting .value, so Ctrl+Z
+    // undoes the formatting.
+    const format = () => {
+      const res = formatExpr(ta.value)
+      if ('error' in res) { showToast(`Can't format: ${res.error}`, 'info'); return }
+      if (res.text === ta.value) return
+      ta.focus()
+      ta.select()
+      if (!document.execCommand('insertText', false, res.text)) {
+        ta.value = res.text
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      autocomplete.close()
+    }
+    drawer.querySelector('#formatExprBtn')!.addEventListener('click', format)
+
     ta.addEventListener('keydown', e => {
       if (autocomplete.handleKeydown(e)) return
+
+      // e.code, not e.key: with Alt held, e.key is a layout-dependent character on macOS.
+      if (e.shiftKey && e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyF') {
+        e.preventDefault()
+        format()
+        return
+      }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault()

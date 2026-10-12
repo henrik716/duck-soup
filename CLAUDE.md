@@ -19,6 +19,7 @@ npm install
 npm run dev        # Vite dev server with /api proxy → :8000
 npm run build      # compile TypeScript → ../static/ (commit the output)
 npm run build:fast # skip tsc type-check
+npm test           # Vitest unit tests (src/*.test.ts); npm run test:watch to rerun on save
 ```
 
 **Docs** (GitHub Pages, MkDocs Material; source: `docs/`, config: `mkdocs.yml`)
@@ -49,8 +50,10 @@ pytest -v                                           # backend test suite (tests/
 ```
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR: a `backend` job (`pytest`)
-and a `frontend` job (`npm run build`, i.e. `tsc --noEmit` + `vite build`). There's no
-frontend unit-test framework yet — the frontend job is a type-check/build gate only.
+and a `frontend` job (`npm test`, then `npm run build`, i.e. `tsc --noEmit` + `vite build`).
+Frontend unit tests are Vitest files next to their module (`src/<module>.test.ts`, run in Node,
+no DOM), so they suit pure modules like `expr-format.ts` and `expr-highlight.ts`; `tsc` type-checks
+them too, and Vite's build never includes them since nothing imports them.
 
 ## Architecture
 

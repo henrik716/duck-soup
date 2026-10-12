@@ -243,7 +243,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
           <div class="auto-map-banner-container"></div>
           <div class="mapping-container-layout" style="display: flex; gap: 20px; align-items: stretch; min-height: 200px;">
             <!-- Left Side: Available Fields Pool -->
-            <div class="pl-available-pool" style="width: 250px; flex-shrink: 0; background: var(--panel2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div class="pl-available-pool" style="width: 250px; flex-shrink: 0; background: var(--panel2-solid); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 8px;">
               <div style="font-size: 10px; font-family: var(--mono); text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 6px; font-weight: 600; display: flex; align-items: center; gap: 4px;">
                 <i data-lucide="database" style="width: 12px; height: 12px;"></i> Available Source Fields
               </div>

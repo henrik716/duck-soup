@@ -32,7 +32,7 @@ jobs:
         run: pytest -v
 
   frontend:
-    name: Frontend build (tsc + vite)
+    name: Frontend tests and build (vitest + tsc + vite)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,6 +48,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run unit tests
+        run: npm test
 
       - name: Type-check and build
         run: npm run build
