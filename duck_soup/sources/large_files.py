@@ -10,12 +10,8 @@ from ..config import Source
 from ..sql_util import quote_ident as _sql_ident, quote_literal as _sql_str
 from . import settings
 from .crs import _normalize_crs
+from .formats import GDAL_VECTOR
 from .gdal import _geometry_column_via_describe
-
-# Formats the pyogrio fallback covers: plain GDAL vector files. xlsx/csv are left on ST_Read,
-# since their header-row open options and SQL-built geometry are ST_Read-specific.
-_PYOGRIO_FORMATS = ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf")
-
 
 def _local_file_size(uri: str) -> int:
     """Size in bytes of a local file, or of the largest file inside a directory source (a
@@ -37,7 +33,7 @@ def needs_pyogrio_reader(uri: str) -> bool:
 
 def large_file_reader_note(src: Source) -> str | None:
     """User-facing explanation when `src` will be read via pyogrio, else None."""
-    if src.format not in _PYOGRIO_FORMATS or not needs_pyogrio_reader(src.uri):
+    if src.format not in GDAL_VECTOR or not needs_pyogrio_reader(src.uri):
         return None
     size_gib = _local_file_size(src.uri) / 2**30
     return (

@@ -18,7 +18,7 @@ pytest -v
 ```text
 duck_soup/
   config.py      Pydantic schema for the YAML (the source of truth for every option)
-  sources.py     one reader per format → a SQL table expression (mostly ST_Read)
+  sources/       one reader per format → a SQL table expression (mostly ST_Read)
   engine.py      builds the src_<id> → step_N → mapped view chain and writes the output
   derive.py      DuckDB bootstrap (extensions) + Python UDFs (to_mgrs, to_geohash)
   sql_util.py    identifier / literal quoting
@@ -37,7 +37,7 @@ docs/            this site (MkDocs Material)
 
 ### Engine in brief
 
-1. Each source becomes a `src_<id>` view, reprojected to the working CRS (`sources.py`).
+1. Each source becomes a `src_<id>` view, reprojected to the working CRS (`sources/`).
 2. Each step becomes `step_N` on top of the previous view (`engine.py`). Spatial joins, clip,
    erase and nearest-neighbour use a plain `JOIN` on the spatial predicate, which DuckDB plans
    as an R-tree `SPATIAL_JOIN`, then aggregate per base row. Avoid `LATERAL` subqueries for

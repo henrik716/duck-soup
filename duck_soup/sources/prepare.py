@@ -6,6 +6,7 @@ import threading
 import time
 
 from ..config import Source
+from .formats import DOWNLOADED, GDAL_TABULAR
 from .large_files import _local_file_size
 from .remote import (
     _clear_all_progress,
@@ -77,7 +78,7 @@ def _prepare_signature(src: Source) -> tuple:
 
 def _needs_preparing(src: Source) -> bool:
     """Whether reading `src` right now would mean a download or a Parquet conversion."""
-    if src.format not in ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv", "json"):
+    if src.format not in DOWNLOADED:
         return False
     local = src.uri
     if should_download(src.uri, src.format):
@@ -85,7 +86,7 @@ def _needs_preparing(src: Source) -> bool:
         if latest is None:
             return True
         local = str(latest)
-    if src.format in ("csv", "xlsx"):
+    if src.format in GDAL_TABULAR:
         target = _tabular_cache_path(local, src.layer, _tabular_open_extra(src))
         if target is not None and not target[0].exists():
             return True
@@ -100,7 +101,7 @@ def _prepare_job(src: Source, refresh: bool) -> None:
         local = src.uri
         if should_download(src.uri, src.format):
             local = fetch_remote_file(src.uri, src.format, progress_key=key, fresh=refresh)
-        if src.format in ("csv", "xlsx"):
+        if src.format in GDAL_TABULAR:
             extra = _tabular_open_extra(src)
             target = _tabular_cache_path(local, src.layer, extra)
             if target is not None and not target[0].exists():

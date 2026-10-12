@@ -17,6 +17,7 @@ import requests
 
 from ..config import Source
 from . import settings
+from .formats import DOWNLOADED
 
 # Remote file sources (an http(s) uri on a gpkg/geojson/csv/... source) are downloaded once
 # to a local file instead of being handed to ST_Read as a URL. GDAL reads URLs through
@@ -134,10 +135,6 @@ def should_download(uri: str, fmt: str) -> bool:
     return not (fmt == "shp" and urlparse(uri).path.lower().endswith(".shp"))
 
 
-# The formats read_expr downloads first when their uri is remote (see should_download).
-_DOWNLOADED_FORMATS = ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv", "json")
-
-
 def download_remote_sources(sources: list[Source], log: Callable[[str], None] | None = None) -> None:
     """Download every remote file among `sources`, in parallel, the way read_expr would:
     fresh inside fresh_downloads(), once per URL. The editor does this for a run before
@@ -147,7 +144,7 @@ def download_remote_sources(sources: list[Source], log: Callable[[str], None] | 
     from contextvars import copy_context
 
     todo = {(s.uri, s.format) for s in sources
-            if s.format in _DOWNLOADED_FORMATS and should_download(s.uri, s.format)}
+            if s.format in DOWNLOADED and should_download(s.uri, s.format)}
     if not todo:
         return
     # copy_context: each thread sees this run's fresh_downloads() setting.

@@ -63,7 +63,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 
 **`config.py`** — Pydantic schemas for the entire YAML structure. `Source`, `Step` (SpatialJoin / AttributeJoin / NearestNeighbor), `MapItem`, `CodeList`, `Pipeline`, `Config`. Validates cross-references and CRS. Auto-upgrades the legacy single-output format to the multi-output/multi-layer format on load.
 
-**`sources.py`** — Translates a `Source` config into a SQL table expression. Most formats produce `ST_Read(...)` strings via `_st_read()`. Exceptions:
+**`sources/`** — Translates a `Source` config into a SQL table expression (`read_expr` in `__init__.py`, which dispatches on format). One module per concern: `remote` (downloads, progress), `services` (WFS / ArcGIS REST / OAPIF fetchers and layer listing), `gdal` (`ST_Read`, layer listing, curve linearization, aliasing the geometry column to `geom`), `parquet`, `postgres`, `tabular` (xlsx/csv/json), `large_files` (pyogrio), `crs`, `prepare` (the editor's background preparation and source-card notes). `formats.py` holds the format sets each reader handles (`GDAL_VECTOR`, `GDAL_TABULAR`, `DOWNLOADED`, …) and `alias_geom`; add a format there rather than as a literal tuple. Cache folders and size thresholds live in `settings.py`, read as `settings.X` at call time (never `from .settings import X`), so tests patch them there and `worker._SHARED_SETTINGS` hands them to the workers. Most formats produce `ST_Read(...)` strings via `gdal._st_read()`. Exceptions:
 - `arcgis_rest`: paged HTTP → temp GeoJSON → `ST_Read`
 - `wfs`: HTTP GetFeature (GML/3.2) → temp `.gml` → `ST_Read`
 - `parquet`: DuckDB's native `read_parquet()`, not `ST_Read` — the GDAL build bundled with the `spatial` extension has no Parquet/Arrow driver
@@ -76,7 +76,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 
 **`derive.py`** — Registers Python UDFs into DuckDB (`to_mgrs`, backed by the `mgrs` package, a required dependency; `to_geohash`, self-contained, since the spatial extension has no `ST_GeoHash`). Also owns connection bootstrap: `load_extensions()` (spatial + postgres) and `init_duckdb()` (extensions + UDFs) — every DuckDB connection in the codebase goes through one of these.
 
-**`sql_util.py`** — `quote_ident()` / `quote_literal()`, shared by `engine.py` and `sources.py` (imported there under their local `_ident`/`_lit` and `_sql_ident`/`_sql_str` names).
+**`sql_util.py`** — `quote_ident()` / `quote_literal()`, shared by `engine.py` and `sources/` (imported there under their local `_ident`/`_lit` and `_sql_ident`/`_sql_str` names).
 
 **`worker.py`** — Every DuckDB connection the editor's server needs lives in a spawned child process, so a native DuckDB crash can't take the server down. `EngineWorker.call(task, payload, …)` runs a task (`inspect`, `layers`, `preview`, `counts`, `run`, `convert`) in its worker, one call at a time, streaming log lines back over a pipe. Two long-lived workers: `ENGINE` (inspect / layer listing / preview / counts) and `RUNNER` (runs; `RUNNER.cancel()` kills it, behind `POST /api/run/cancel`); `run_once` gives the Parquet conversion in `sources._prepare_job` a one-off worker. `/api/preview` takes a `client` id (one per editor tab, `CLIENT_ID` in `api.ts`; each live check in `validation.ts` uses its own, so checks and the main preview don't stop each other): `_preview_ticket` makes each preview that client's newest, `ENGINE.interrupt(("preview", client))` stops its running one (a DuckDB interrupt via `derive.interrupt_all`, matched by call id so a late interrupt can't hit the next call; the worker stays up), and `call(..., stale=...)` skips one that's been superseded by the time the worker is free; both raise `EngineSuperseded`, answered as `stale: true`. A crash raises `EngineCrashed` (exit code + last log lines; the endpoints answer `crashed: true`), a cancel `EngineCancelled`, and the next call starts a new worker; ordinary exceptions come back as `EngineTaskError` with the worker's traceback. A worker exits when the server process dies (a watchdog thread on `mp.parent_process()`). Each call passes the server's cwd and the `sources` settings in `_SHARED_SETTINGS` (cache folders, `_TABULAR_CACHE_MIN_BYTES`), so a worker reads what the server prepared: downloads stay in the server (for a run, `download_remote_sources` first, then `run_config(downloads={uri: path})` in `RUNNER`). Anything else a test monkeypatches in the server process is invisible to the workers.
 
@@ -145,11 +145,11 @@ outputs:
 `codelist` can also reference a CSV file: `{file: data/lookup.csv, key: code, value: label}`.
 
 A source's `uri` (and a `codelist`'s `file`) can be any absolute path on disk, not just a path
-under `data/` — `sources.py` passes it straight through to `ST_Read`/`read_parquet` with no
+under `data/` — `sources/` passes it straight through to `ST_Read`/`read_parquet` with no
 normalization. `data/` is only a convenience location for the committed test fixtures; personal
 datasets don't need to be copied into the repo to be used in a pipeline.
 
 A `postgres` source's `uri` is a full libpq/DSN connection string (e.g.
 `postgresql://user:pass@host:5432/dbname`), read via DuckDB's `postgres` extension
-(`ATTACH ... TYPE postgres`) rather than GDAL/`ST_Read` — see `sources.py`'s module docstring.
+(`ATTACH ... TYPE postgres`) rather than GDAL/`ST_Read` — see `sources/__init__.py`'s module docstring.
 `layer` names the table, optionally schema-qualified (`schema.table`, defaulting to `public`).

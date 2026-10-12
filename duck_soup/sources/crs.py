@@ -2,13 +2,10 @@
 against its coordinates."""
 from __future__ import annotations
 
-import re
-
-
-# Matches config.py's CRSStr format (AUTHORITY:NUMERIC_CODE, e.g. "EPSG:4326") — mirrored
-# here (rather than importing config._CRS_RE) so a CRS string this module hands back is
-# guaranteed to pass that validation, never surfaced as a raw pydantic error in the editor.
-_CRS_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*:[0-9]+$")
+# config.py's CRSStr format (AUTHORITY:NUMERIC_CODE, e.g. "EPSG:4326"): a CRS string this
+# module hands back must pass that validation, never surfaced as a raw pydantic error in the
+# editor.
+from ..config import _CRS_RE
 
 # Aliases GDAL/PROJ use for WGS84-lon/lat that aren't the AUTHORITY:NUMERIC_CODE shape
 # config.py's CRS field requires: "OGC:CRS84" is GeoParquet/GeoJSON's default per-spec CRS

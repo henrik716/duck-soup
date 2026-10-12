@@ -556,13 +556,13 @@ function showChip(c: HTMLElement, sel: string, on: boolean): void {
 }
 
 // Shows/hides the "this crs looks wrong for the sampled coordinates" hint from
-// /api/inspect's crs_warning — see crs_extent_warning in sources.py.
+// /api/inspect's crs_warning — see crs_extent_warning in sources/crs.py.
 function updateCrsWarning(c: HTMLElement, warning: string | null | undefined): void {
   updateCardHint(c, '[data-crs-warning]', warning)
 }
 
 // /api/inspect's reader_note: the source is read via pyogrio rather than ST_Read (a file
-// over 2 GiB on Windows) — see large_file_reader_note in sources.py.
+// over 2 GiB on Windows) — see large_file_reader_note in sources/large_files.py.
 function updateReaderNote(c: HTMLElement, note: string | null | undefined): void {
   updateCardHint(c, '[data-reader-note]', note)
 }
@@ -682,7 +682,7 @@ function wireFormatToggles(
   // Geometry-from-columns: xlsx/csv/json only. Not a GDAL feature any of these readers
   // provides — the XLSX driver has no geometry support at all, the CSV driver's own
   // X_POSSIBLE_NAMES/GEOM_POSSIBLE_NAMES open options came with real sharp edges, and json
-  // isn't read through GDAL at all (see sources.py's _apply_tabular_geometry) — so the
+  // isn't read through GDAL at all (see sources/tabular.py's _apply_tabular_geometry) — so the
   // engine builds the geometry itself in SQL, identically for every tabular format.
   const geomModeSel = c.querySelector<HTMLSelectElement>('[data-geom-mode]')!
   const toggleTabularGeom = () => {

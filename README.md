@@ -156,7 +156,7 @@ lon/lat/x/y/mgrs/geohash/wkb/wkt/area/length are always derived from the same wo
 used for the joins, so there's no extra reprojection.
 
 Most formats go through DuckDB's `ST_Read` (which uses GDAL), so adding a format is
-usually one branch in `sources.py`. **ArcGIS REST** and **OGC API - Features (oapif)**
+usually one branch in `sources/__init__.py`'s `read_expr`. **ArcGIS REST** and **OGC API - Features (oapif)**
 are paged over HTTP into a temporary GeoJSON file first, then read like any other file;
 **WFS** is likewise fetched (GetFeature/GML) into a temporary `.gml` file first. **Parquet**
 and **Postgres** skip GDAL entirely, using DuckDB's native `read_parquet()` and `postgres`
@@ -436,7 +436,7 @@ The user guide is MkDocs Material, in `docs/`. `mkdocs serve` previews it, and
 ```
 duck_soup/           # Python package
   config.py          # YAML schema (pydantic) + load/save
-  sources.py         # one reader per format (mostly DuckDB ST_Read / GDAL)
+  sources/           # one reader per format (mostly DuckDB ST_Read / GDAL)
   engine.py          # builds a chain of SQL views, writes GeoPackage/GeoParquet
   derive.py          # DuckDB bootstrap (extensions) + python UDFs (MGRS)
   sql_util.py        # identifier / literal quoting

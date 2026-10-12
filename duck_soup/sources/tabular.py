@@ -14,6 +14,7 @@ import duckdb
 from ..config import Source
 from ..sql_util import quote_ident as _sql_ident, quote_literal as _sql_str
 from . import settings
+from .formats import GDAL_TABULAR, alias_geom
 from .gdal import _geometry_column_via_describe, _st_read
 from .large_files import _local_file_size
 from .remote import _clear_progress, _is_download, _set_progress, _superseded_long_enough
@@ -21,7 +22,7 @@ from .remote import _clear_progress, _is_download, _set_progress, _superseded_lo
 
 def _read_as_parquet(src: Source, local: str) -> bool:
     return (
-        src.format in ("csv", "xlsx")
+        src.format in GDAL_TABULAR
         and _local_file_size(local) >= settings.TABULAR_CACHE_MIN_BYTES
         and not Path(local).is_dir()
     )
@@ -115,7 +116,7 @@ def _apply_tabular_geometry(
 
 def _tabular_open_extra(src: Source) -> str:
     """The ST_Read open-options clause for a csv/xlsx source (just header_row today)."""
-    if src.format in ("xlsx", "csv") and src.header_row is not None:
+    if src.format in GDAL_TABULAR and src.header_row is not None:
         return _open_options_arg([_header_open_option(src.format, src.header_row)])
     return ""
 
@@ -197,9 +198,7 @@ def _tabular_parquet_cache(
                 pass
     base = f"read_parquet({_sql_str(str(out).replace(chr(92), '/'))})"
     name = _geometry_column_via_describe(con, base)
-    if not name or name == "geom":
-        return base
-    return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
+    return alias_geom(base, name)
 
 
 def _json_read_expr(path: str, records: str | None) -> str:

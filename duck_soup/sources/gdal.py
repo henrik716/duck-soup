@@ -12,9 +12,10 @@ from typing import Callable
 
 import duckdb
 
-from ..sql_util import quote_ident as _sql_ident, quote_literal as _sql_str
+from ..sql_util import quote_literal as _sql_str
 from . import settings
 from .crs import _normalize_crs
+from .formats import alias_geom
 
 # GDAL geometry-type labels that DuckDB's spatial extension cannot parse: the ISO
 # SQL/MM curve types (CircularString, CompoundCurve, CurvePolygon, MultiCurve,
@@ -190,6 +191,4 @@ def _read_expr_normalized(
         return base
     gfield = _layer_geometry_field(con, uri, layer)
     name = gfield["name"] if gfield else _geometry_column_via_describe(con, base)
-    if not name or name == "geom":
-        return base
-    return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
+    return alias_geom(base, name)

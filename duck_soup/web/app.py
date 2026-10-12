@@ -715,11 +715,11 @@ def inspect_file(req: InspectFileRequest) -> dict:
             local = remote_file_name(uri, fmt) if should_download(uri, fmt) else fwd_path
             return {"ok": True, "layers": [Path(local).stem], "default_crs": None}
         if fmt == "json":
-            # Read with DuckDB's read_json (see sources.py), not GDAL: no layers, no CRS.
+            # Read with DuckDB's read_json (see sources.tabular), not GDAL: no layers, no CRS.
             return {"ok": True, "layers": [], "default_crs": None}
         if fmt == "parquet":
             # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
-            # bundled GDAL build — see sources.py's module docstring). No layer concept
+            # bundled GDAL build — see the sources package docstring). No layer concept
             # for a single flat Parquet file, so just report the CRS if one is embedded.
             _, crs = ENGINE.call("layers", {"kind": "parquet", "path": fwd_path})
             return {"ok": True, "layers": [], "default_crs": crs}

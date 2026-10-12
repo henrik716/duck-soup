@@ -230,7 +230,8 @@ export interface InspectColumn {
   type: string
 }
 
-// What a slow source is busy with (sources.py's prepare_source / source_progress).
+// What a slow source is busy with (sources/prepare.py's prepare_source, sources/remote.py's
+// source_progress).
 export interface SourceProgress {
   stage: 'queued' | 'download' | 'convert'
   source?: string
@@ -250,12 +251,12 @@ export interface InspectResponse {
   columns?: InspectColumn[]
   // A sanity-check hint when the declared crs looks inconsistent with the sampled
   // coordinate magnitudes (e.g. EPSG:4326 but values are clearly meters) — see
-  // crs_extent_warning in sources.py. null/absent means nothing looked off.
+  // crs_extent_warning in sources/crs.py. null/absent means nothing looked off.
   crs_warning?: string | null
   // Set when the source is read via pyogrio instead of ST_Read (a file over 2 GiB on
-  // Windows) — see large_file_reader_note in sources.py. Informational, not an error.
+  // Windows) — see large_file_reader_note in sources/large_files.py. Informational, not an error.
   reader_note?: string | null
-  // A remote file source previews read from a download (sources.py's download_info): its
+  // A remote file source previews read from a download (sources/prepare.py's download_info): its
   // size, age in seconds, and whether it's also read via a Parquet copy. Null otherwise.
   download?: { bytes: number; age: number; parquet: boolean } | null
   error?: string

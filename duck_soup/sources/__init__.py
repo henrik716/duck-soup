@@ -30,9 +30,15 @@ from ..config import Source
 from ..sql_util import quote_ident as _sql_ident, quote_literal as _sql_str
 from . import settings
 from .crs import GEOGRAPHIC_CRS, crs_extent_warning
+from .formats import (
+    GDAL_FILE,
+    GDAL_TABULAR,
+    GDAL_VECTOR,
+    MAY_HAVE_CURVES,
+    alias_geom,
+)
 from .gdal import _maybe_linearize, _read_expr_normalized, _st_read, list_gdal_layers
 from .large_files import (
-    _PYOGRIO_FORMATS,
     _read_via_pyogrio,
     large_file_reader_note,
     needs_pyogrio_reader,
@@ -125,9 +131,7 @@ def read_expr(
         if con is None:
             return base
         name, _crs = parquet_geometry_info(con, src.uri)
-        if not name or name == "geom":
-            return base
-        return f"(SELECT * EXCLUDE ({_sql_ident(name)}), {_sql_ident(name)} AS geom FROM {base})"
+        return alias_geom(base, name)
 
     if fmt == "postgres":
         # No GDAL involved at all here either — see module docstring.
@@ -144,7 +148,7 @@ def read_expr(
         # through as VARCHAR hex-EWKB text (PostGIS's default text output for that column) —
         # ST_GeomFromHEXWKB parses that directly, same as the xlsx/csv geom_field branch below.
         geom = f"CASE WHEN {g} IS NULL THEN NULL ELSE TRY(ST_GeomFromHEXWKB({g})) END"
-        return f"(SELECT * EXCLUDE ({g}), {geom} AS geom FROM {base})"
+        return alias_geom(base, geom_col, geom)
 
     if fmt == "json":
         # Native read_json(), not GDAL: its GeoJSON driver only takes FeatureCollections.
@@ -161,23 +165,23 @@ def read_expr(
             }
         return _apply_tabular_geometry(base, src, column_types)
 
-    if fmt in ("gpkg", "fgdb", "shp", "geojson", "gml", "flatgeobuf", "xlsx", "csv"):
+    if fmt in GDAL_FILE:
         # GDAL picks the driver from the path/extension; layer/sheet is optional.
         uri, layer = src.uri, src.layer
         if con is not None and should_download(uri, fmt):
             uri = fetch_remote_file(uri, fmt, log, progress_key=src.uri)
-        if fmt in ("gpkg", "fgdb", "gml"):
+        if fmt in MAY_HAVE_CURVES:
             uri, layer = _maybe_linearize(uri, layer, workdir, src.id, con, log)
-        if con is not None and fmt in _PYOGRIO_FORMATS and needs_pyogrio_reader(uri):
+        if con is not None and fmt in GDAL_VECTOR and needs_pyogrio_reader(uri):
             limit = settings.PYOGRIO_SAMPLE_ROWS if sample and max_features is None else max_features
             return _read_via_pyogrio(con, uri, layer, src.id, bbox, limit, log)
         extra = _tabular_open_extra(src)
         base = None
-        if con is not None and fmt in ("xlsx", "csv"):
+        if con is not None and fmt in GDAL_TABULAR:
             base = _tabular_parquet_cache(con, uri, layer, extra, log, progress_key=src.uri)
         if base is None:
             base = _read_expr_normalized(uri, layer, con, extra=extra)
-        if fmt in ("xlsx", "csv") and (src.x_field or src.geom_field):
+        if fmt in GDAL_TABULAR and (src.x_field or src.geom_field):
             base = _apply_tabular_geometry(base, src)
         return base
 

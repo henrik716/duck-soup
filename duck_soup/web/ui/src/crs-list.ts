@@ -7,8 +7,8 @@ export interface CrsOption {
 }
 
 // A curated shortlist for the crs field's searchable combo — not an EPSG database (this repo
-// has no PROJ/pyproj lookup exposed to the frontend; see sources.py's module docstring for why
-// GDAL's own database isn't queried live for this either). Covers WGS84/Web Mercator, every
+// has no PROJ/pyproj lookup exposed to the frontend; see sources/crs.py's crs_extent_warning
+// for why GDAL's own database isn't queried live for this either). Covers WGS84/Web Mercator, every
 // ETRS89 UTM zone across Europe (the projected CRS most of this repo's own test data and
 // example pipeline use — see pipelines/test.yaml's `working_crs: EPSG:25833`), a few national
 // grids, and NAD83/GDA94/NZGD2000 for elsewhere. Anything not listed can still be typed
