@@ -221,7 +221,7 @@ def test_read_expr_falls_back_to_describe_when_st_read_meta_finds_no_geometry_fi
     spatial_con.execute(
         f"COPY t TO '{gpkg_path}' (FORMAT GDAL, DRIVER 'GPKG', LAYER_CREATION_OPTIONS 'GEOMETRY_NAME=shape')"
     )
-    monkeypatch.setattr(sources_mod, "_layer_geometry_field", lambda con, uri, layer: None)
+    monkeypatch.setattr(sources_mod.gdal, "_layer_geometry_field", lambda con, uri, layer: None)
 
     src = Source(id="pts", format="gpkg", uri=str(gpkg_path))
     read = read_expr(src, tmp_path, con=spatial_con)
@@ -321,9 +321,9 @@ def _clear_oapif_fetch_cache():
     # fetch_oapif's short-lived cache (_OAPIF_FETCH_CACHE) is a module-level global keyed by
     # (uri, layer, bbox, page_size) — several tests here share the same fake uri/layer/page_size
     # and would otherwise leak cached results (and skipped HTTP calls) across each other.
-    sources_mod._OAPIF_FETCH_CACHE.clear()
+    sources_mod.services._OAPIF_FETCH_CACHE.clear()
     yield
-    sources_mod._OAPIF_FETCH_CACHE.clear()
+    sources_mod.services._OAPIF_FETCH_CACHE.clear()
 
 
 class _FakeResponse:
@@ -357,7 +357,7 @@ class _FakeSession:
 
 def _patch_session(monkeypatch, pages: list[dict]) -> _FakeSession:
     session = _FakeSession(pages)
-    monkeypatch.setattr("duck_soup.sources.requests.Session", lambda: session)
+    monkeypatch.setattr("requests.Session", lambda: session)
     return session
 
 
@@ -442,7 +442,7 @@ def test_fetch_wfs_requests_srsname_matching_source_crs(tmp_path: Path, monkeypa
         calls.append(url)
         return _FakeWfsResponse()
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
 
     src = Source(id="a", format="wfs", uri="https://host/wfs", layer="app:Fylke", crs="EPSG:25833")
     fetch_wfs(src, tmp_path)
@@ -457,7 +457,7 @@ def test_fetch_wfs_omits_srsname_when_source_crs_unset(tmp_path: Path, monkeypat
         calls.append(url)
         return _FakeWfsResponse()
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
 
     src = Source(id="a", format="wfs", uri="https://host/wfs", layer="app:Fylke")
     fetch_wfs(src, tmp_path)
@@ -472,7 +472,7 @@ def test_fetch_arcgis_rest_joins_service_root_and_layer(tmp_path: Path, monkeypa
         calls.append((url, params))
         return _FakeGetResponse({"features": []})
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
 
     src = Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer", layer="0")
     fetch_arcgis_rest(src, tmp_path)
@@ -487,7 +487,7 @@ def test_fetch_arcgis_rest_full_endpoint_without_layer_unchanged(tmp_path: Path,
         calls.append((url, params))
         return _FakeGetResponse({"features": []})
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
 
     src = Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer/0")
     fetch_arcgis_rest(src, tmp_path)
@@ -512,7 +512,7 @@ def test_fetch_arcgis_rest_pages_until_short_batch(tmp_path: Path, monkeypatch):
         calls.append(params)
         return _FakeGetResponse(pages[len(calls) - 1])
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
 
     src = Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer", layer="0", page_size=2)
     out_path = fetch_arcgis_rest(src, tmp_path)
@@ -544,7 +544,7 @@ def test_fetch_arcgis_rest_sample_stops_after_first_page(tmp_path: Path, monkeyp
         calls.append(params)
         return _FakeGetResponse(pages[len(calls) - 1])
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
 
     src = Source(id="a", format="arcgis_rest", uri="https://host/arcgis/rest/services/Foo/MapServer", layer="0", page_size=2)
     out_path = fetch_arcgis_rest(src, tmp_path, sample=True)
@@ -645,13 +645,13 @@ def test_fetch_oapif_cache_expires_after_ttl(tmp_path: Path, monkeypatch):
     session = _patch_session(monkeypatch, pages)
 
     fake_now = [1_000_000.0]
-    monkeypatch.setattr(sources_mod.time, "time", lambda: fake_now[0])
+    monkeypatch.setattr(sources_mod.services.time, "time", lambda: fake_now[0])
 
     src = Source(id="fylker", format="oapif", uri="https://host/ogcapi", layer="fylker", page_size=1)
     fetch_oapif(src, tmp_path, sample=True)
     assert len(session.calls) == 1
 
-    fake_now[0] += sources_mod._OAPIF_CACHE_TTL + 1
+    fake_now[0] += sources_mod.services._OAPIF_CACHE_TTL + 1
     out_path = fetch_oapif(src, tmp_path, sample=True)
     data = json.loads(Path(out_path).read_text(encoding="utf-8"))
     assert [f["properties"]["nr"] for f in data["features"]] == ["99"]
@@ -665,7 +665,7 @@ def test_fetch_oapif_cache_expires_after_ttl(tmp_path: Path, monkeypatch):
 
 @pytest.fixture()
 def force_pyogrio(monkeypatch):
-    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 1)
+    monkeypatch.setattr(sources_mod.settings, "ST_READ_MAX_BYTES", 1)
 
 
 def _describe(con, expr: str) -> list[tuple[str, str]]:
@@ -682,7 +682,7 @@ def test_read_expr_pyogrio_matches_st_read_schema_and_rows(
     src = Source(id="s", format=fmt, uri=uri)
     st_read = read_expr(src, tmp_path, con=spatial_con)
 
-    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 1)
+    monkeypatch.setattr(sources_mod.settings, "ST_READ_MAX_BYTES", 1)
     via_pyogrio = read_expr(src, tmp_path, con=spatial_con)
 
     assert not via_pyogrio.startswith(("ST_Read", "(SELECT"))  # a temp table, not ST_Read
@@ -726,7 +726,7 @@ def test_read_expr_pyogrio_honors_max_features_and_sample(spatial_con, tmp_path:
 
     sampled = read_expr(src, tmp_path, con=spatial_con, sample=True)
     assert spatial_con.execute(f"SELECT count(*) FROM {sampled}").fetchone() == (
-        sources_mod._PYOGRIO_SAMPLE_ROWS,
+        sources_mod.settings.PYOGRIO_SAMPLE_ROWS,
     )
 
 
@@ -737,15 +737,15 @@ def test_needs_pyogrio_reader_only_above_threshold(tmp_path: Path, monkeypatch):
     gdb.mkdir()
     (gdb / "a0000000a.gdbtable").write_bytes(b"0" * 10)
 
-    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", None)  # non-Windows
+    monkeypatch.setattr(sources_mod.settings, "ST_READ_MAX_BYTES", None)  # non-Windows
     assert not sources_mod.needs_pyogrio_reader(str(f))
 
-    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 10)
+    monkeypatch.setattr(sources_mod.settings, "ST_READ_MAX_BYTES", 10)
     assert sources_mod.needs_pyogrio_reader(str(f))
     assert sources_mod.needs_pyogrio_reader(str(gdb))  # largest file inside the folder
     assert not sources_mod.needs_pyogrio_reader("https://example.com/x.gpkg")
 
-    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 11)
+    monkeypatch.setattr(sources_mod.settings, "ST_READ_MAX_BYTES", 11)
     assert not sources_mod.needs_pyogrio_reader(str(f))
 
 
@@ -853,7 +853,7 @@ class _FakeStreamResponse:
 
 @pytest.fixture()
 def _remote_cache(monkeypatch, tmp_path):
-    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    monkeypatch.setattr(sources_mod.settings, "REMOTE_CACHE_DIR", tmp_path / "remote")
 
 
 def test_fetch_remote_file_keeps_url_name_and_caches(monkeypatch, _remote_cache):
@@ -863,7 +863,7 @@ def test_fetch_remote_file_keeps_url_name_and_caches(monkeypatch, _remote_cache)
         calls.append(url)
         return _FakeStreamResponse(b"id;name\n1;A\n")
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
     url = "https://example.com/export/segmentert.csv?fylke=56"
     path = sources_mod.fetch_remote_file(url, "csv")
     assert Path(path).name == "segmentert.csv"
@@ -879,7 +879,7 @@ def test_fetch_remote_file_keeps_url_name_and_caches(monkeypatch, _remote_cache)
 def test_fresh_downloads_fetches_once_per_run(monkeypatch, _remote_cache):
     calls = []
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get",
+        "requests.get",
         lambda url, **kw: calls.append(url) or _FakeStreamResponse(b"a\n1\n"),
     )
     url = "https://example.com/x.csv"
@@ -892,7 +892,7 @@ def test_fresh_downloads_fetches_once_per_run(monkeypatch, _remote_cache):
 
 def test_fetch_remote_file_adds_format_extension(monkeypatch, _remote_cache):
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(b"[]")
+        "requests.get", lambda url, **kw: _FakeStreamResponse(b"[]")
     )
     path = sources_mod.fetch_remote_file("https://example.com/api/export?id=5", "json")
     assert Path(path).name == "export.json"
@@ -908,7 +908,7 @@ def test_should_download():
 def test_read_expr_remote_json_is_downloaded(monkeypatch, spatial_con, tmp_path, _remote_cache):
     body = json.dumps({"results": [{"id": 1}, {"id": 2}]}).encode()
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(body)
+        "requests.get", lambda url, **kw: _FakeStreamResponse(body)
     )
     src = Source(id="j", format="json", uri="https://example.com/places?x=1", records="results")
     read = read_expr(src, tmp_path, con=spatial_con)
@@ -919,7 +919,7 @@ def test_fetch_remote_file_new_download_does_not_overwrite_previous(monkeypatch,
     # On Windows a file still open elsewhere can't be replaced, so each download gets its
     # own folder; the older one is removed once nothing can still be using it.
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(b"a\n1\n")
+        "requests.get", lambda url, **kw: _FakeStreamResponse(b"a\n1\n")
     )
     first = Path(sources_mod.fetch_remote_file("https://example.com/x.csv", "csv"))
     second = Path(sources_mod.fetch_remote_file("https://example.com/x.csv", "csv", fresh=True))
@@ -938,7 +938,7 @@ def test_two_processes_do_not_delete_each_others_parquet_copy(
     monkeypatch, spatial_con, tmp_path, _remote_cache, _tabular_cache
 ):
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(b"id\n1\n2\n")
+        "requests.get", lambda url, **kw: _FakeStreamResponse(b"id\n1\n2\n")
     )
     src = Source(id="r", format="csv", uri="https://example.com/r.csv")
     read_a = read_expr(src, tmp_path, con=spatial_con)  # the editor's preview
@@ -952,8 +952,8 @@ def test_two_processes_do_not_delete_each_others_parquet_copy(
 
 @pytest.fixture()
 def _tabular_cache(monkeypatch, tmp_path):
-    monkeypatch.setattr(sources_mod, "_TABULAR_CACHE_DIR", tmp_path / "tabular")
-    monkeypatch.setattr(sources_mod, "_TABULAR_CACHE_MIN_BYTES", 0)
+    monkeypatch.setattr(sources_mod.settings, "TABULAR_CACHE_DIR", tmp_path / "tabular")
+    monkeypatch.setattr(sources_mod.settings, "TABULAR_CACHE_MIN_BYTES", 0)
 
 
 def test_read_expr_large_csv_reads_from_parquet_copy(spatial_con, _tabular_cache):
@@ -1012,7 +1012,7 @@ def test_prepare_source_downloads_and_converts_in_background(
             yield self._body
 
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get",
+        "requests.get",
         lambda url, **kw: _SlowResponse(b"id,name\n1,A\n2,B\n"),
     )
     src = Source(id="r", format="csv", uri="https://example.com/r.csv")
@@ -1034,7 +1034,7 @@ def test_failed_download_stays_reported_until_retried(monkeypatch, _remote_cache
         calls.append(url)
         raise ConnectionError("server unreachable")
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", boom)
+    monkeypatch.setattr("requests.get", boom)
     src = Source(id="r", format="csv", uri="https://example.com/fail.csv")
     sources_mod.prepare_source(src)
     assert _wait_prepared(src) == {"stage": "error", "error": "server unreachable"}
@@ -1051,9 +1051,9 @@ def test_failed_download_stays_reported_until_retried(monkeypatch, _remote_cache
     changed = Source(id="r", format="csv", uri=src.uri, header_row=True)
     assert sources_mod.prepare_source(changed)["stage"] != "error"
     assert _wait_prepared(changed)["stage"] == "error"
-    monkeypatch.setattr(sources_mod, "_PREPARE_ERROR_TTL", 0.0)
+    monkeypatch.setattr(sources_mod.prepare, "_PREPARE_ERROR_TTL", 0.0)
     assert sources_mod.prepare_source(changed)["stage"] != "error"
-    monkeypatch.setattr(sources_mod, "_PREPARE_ERROR_TTL", 60.0)
+    monkeypatch.setattr(sources_mod.prepare, "_PREPARE_ERROR_TTL", 60.0)
     _wait_prepared(changed)
     assert len(calls) == 4
 
@@ -1071,7 +1071,7 @@ def test_different_urls_download_in_parallel(monkeypatch, _remote_cache):
                 yield self._body
         return _R(b"a\n1\n")
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
     slow = _th.Thread(target=sources_mod.fetch_remote_file, args=("https://example.com/slow.csv", "csv"))
     slow.start()
     try:
@@ -1101,7 +1101,7 @@ def test_run_reuses_a_download_in_progress(monkeypatch, _remote_cache):
                 yield self._body
         return _R(b"a\n1\n")
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", fake_get)
+    monkeypatch.setattr("requests.get", fake_get)
     url = "https://example.com/r.csv"
     preview = _th.Thread(target=sources_mod.fetch_remote_file, args=(url, "csv"))
     preview.start()
@@ -1143,7 +1143,7 @@ def test_refresh_downloads_again_and_converts_in_background(
 ):
     bodies = iter([b"id\n1\n", b"id\n1\n2\n3\n"])
     monkeypatch.setattr(
-        "duck_soup.sources.requests.get", lambda url, **kw: _FakeStreamResponse(next(bodies))
+        "requests.get", lambda url, **kw: _FakeStreamResponse(next(bodies))
     )
     src = Source(id="r", format="csv", uri="https://example.com/r.csv")
     assert _wait_prepared(src) is None

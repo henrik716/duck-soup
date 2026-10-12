@@ -74,7 +74,7 @@ def test_server_survives_a_native_crash_in_duckdb(tmp_path):
 def test_run_downloads_in_the_server_and_the_worker_reuses_them(tmp_path, monkeypatch):
     import duck_soup.sources as sources_mod
 
-    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    monkeypatch.setattr(sources_mod.settings, "REMOTE_CACHE_DIR", tmp_path / "remote")
     calls = []
 
     class _Resp:
@@ -86,7 +86,7 @@ def test_run_downloads_in_the_server_and_the_worker_reuses_them(tmp_path, monkey
             yield b"id,name\n1,A\n"
 
     # Only the server's requests is faked: a download in the worker would go out for real.
-    monkeypatch.setattr("duck_soup.sources.requests.get", lambda url, **kw: calls.append(url) or _Resp())
+    monkeypatch.setattr("requests.get", lambda url, **kw: calls.append(url) or _Resp())
     src = {"id": "r", "format": "csv", "uri": "https://example.com/r.csv", "geometry": False}
     cfg = {"name": "t", "output": str(tmp_path / "out.gpkg"), "pipelines": [{
         "name": "t", "sources": [src], "base": "r", "steps": [],
@@ -145,7 +145,7 @@ def test_cancel_during_downloads_answers_at_once(tmp_path, monkeypatch):
 
     import duck_soup.sources as sources_mod
 
-    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    monkeypatch.setattr(sources_mod.settings, "REMOTE_CACHE_DIR", tmp_path / "remote")
     release = threading.Event()
 
     class _Resp:
@@ -157,7 +157,7 @@ def test_cancel_during_downloads_answers_at_once(tmp_path, monkeypatch):
             release.wait(30)
             yield b"id,name\n1,A\n"
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", lambda url, **kw: _Resp())
+    monkeypatch.setattr("requests.get", lambda url, **kw: _Resp())
     src = {"id": "r", "format": "csv", "uri": "https://example.com/slow-run.csv", "geometry": False}
     cfg = {"name": "t", "output": str(tmp_path / "out.gpkg"), "pipelines": [{
         "name": "t", "sources": [src], "base": "r", "steps": [],

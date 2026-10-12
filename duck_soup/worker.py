@@ -9,13 +9,13 @@ DuckDB connection.
 Two long-lived workers, each taking one call at a time: ENGINE for the editor's interactive
 work (inspect, preview, row counts) and RUNNER for runs, so a long run doesn't hold up
 previews, and cancelling one (EngineWorker.cancel) only kills the run. Converting a large
-csv/xlsx to Parquet gets a worker of its own per file (sources._prepare_job): it takes long
-enough that it would hold up ENGINE too, and starting a process is cheap next to it.
+csv/xlsx to Parquet gets a worker of its own per file (sources.prepare._prepare_job): it
+takes long enough that it would hold up ENGINE too, and starting a process is cheap next to it.
 
 Calls go over a pipe as (task, payload, context, kwargs); the worker answers with any
 number of ("log", line) messages and then ("ok", result) or ("error", message, trace,
 partial). `context` carries the server's working folder and cache settings, so the worker
-reads the same downloads and Parquet copies the server prepared (see sources.py).
+reads the same downloads and Parquet copies the server prepared (see sources.settings).
 """
 from __future__ import annotations
 
@@ -196,11 +196,12 @@ def _task_layers(target: dict, log: Callable[[str], None], partial: dict) -> tup
 
 
 def _task_convert(target: dict, log: Callable[[str], None], partial: dict) -> None:
-    """Write the cached Parquet copy of a large local csv/xlsx (sources._tabular_parquet_cache)."""
+    """Write the cached Parquet copy of a large local csv/xlsx
+    (sources.tabular._tabular_parquet_cache)."""
     import duckdb
 
     from .derive import load_extensions
-    from .sources import _tabular_parquet_cache
+    from .sources.tabular import _tabular_parquet_cache
 
     con = duckdb.connect()
     try:
@@ -217,11 +218,11 @@ _TASKS = {
 
 
 def _apply_context(ctx: dict) -> None:
-    from . import sources
+    from .sources import settings
 
     os.chdir(ctx["cwd"])
     for name, value in ctx["sources"].items():
-        setattr(sources, name, value)
+        setattr(settings, name, value)
 
 
 def _serve(conn, interrupt_event, interrupt_target) -> None:
@@ -269,17 +270,17 @@ def _serve(conn, interrupt_event, interrupt_target) -> None:
 
 # -- server side --------------------------------------------------------------
 
-# sources.py settings the server decides for its workers: where the downloads and Parquet
+# sources.settings the server decides for its workers: where the downloads and Parquet
 # copies are, and which files get a Parquet copy.
 _SHARED_SETTINGS = (
-    "_REMOTE_CACHE_DIR", "_TABULAR_CACHE_DIR", "_LINEARIZE_CACHE_DIR", "_TABULAR_CACHE_MIN_BYTES",
+    "REMOTE_CACHE_DIR", "TABULAR_CACHE_DIR", "LINEARIZE_CACHE_DIR", "TABULAR_CACHE_MIN_BYTES",
 )
 
 
 def _context() -> dict:
-    from . import sources
+    from .sources import settings
 
-    return {"cwd": os.getcwd(), "sources": {n: getattr(sources, n) for n in _SHARED_SETTINGS}}
+    return {"cwd": os.getcwd(), "sources": {n: getattr(settings, n) for n in _SHARED_SETTINGS}}
 
 
 class EngineWorker:

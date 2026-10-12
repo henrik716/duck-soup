@@ -425,7 +425,7 @@ def test_inspect_reports_reader_note_only_for_large_files(client, monkeypatch):
     assert body["reader_note"] is None
 
     # Pretend the fixture is over the size limit, as a 2 GiB+ file would be on Windows.
-    monkeypatch.setattr(sources_mod, "_ST_READ_MAX_BYTES", 1)
+    monkeypatch.setattr(sources_mod.settings, "ST_READ_MAX_BYTES", 1)
     body = client.post("/api/inspect", json={"source": source}).json()
     assert body["ok"] is True
     assert "pyogrio" in body["reader_note"]
@@ -436,7 +436,7 @@ def test_inspect_answers_pending_while_a_remote_source_downloads(client, monkeyp
     import threading
     import duck_soup.sources as sources_mod
 
-    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    monkeypatch.setattr(sources_mod.settings, "REMOTE_CACHE_DIR", tmp_path / "remote")
     release = threading.Event()
 
     class _Resp:
@@ -448,7 +448,7 @@ def test_inspect_answers_pending_while_a_remote_source_downloads(client, monkeyp
             release.wait(5)
             yield b"id,name\n1,A\n"
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", lambda url, **kw: _Resp())
+    monkeypatch.setattr("requests.get", lambda url, **kw: _Resp())
     src = {"id": "r", "format": "csv", "uri": "https://example.com/slow.csv"}
     d = client.post("/api/inspect", json={"source": src}).json()
     assert d["ok"] is False and d["pending"] is True
@@ -484,7 +484,7 @@ def test_preview_reports_every_pending_source(client, monkeypatch, tmp_path):
     import time
     import duck_soup.sources as sources_mod
 
-    monkeypatch.setattr(sources_mod, "_REMOTE_CACHE_DIR", tmp_path / "remote")
+    monkeypatch.setattr(sources_mod.settings, "REMOTE_CACHE_DIR", tmp_path / "remote")
     release = threading.Event()
 
     class _Resp:
@@ -496,7 +496,7 @@ def test_preview_reports_every_pending_source(client, monkeypatch, tmp_path):
             release.wait(5)
             yield b"id,name\n1,A\n"
 
-    monkeypatch.setattr("duck_soup.sources.requests.get", lambda url, **kw: _Resp())
+    monkeypatch.setattr("requests.get", lambda url, **kw: _Resp())
     sources = [
         {"id": "a", "format": "csv", "uri": "https://example.com/a.csv", "geometry": False},
         {"id": "b", "format": "csv", "uri": "https://example.com/b.csv", "geometry": False},

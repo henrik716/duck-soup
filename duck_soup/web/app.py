@@ -141,7 +141,7 @@ class RefreshSourceRequest(BaseModel):
 @app.post("/api/refresh_source")
 def refresh_source(req: RefreshSourceRequest) -> dict:
     """Download a remote file source again (previews otherwise keep reusing its download, see
-    sources.py's _REMOTE_CACHE_DIR). Runs in the background like any download: answers
+    sources.settings.REMOTE_CACHE_DIR). Runs in the background like any download: answers
     pending, and the editor re-inspects until it's done."""
     try:
         src = Source.model_validate(req.source)

@@ -264,7 +264,7 @@ class Engine:
             return f"ST_Read('<{s.format}: {what}, downloaded to a temp file at run time>')"
         if s.format == "postgres":
             # Not the uri: a connection string usually holds the password.
-            schema, table = src_readers._split_pg_layer(s.layer)
+            schema, table = src_readers.postgres._split_pg_layer(s.layer)
             return f"{_ident(s.id)}.{_ident(schema)}.{_ident(table)}"
         return src_readers.read_expr(s, Path(tempfile.gettempdir()), con=None)
 
