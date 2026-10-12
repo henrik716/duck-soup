@@ -93,15 +93,31 @@ The body depends on the step type:
 - **expressions**: any SQL field with a pencil icon (a mapping or attribute `expr`, a dissolve
   key or aggregate) opens the [expression builder](mapping.md#expression-builder), which checks
   the expression against the rows that reach this step.
-
-Column dropdowns and checks in a step card offer only the columns that reach that step: the
-base source's, plus what earlier steps add, minus what they drop or dissolve away. A column
-an earlier step drops isn't offered, and neither is one a later step adds.
 - **rejects → output layer**: on joins, `clip` and `filter`, a layer for the rows the step
   rejects (no match, outside the mask, condition not true). Those rows then go there instead of
   on down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).
 - **apply to branch**: run this step on a named [snapshot branch](../concepts.md#branches-and-derived-sources)
   instead of the main chain. For a snapshot step this reads **snapshot from branch**.
+
+Column dropdowns and checks in a step card offer only the columns that reach that step: the
+base source's, plus what earlier steps add, minus what they drop or dissolve away. A column
+an earlier step drops isn't offered, and neither is one a later step adds.
+
+!!! tip "Keep columns, or drop them?"
+    Keep them by default. The [mapping](mapping.md) chooses what's written, so a column it
+    doesn't use never reaches the output, and a column you keep is still there if you need it
+    later. Drop one in **Update Attributes** when:
+
+    - **the mapping is empty**: then every column is written, and dropping is how you leave
+      one out.
+    - **it was only a helper**, such as a key you made for a join or a flag for a filter, and
+      it has done its job.
+    - **the data is big and the column heavy** (long text, JSON, lists) and you don't need it:
+      a run stores every column after each step, so dropping it early saves memory and time.
+    - **a join will bring in a column with the same name**: the joined one would come out as
+      `name_1`, and `name` would still mean the old column. Drop (or rename) the old one first.
+
+    See [Keep or drop?](../reference/steps.md#keep-or-drop) in the step reference.
 
 ## Working step by step
 

@@ -286,6 +286,21 @@ the whole run. A preview may recompute it, though, so it can differ between prev
 `geom` can't be dropped. Setting it with an `expr` replaces the geometry, so the expression
 must return one.
 
+### Keep or drop?
+
+Keep columns by default. The [mapping](mapping.md) chooses what's written, so a column it
+doesn't use never reaches the output, and a column you keep is still there if a later step or
+the mapping turns out to need it. Drop one when:
+
+- **The mapping is empty.** Then every column is written, and `drop` is how you leave one out.
+- **It was only a helper.** A key you made for a join or a flag for a filter can go once it
+  has done its job, which keeps previews and column lists tidy.
+- **The data is big and the column heavy.** A run stores every column after each step, so
+  dropping a long text, JSON or list column you don't need saves memory and time. (A preview
+  runs on a small sample, so there it makes little difference.)
+- **A join will bring in a column with the same name.** The joined one would come out as
+  `name_1`, and `name` would still mean the old column. Drop or rename the old one first.
+
 ---
 
 ## `branch`
