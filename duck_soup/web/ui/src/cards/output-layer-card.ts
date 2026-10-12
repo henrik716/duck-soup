@@ -1,5 +1,7 @@
 import { createIcons, Package, Trash2, ChevronDown, Plus, Copy } from 'lucide'
 import { mkEl, refreshIcons, wireCollapse } from '../dom'
+import { comboField, wireCombos } from '../combo'
+import { CRS_COMBO_OPTIONS } from '../crs-list'
 import { mutate } from '../history'
 import { collectPipelineDef, wireDragReorder } from './pipeline-card'
 import { mapRow, type MapRowElement } from './map-row'
@@ -25,7 +27,7 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
     <div class="card-content" style="margin-top:12px;">
       <div class="row">
         <label class="field grow">layer name<input data-k="layer" placeholder="MyLayer"></label>
-        <label class="field grow">CRS<input data-k="crs" placeholder="EPSG:25833"></label>
+        <label class="field grow">CRS${comboField('data-k="crs"', '', CRS_COMBO_OPTIONS, 'EPSG:25833')}</label>
       </div>
       <label class="field" style="margin-top:8px">filter (optional SQL; rows where this is false are excluded from this layer)
         <input data-k="filter" placeholder="county IS NOT NULL">
@@ -108,6 +110,7 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
   updateTitle()
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
+  wireCombos(c)
 
   createIcons({ icons: { Package, Trash2, ChevronDown, Plus, Copy } })
   return c

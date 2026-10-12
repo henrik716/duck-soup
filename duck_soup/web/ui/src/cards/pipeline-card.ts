@@ -3,7 +3,8 @@ import { uploadFile } from '../api'
 import { mkEl, val, refreshIcons, getDragAfterElement, esc, qs, wireCollapse, helpLink } from '../dom'
 import { mutate } from '../history'
 import { EXT_FORMAT } from '../state'
-import { wireCombos } from '../combo'
+import { comboField, wireCombos } from '../combo'
+import { CRS_COMBO_OPTIONS } from '../crs-list'
 import {
   refreshBaseOptionsScoped, updateDatalistsScoped,
   collectAvailableColumnsScoped, collectAllSourceIdsScoped, resolveSchemaScoped,
@@ -173,7 +174,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
           <div class="pl-panel-actions">
             <label class="field inline" title="Internal CRS used for every join/step (spatial joins, buffer, clip, etc.) and for area/length calcs — pick a projected (metric) CRS if you use those. Every source is reprojected into this CRS before processing, then reprojected again to the output layer's CRS. Leave blank to use the base source's declared CRS.">
               <span>working CRS <i data-lucide="info" style="width:10px;height:10px;vertical-align:middle"></i></span>
-              <input class="pl-working-crs" placeholder="auto (base CRS)" value="${esc(pdef.working_crs)}">
+              ${comboField('class="pl-working-crs"', pdef.working_crs ?? '', CRS_COMBO_OPTIONS, 'auto (base CRS)')}
             </label>
             <span class="spacer"></span>
             <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
