@@ -76,8 +76,7 @@ diagram instead. Every change made from the diagram can be undone with
 
 ### Row counts
 
-**count rows** in the diagram's header counts the rows on every connection, like the feature
-counts FME shows after a run:
+**count rows** in the diagram's header counts the rows on every connection:
 
 - **sample** counts the first *limit* base features (the preview limit, by default 1 000), or
   only those in view while the map's **in view** is on. It's quick, and shows where rows get

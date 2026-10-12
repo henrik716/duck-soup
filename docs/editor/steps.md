@@ -78,14 +78,25 @@ The body depends on the step type:
   `sum(population)` or `string_agg(name, ', ')`. The expression builder (the pencil icon) lists
   the aggregate functions first. Its live check runs the dissolve, so it catches a column used
   outside an aggregate. Only the keys and aggregates are kept. Every other column is dropped.
-- **set columns**: for an attributes step (**Update Attributes**), rows like the [mapping](mapping.md)'s: a column
-  name, a rule (`from`, `const`, `expr`, `func`, `codelist`) and an optional cast. They run top
-  to bottom, so an expression can use a column set in a row above it, and its live check sees
-  that column. Drag the grip to reorder.
-- **drop columns**: for an attributes step, columns to remove after the ones above are set.
+- **Update Attributes** (an attributes step) changes only what you list. Every other column is
+  kept as it is and goes on to the next step, as the card says at the top. Its parts:
+    - **available here**: the columns that reach this step, grouped by where they come from
+      (the base, or an earlier step). Click one to add a row for it, ready to change its value.
+      Its **×** adds it to the drop list. Changed columns are outlined, dropped ones struck
+      through.
+    - **add or change columns**: rows like the [mapping](mapping.md)'s: a column name, a rule
+      (`from`, `const`, `expr`, `func`, `codelist`) and an optional cast. The name is a
+      dropdown of the available columns, so changing one is a pick; type a new name to add a
+      column. The rows run top to bottom, so an expression can use a column set in a row above
+      it, and its live check sees that column. Drag the grip to reorder.
+    - **drop columns**: columns to remove after the ones above are set.
 - **expressions**: any SQL field with a pencil icon (a mapping or attribute `expr`, a dissolve
   key or aggregate) opens the [expression builder](mapping.md#expression-builder), which checks
   the expression against the rows that reach this step.
+
+Column dropdowns and checks in a step card offer only the columns that reach that step: the
+base source's, plus what earlier steps add, minus what they drop or dissolve away. A column
+an earlier step drops isn't offered, and neither is one a later step adds.
 - **rejects → output layer**: on joins, `clip` and `filter`, a layer for the rows the step
   rejects (no match, outside the mask, condition not true). Those rows then go there instead of
   on down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).

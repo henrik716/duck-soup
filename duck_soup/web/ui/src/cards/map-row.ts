@@ -2,7 +2,7 @@ import { mkEl, refreshIcons, esc } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS } from '../state'
 import { comboField, wireCombos, type ComboOptionDef } from '../combo'
-import { collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped, stepOutputColumns } from '../schema'
+import { collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped, collectColumnsBeforeStep, stepOutputColumns } from '../schema'
 import { openCodelistDrawer } from './codelist'
 import { exprField } from '../expr-field'
 import { fieldPreviewConfig } from '../field-preview'
@@ -36,6 +36,9 @@ export interface MapRowOptions {
   /** The preview Config the expression builder checks a draft `expr` with; by default the
    *  pipeline as drafted, mapping just that expression (see fieldPreviewConfig). */
   previewConfig?: (draftExpr: string) => Config | null
+  /** The column name as a dropdown of the available columns (in a step card, those reaching
+   *  the step), for overwriting one without typing its name. */
+  toCombo?: boolean
 }
 
 export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0', opts: MapRowOptions = {}): MapRowElement {
@@ -64,7 +67,7 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
 
   row.innerHTML = `
     <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
-    <input data-to placeholder="column" value="${esc(m.to)}">
+    ${opts.toCombo ? comboField('data-to data-from-list="1"', m.to ?? '', [], 'column') : `<input data-to placeholder="column" value="${esc(m.to)}">`}
     ${comboField('data-kind', kind, KIND_OPTIONS)}
     <span data-valwrap></span>
     ${comboField('data-cast', m.cast ? m.cast.toUpperCase() : '', ['INTEGER', 'DOUBLE', 'VARCHAR', 'BOOLEAN', 'DATE', 'TIMESTAMP'], '— cast —')}
@@ -236,8 +239,12 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
           onChange: val => { currentExprValue = val; syncFn() },
           drawer: () => {
             const plCard = row.closest('.pipeline-card')
+            const stepCard = row.closest('.pl-steps > .card')
             return {
-              columns: plCard ? collectAvailableColumnDetailsScoped(plCard) : [],
+              // In a step card, only the columns that reach that step.
+              columns: !plCard ? [] : stepCard
+                ? collectColumnsBeforeStep(plCard, stepCard)
+                : collectAvailableColumnDetailsScoped(plCard),
               // The pipeline as drafted in the form, mapping just this expression, so the
               // drawer can check it against real sample data via /api/preview.
               buildPreviewConfig: draft => opts.previewConfig

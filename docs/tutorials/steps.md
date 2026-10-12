@@ -134,7 +134,7 @@ overlapping pair with the shared area as its geometry.
 
 **Cuts lines where other lines lie on top of them**, and copies those lines' attributes onto
 the shared stretches. Everything else is kept, so the whole network comes out again and can go
-into the next `line_overlay`. This is FME's LineOnLineOverlayer.
+into the next `line_overlay`.
 
 Here the footpath network collects attributes from two datasets: the lamp register
 (`lit_paths`, which has gaps) and the boardwalk survey (`boardwalks`, just a few stretches).
@@ -349,6 +349,7 @@ of a later step.
 - The columns are set in order, so `era` can compare the `opened` set just above it.
 - The `filter` after it can then use `era`, a column that doesn't exist in the source.
   Without the attributes step, the filter would have to repeat the whole `CASE` expression.
-- `drop` removes columns. Every column not mentioned passes through unchanged. Here that's
-  everything except `inspected`.
+- You only list what you change. Every column you don't mention (`name`, `category`,
+  `bread_crumbs`, …) is kept as it is and goes on to the next step. `drop` removes the ones
+  you don't want, here `inspected`.
 

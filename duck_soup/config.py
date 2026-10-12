@@ -505,7 +505,7 @@ class MapItem(BaseModel):
 
 
 class Attributes(StepBase):
-    """Sets and removes attributes mid-pipeline, like FME's AttributeManager: each of
+    """Sets and removes attributes mid-pipeline: each of
     `columns` (the mapping's rules) adds a column or overwrites one of the same name, in
     order, so a column can use the ones set before it; then `drop` removes columns. Every
     other column passes through."""

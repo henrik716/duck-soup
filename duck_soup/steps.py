@@ -314,8 +314,8 @@ def attributes_sql(prev: str, step: Attributes, log: Log, ctx: StepContext) -> s
     the column of that name) and step.drop removed.
 
     One SELECT per column, each over the one before it, so a column can use the ones set
-    before it, as in FME's AttributeManager. They're nested subqueries over one read of
-    `prev`, which DuckDB folds into a single projection. The column being set is left out
+    before it. They're nested subqueries over one read of `prev`, which DuckDB folds into a
+    single projection. The column being set is left out
     of the SELECT * with COLUMNS(lambda), not EXCLUDE, which errors when the column isn't
     there yet; a replaced column therefore moves to the end of the row. `__keep` rides along
     so that lambda never matches nothing (COLUMNS errors on an empty set), e.g. when the only

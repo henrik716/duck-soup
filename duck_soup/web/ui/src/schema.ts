@@ -160,6 +160,123 @@ export function stepOutputColumns(stepCard: Element): string[] {
   ]
 }
 
+/**
+ * The columns the rows have when they reach `stepCard`: the base source's, then what each
+ * step before it adds (pulled fields, set columns, merged sources' columns), overwrites or
+ * removes (an attributes step's drops; a dissolve keeps only its keys and aggregates). Steps
+ * on another branch don't count; a step on a branch sees the chain as it was at the snapshot
+ * that made the branch. Unlike collectAvailableColumnsScoped, nothing from a later step.
+ */
+export function collectColumnsBeforeStep(scope: Element, stepCard: Element): AvailableColumnDetail[] {
+  type Cols = Map<string, AvailableColumnDetail>  // keyed by lower-case name, like DuckDB
+  const MAIN = '__main__'
+  const branchOf = (card: Element) => {
+    const v = card.querySelector<HTMLInputElement>('[data-k="branch"]')?.value.trim() || ''
+    return v && v !== 'main' ? v : MAIN
+  }
+  const add = (cols: Cols, name: string, type: string, origin: string) => {
+    if (name) cols.set(name.toLowerCase(), { name, type, origin })
+  }
+  const values = (card: Element, sel: string) => [...card.querySelectorAll<HTMLInputElement>(sel)]
+    .map(i => i.value.trim()).filter(Boolean)
+
+  const baseId = scope.querySelector<HTMLInputElement>('.pl-base')?.value || ''
+  const main: Cols = new Map()
+  ;(SOURCE_SCHEMAS[baseId] || []).forEach(c => add(main, c.name, c.type || '', 'base'))
+  const chains = new Map<string, Cols>([[MAIN, main]])
+
+  const steps = [...scope.querySelectorAll('.pl-steps > .card')]
+  const idx = steps.indexOf(stepCard)
+  for (let i = 0; i < (idx < 0 ? steps.length : idx); i++) {
+    const card = steps[i]
+    const type = (card as HTMLElement).dataset['type'] || ''
+    const origin = `step ${i + 1} (${type})`
+    if (type === 'snapshot') {
+      const id = card.querySelector<HTMLInputElement>('[data-k="id"]')?.value.trim()
+      if (id) chains.set(id, new Map(chains.get(branchOf(card)) ?? main))
+      continue
+    }
+    const target = branchOf(card)
+    const cols = chains.get(target) ?? new Map(main)
+    chains.set(target, cols)
+    if (type === 'dissolve') {
+      const kept: Cols = new Map()
+      const geom = cols.get('geom')
+      if (geom) kept.set('geom', geom)
+      card.querySelectorAll('[data-by-row]').forEach(r => {
+        const as = r.querySelector<HTMLInputElement>('[data-by-as]')?.value.trim() || ''
+        const col = r.querySelector<HTMLInputElement>('[data-by-col]')?.value.trim() || ''
+        if (as) add(kept, as, '', origin)
+        else if (col) kept.set(col.toLowerCase(), cols.get(col.toLowerCase()) ?? { name: col, type: '', origin })
+      })
+      values(card, '[data-agg-to]').forEach(n => add(kept, n, '', origin))
+      chains.set(target, kept)
+    } else if (type === 'attributes') {
+      values(card, '.st-columns > .map-item [data-to]').forEach(n => add(cols, n, '', origin))
+      values(card, '[data-drop-col]').forEach(n => cols.delete(n.toLowerCase()))
+    } else if (type === 'merge') {
+      const src = card.querySelector<HTMLInputElement>('[data-k="source"]')?.value.trim() || ''
+      ;(src ? resolveSchemaScoped(scope, src) : []).forEach(c => {
+        if (!cols.has(c.name.toLowerCase())) add(cols, c.name, c.type || '', origin)
+      })
+    } else {
+      stepOutputColumns(card).forEach(n => add(cols, n, '', origin))
+    }
+  }
+  // A snapshot card's own `branch` names the chain it copies, any other step's the chain it runs on.
+  return [...(chains.get(idx >= 0 ? branchOf(stepCard) : MAIN) ?? main).values()]
+}
+
+/** Column options for a combo, grouped by where each column comes from. */
+function columnOptions(details: AvailableColumnDetail[]): ComboOptionDef[] {
+  return details.map(c => ({
+    value: c.name,
+    group: originLabel(c.origin),
+    label: `<span style="font-family:var(--mono);">${esc(c.name)}</span>` + (c.type
+      ? ` <span data-tag style="font-size:10px;color:var(--muted);">${esc(c.type)}</span>`
+      : ''),
+  }))
+}
+
+/** An attributes step card's "available here" list: the columns reaching the step, grouped
+ *  by origin. Click one to add a row setting it; its × adds it to the drop list. The card
+ *  does the adding (`_poolSet` / `_poolDrop`, see step-card.ts), which keeps this module from
+ *  importing the step card. */
+function renderAttributesPool(scope: Element, card: HTMLElement): void {
+  const list = card.querySelector<HTMLElement>('.st-pool-list')
+  if (!list) return
+  const details = collectColumnsBeforeStep(scope, card)
+  const set = new Set([...card.querySelectorAll<HTMLInputElement>('.st-columns > .map-item [data-to]')]
+    .map(i => i.value.trim().toLowerCase()))
+  const dropped = new Set([...card.querySelectorAll<HTMLInputElement>('[data-drop-col]')]
+    .map(i => i.value.trim().toLowerCase()))
+  const actions = card as HTMLElement & { _poolSet?: (name: string) => void; _poolDrop?: (name: string) => void }
+  list.innerHTML = ''
+  const groups = new Map<string, AvailableColumnDetail[]>()
+  for (const c of details) {
+    if (c.name.toLowerCase() === 'geom') continue
+    if (!groups.has(c.origin)) groups.set(c.origin, [])
+    groups.get(c.origin)!.push(c)
+  }
+  for (const [origin, cols] of groups) {
+    list.appendChild(mkEl('div', { className: 'st-pool-head', textContent: originLabel(origin) }))
+    for (const c of cols) {
+      const key = c.name.toLowerCase()
+      const chip = mkEl('span', { className: 'st-pool-chip' })
+      chip.classList.toggle('is-set', set.has(key))
+      chip.classList.toggle('is-dropped', dropped.has(key))
+      const tip = `${c.name}${c.type ? ` (${c.type})` : ''}`
+      chip.innerHTML = `<button type="button" class="st-pool-set" title="${esc(tip)} — click to set this column">${esc(c.name)}${c.type ? `<span class="pool-field-type">${esc(c.type)}</span>` : ''}</button><button type="button" class="st-pool-drop" title="Drop ${esc(c.name)}" aria-label="Drop ${esc(c.name)}">×</button>`
+      chip.querySelector('.st-pool-set')!.addEventListener('click', () => actions._poolSet?.(c.name))
+      chip.querySelector('.st-pool-drop')!.addEventListener('click', () => actions._poolDrop?.(c.name))
+      list.appendChild(chip)
+    }
+  }
+  if (!list.children.length) {
+    list.innerHTML = '<div class="pool-empty">No columns known yet. Set the base source first.</div>'
+  }
+}
+
 export function collectAvailableColumnsScoped(scope: Element): Set<string> {
   const baseId = scope.querySelector<HTMLInputElement>('.pl-base')?.value
   const cols = new Set<string>()
@@ -245,13 +362,7 @@ export function updateDatalistsScoped(scope: Element): void {
   const details = collectAvailableColumnDetailsScoped(scope)
   // Grouped by origin (base, step 1, …) like the field pool below, so a column's type is the
   // only tag left on its row.
-  const availableOptions: ComboOptionDef[] = details.map(c => ({
-    value: c.name,
-    group: originLabel(c.origin),
-    label: `<span style="font-family:var(--mono);">${esc(c.name)}</span>` + (c.type
-      ? ` <span data-tag style="font-size:10px;color:var(--muted);">${esc(c.type)}</span>`
-      : ''),
-  }))
+  const availableOptions = columnOptions(details)
 
   // Render fields in the side visual schema mapper panel, grouped by where each column comes
   // from (base, step 1, …) so the origin is a group heading rather than a tag repeated on, and
@@ -278,11 +389,20 @@ export function updateDatalistsScoped(scope: Element): void {
 
   // Point all "from" inputs to the right datalist
   const noUpstreamText = 'No upstream columns yet — set the base source, or pull fields in a step'
+  // Inside a step card, only the columns that reach that step (collectColumnsBeforeStep).
+  const stepOptions = new Map<Element, ComboOptionDef[]>()
   scope.querySelectorAll<HTMLInputElement>('[data-from-list]').forEach(inp => {
     const cur = inp.value
-    setComboOptions(inp, availableOptions, noUpstreamText)
+    const stepCard = inp.closest('.pl-steps > .card')
+    let options = availableOptions
+    if (stepCard) {
+      if (!stepOptions.has(stepCard)) stepOptions.set(stepCard, columnOptions(collectColumnsBeforeStep(scope, stepCard)))
+      options = stepOptions.get(stepCard)!
+    }
+    setComboOptions(inp, options, noUpstreamText)
     ensureComboOption(inp, cur)
   })
+  scope.querySelectorAll<HTMLElement>('.pl-steps > .card[data-type="attributes"]').forEach(card => renderAttributesPool(scope, card))
 
   // Populate each step's source-column selects from the inspected source schema.
   // `[data-src-col]` is attribute_join's `right`, which picks from the same schema as the

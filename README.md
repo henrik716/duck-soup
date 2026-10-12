@@ -288,8 +288,8 @@ Every source also accepts an optional `make_valid: true` to repair invalid geome
 | `snapshot`           | name the chain's current state (`id:`) so a later step can join back against it or fork a branch |
 | `attributes`         | add or overwrite `columns` (mapping rules, in order) and `drop` columns, mid-pipeline |
 
-Joins, `clip` and `filter` also accept `rejects: <layer>`, which, like an FME transformer's
-Failed port, writes the rows the step rejects (no match, outside the mask, condition not true)
+Joins, `clip` and `filter` also accept `rejects: <layer>`, which writes the rows the step
+rejects (no match, outside the mask, condition not true)
 to a layer of their own instead of passing them on or discarding them.
 
 Every step also accepts an optional `branch:` — the name of an earlier `snapshot` to

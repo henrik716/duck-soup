@@ -4,13 +4,14 @@ import { comboField, wireCombos } from '../combo'
 import { mutate } from '../history'
 import { wireDragReorder } from './pipeline-card'
 import { mapRow, type MapRowElement } from './map-row'
-import { resolveSchemaScoped, collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped } from '../schema'
+import { resolveSchemaScoped, collectColumnsBeforeStep } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
 import { exprField, exprValue } from '../expr-field'
 import { AGGREGATE_SNIPPETS } from '../expr-snippets'
 import { fieldPreviewConfig } from '../field-preview'
 import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, Attributes, ExprColumn, MapItem } from '../types'
 import { renderIcons } from '../icons'
+import { showToast } from '../toast'
 
 // ---- step card ----
 const STEP_ICONS: Record<string, string> = {
@@ -61,7 +62,7 @@ const STEP_HINTS: Record<string, string> = {
   filter: 'Drops rows where this SQL condition is false — e.g. reject rows a prior join left unmatched.',
   merge: 'Appends rows from another source (matched by column name; non-overlapping columns become NULL). Row count adds rather than multiplies.',
   snapshot: 'Names this step\'s current state so a later step can join back against it — fork mid-pipeline (after some processing), not just from a raw source.',
-  attributes: 'Adds, overwrites or removes columns mid-pipeline, with the same rules as the mapping (like FME\'s AttributeManager). Columns are set in order, so each can use the ones above it; every other column passes through.',
+  attributes: 'Adds, changes or removes columns mid-pipeline, with the same rules as the mapping.',
 }
 
 const HEAD_STYLE = 'font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px'
@@ -162,10 +163,15 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
     </div>`
   }
   if (kind === 'attributes') {
-    bodyHtml += `<div style="margin-top:10px">
-      <span class="head" style="${HEAD_STYLE}">set columns&nbsp;<span style="font-weight:normal">(in order · each can use the ones above it)</span></span>
+    bodyHtml += `<p class="hint st-keep-note" style="margin-top:8px">✓ Every column keeps going to the next step as it is. List only the ones to add or change, and drop the ones you don't want.</p>`
+    bodyHtml += `<details class="st-pool" open style="margin-top:10px">
+      <summary class="head" style="${HEAD_STYLE};cursor:pointer">available here&nbsp;<span style="font-weight:normal;text-transform:none;letter-spacing:0">(all kept unless dropped · click one to change it, × to drop it)</span></summary>
+      <div class="st-pool-list"></div>
+    </details>
+    <div style="margin-top:10px">
+      <span class="head" style="${HEAD_STYLE}">add or change columns&nbsp;<span style="font-weight:normal">(in order · each can use the ones above it)</span></span>
       <div class="st-columns"></div>
-      <div class="fields-empty" data-columns-empty>No columns set yet — add one to create or overwrite a column.</div>
+      <div class="fields-empty" data-columns-empty>Nothing changed yet. Add a column here only to create one or change its value.</div>
       <button class="mini ghost" data-addcolumn style="margin-top:6px">${PLUS_ICON} column</button>
     </div>
     <div style="margin-top:10px">
@@ -493,9 +499,10 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
 function wireDissolveLists(c: HTMLElement, syncFn: () => void) {
   const byBox = c.querySelector<HTMLElement>('[data-by-cols]')
   const aggBox = c.querySelector<HTMLElement>('[data-aggs]')
+  // Only what reaches this step: a later step's columns don't exist yet here.
   const columns = () => {
     const card = c.closest('.pipeline-card')
-    return card ? collectAvailableColumnDetailsScoped(card) : []
+    return card ? collectColumnsBeforeStep(card, c) : []
   }
 
   const addByKey = (key: string | ExprColumn = '') => {
@@ -524,7 +531,7 @@ function wireDissolveLists(c: HTMLElement, syncFn: () => void) {
     // Only a key without a name is a plain column to look up; with one, it's an expression.
     check = attachMembershipCheck(inp, () => {
       const card = c.closest('.pipeline-card')
-      return card && !asInp.value.trim() ? collectAvailableColumnsScoped(card) : []
+      return card && !asInp.value.trim() ? collectColumnsBeforeStep(card, c).map(col => col.name) : []
     })
     asInp.addEventListener('input', () => { check?.check(); syncFn() })
     r.querySelector('[data-bydel]')!.addEventListener('click', () => { r.remove(); syncFn() })
@@ -607,6 +614,7 @@ function wireAttributeLists(c: HTMLElement, syncFn: () => void) {
   const addColumn = (m: Partial<MapItem> = {}) => {
     if (!listEl) return null
     const row: MapRowElement = mapRow(m, sync, '0', {
+      toCombo: true,
       // The steps before this one, then this step with only the columns above the row, which
       // an expression can use.
       previewConfig: draft => {
@@ -635,7 +643,7 @@ function wireAttributeLists(c: HTMLElement, syncFn: () => void) {
     wireCombos(r)
     attachMembershipCheck(inp, () => {
       const card = c.closest('.pipeline-card')
-      return card ? collectAvailableColumnsScoped(card) : []
+      return card ? collectColumnsBeforeStep(card, c).map(col => col.name) : []
     })
     dropBox.appendChild(r)
     renderIcons(r)
@@ -650,6 +658,24 @@ function wireAttributeLists(c: HTMLElement, syncFn: () => void) {
     setTimeout(() => row?.querySelector<HTMLInputElement>('[data-to]')?.focus(), 50)
   })
   c.querySelector('[data-adddrop]')?.addEventListener('click', e => { e.stopPropagation(); addDropCol(); syncFn() })
+
+  // The "available here" list (schema.ts renderAttributesPool) calls these.
+  const has = (sel: string, name: string) => [...c.querySelectorAll<HTMLInputElement>(sel)]
+    .some(i => i.value.trim().toLowerCase() === name.toLowerCase())
+  const actions = c as HTMLElement & { _poolSet?: (name: string) => void; _poolDrop?: (name: string) => void }
+  actions._poolSet = name => {
+    if (has('.st-columns > .map-item [data-to]', name)) { showToast(`${name} is already set in this step`, 'info'); return }
+    mutate('set attribute column')
+    addColumn({ to: name, from: name })
+    renderIcons(c)
+    sync()
+  }
+  actions._poolDrop = name => {
+    if (has('[data-drop-col]', name)) { showToast(`${name} is already dropped`, 'info'); return }
+    mutate('drop attribute column')
+    addDropCol(name)
+    syncFn()
+  }
   if (listEl) wireDragReorder(listEl, '.map-item.dragging', undefined, 'reorder attribute columns', sync)
   updateEmpty()
   return { addColumn, addDropCol }

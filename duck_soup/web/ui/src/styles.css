@@ -689,6 +689,20 @@ body.resizing-y { cursor: row-resize; }
 .pool-field-type { font-family: var(--mono); font-size: 9px; color: var(--muted); flex-shrink: 1; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pool-empty { color: var(--muted); font-size: 11px; padding: 12px 4px; text-align: center; }
 
+/* Update Attributes step: the columns reaching the step (schema.ts renderAttributesPool) */
+.st-pool summary { list-style-position: inside; }
+.st-pool-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 160px; overflow-y: auto; padding: 2px 2px 4px; }
+.st-pool-head { flex-basis: 100%; font-family: var(--mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; padding-top: 4px; }
+.st-pool-head:first-child { padding-top: 0; }
+.st-pool-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); overflow: hidden; }
+.st-pool-chip button { background: none; border: none; color: var(--ink); font-family: var(--mono); font-size: 11px; padding: 3px 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.st-pool-chip .st-pool-drop { color: var(--muted); padding: 3px 6px; border-left: 1px solid var(--line); }
+.st-pool-chip .st-pool-set:hover, .st-pool-chip .st-pool-set:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.st-pool-chip .st-pool-drop:hover, .st-pool-chip .st-pool-drop:focus-visible { background: var(--warn-soft); color: var(--warn-hover); }
+.st-pool-chip.is-set { border-color: var(--accent); }
+.st-pool-chip.is-set .st-pool-set { color: var(--accent); }
+.st-pool-chip.is-dropped .st-pool-set { text-decoration: line-through; color: var(--muted); }
+
 .side-actions { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
 
 .status {

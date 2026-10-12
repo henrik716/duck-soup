@@ -114,7 +114,7 @@ count can grow a lot when there are many overlaps.
 
 ## `line_overlay`
 
-Line-on-line overlay, like FME's LineOnLineOverlayer. The running lines are cut where they lie
+Line-on-line overlay. The running lines are cut where they lie
 on top of the `source` lines: the shared stretches get `fields` from the source, and every
 other piece is kept with those fields NULL. The output is still the complete network, so one
 `line_overlay` per dataset can be chained to collect attributes from several line layers.
@@ -256,9 +256,13 @@ that branch instead of the main chain.
 
 ## `attributes`
 
-Adds, overwrites and removes columns partway through the pipeline, like FME's
-AttributeManager. In the editor's step gallery it's **Update Attributes**. Use it when a later step needs a value that isn't a column yet: a key to
-dissolve or join on, or a value to filter by.
+Adds, changes and removes columns partway through the pipeline. In the editor's step gallery
+it's **Update Attributes**. Use it when a later step needs a value that isn't a column yet: a
+key to dissolve or join on, or a value to filter by.
+
+**You only list what you change.** Every column you don't mention is kept as it is and goes on
+to the next step, so there's no need to list them all, as the mapping does. Remove one with
+`drop`.
 
 ```yaml
 - type: attributes
@@ -274,8 +278,7 @@ dissolve or join on, or a value to filter by.
 `columns` takes the same rules as the [mapping](mapping.md): `from`, `const`, `expr`, `func`
 and `codelist`, each with an optional `cast`. A column with the name of an existing one
 replaces it. Otherwise it's added. The columns are set **in order**, so each one can use the
-ones set before it. `drop` then removes columns. Every other column passes through
-unchanged.
+ones set before it. `drop` then removes columns.
 
 A replaced column moves to the end of the row. Column order only matters for the output,
 where the mapping sets it. A `func` such as `uuid` or `now` gets one value per feature for
@@ -300,7 +303,7 @@ written from the main chain. See [Branches and derived sources](../concepts.md#b
 
 ## `rejects`
 
-Like the Passed and Failed ports of an FME transformer, `rejects` splits a step's rows in two:
+`rejects` splits a step's rows in two:
 the rows that pass go on down the chain, and the rest are written to an output layer of their
 own. It's available on these steps:
 
