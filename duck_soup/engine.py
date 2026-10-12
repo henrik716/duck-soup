@@ -33,10 +33,10 @@ from typing import Callable
 import duckdb
 
 from . import sources as src_readers
-from . import steps
+from . import mapping, steps
 from .config import (
-    Buffer, CodeCase, CodeList, Config, MapItem, NearestNeighbor, OutputLayer, PipelineDef,
-    Snapshot, is_parquet_path, reject_layer_names,
+    Buffer, Config, NearestNeighbor, OutputLayer, PipelineDef, Snapshot, is_parquet_path,
+    reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -46,13 +46,7 @@ from .output import (
     write_gpkg_layer,
     write_parquet_layer,
 )
-from .sql_util import quote_ident as _ident, quote_literal as _lit
-
-def _transform(col: str, from_crs: str, to_crs: str) -> str:
-    if from_crs == to_crs:
-        return col
-    return f"ST_Transform({col}, {_lit(from_crs)}, {_lit(to_crs)}, always_xy := true)"
-
+from .sql_util import quote_ident as _ident, quote_literal as _lit, st_transform
 
 class MappingError(ValueError):
     """A mapping item that doesn't parse or bind (see Engine._check_mapping).
@@ -161,7 +155,7 @@ class Engine:
                 # later CRS-dependent value (lon/lat/mgrs, output CRS, etc.) is derived from
                 # this same working_crs geometry rather than re-transforming from the source
                 # CRS, so there's a single reprojection chain per feature (no double rounding).
-                geom = _transform("geom", crs, self.working_crs)
+                geom = st_transform("geom", crs, self.working_crs)
                 if s.force_2d:
                     geom = f"ST_Force2D({geom})"
                 if s.make_valid:
@@ -295,126 +289,6 @@ class Engine:
         return chains[last_branch if limit_steps is not None else self._MAIN_BRANCH]
 
     # -- mapping ------------------------------------------------------------
-    def _map_expr(self, item: MapItem) -> str:
-        if item.from_ is not None:
-            expr = _ident(item.from_)
-        elif item.const is not None:
-            if isinstance(item.const, str):
-                expr = _lit(item.const)
-            else:
-                expr = str(item.const)
-        elif item.expr is not None:
-            expr = f"({item.expr})"
-        elif item.func is not None:
-            expr = self._func_expr(item.func)
-        elif item.codelist is not None:
-            expr = self._codelist_expr(item.codelist)
-        else:  # pragma: no cover - validated upstream
-            raise ValueError(f"mapping '{item.to}' has no source")
-        if item.cast:
-            expr = self._cast_expr(expr, item.cast)
-        return f"{expr} AS {_ident(item.to)}"
-
-    @staticmethod
-    def _cast_expr(expr: str, cast_type: str) -> str:
-        normalized = cast_type.strip().upper()
-        if normalized in ("DATE", "TIMESTAMP"):
-            # TRY_CAST(... AS DATE/TIMESTAMP) only understands ISO-ish text
-            # (YYYY-MM-DD); it silently returns NULL for the dd.mm.yyyy format this
-            # data's source fields actually use (e.g. Bane NOR's '01.01.1111'
-            # placeholder date, or real 'gyldigfra' values) — not because the date
-            # itself is invalid, but because the format doesn't match. Fall back to
-            # parsing that format explicitly before giving up; a value that fails
-            # both is still NULL. (DATE specifically also can't hold a pre-1970 value
-            # when written to GeoPackage — a DuckDB/GDAL limitation, not this parsing
-            # — which is why some mappings use `cast: TIMESTAMP` instead.)
-            return (
-                f"COALESCE(TRY_CAST({expr} AS {normalized}), "
-                f"TRY_CAST(TRY_STRPTIME(CAST({expr} AS VARCHAR), '%d.%m.%Y') AS {normalized}))"
-            )
-        return f"TRY_CAST({expr} AS {cast_type})"
-
-    def _codelist_expr(self, cl: CodeList) -> str:
-        col = _ident(cl.source)
-        if cl.cases:
-            arms = " ".join(
-                f"WHEN {self._case_condition(col, c, cl.case_insensitive)} "
-                f"THEN {_lit(c.value)}"
-                for c in cl.cases
-            )
-            default = _lit(cl.default) if cl.default is not None else "NULL"
-            return f"CASE {arms} ELSE {default} END"
-
-        # File-backed lookup table: correlated scalar subquery against read_csv.
-        match_col = _ident(cl.file_match_col)
-        value_col = _ident(cl.file_value_col)
-        lookup = f"read_csv({_lit(cl.file)}, header=true, all_varchar=true)"
-        cmp = (
-            f"lower(cl.{match_col}) = lower({col})"
-            if cl.case_insensitive
-            else f"cl.{match_col} = {col}"
-        )
-        sub = f"(SELECT cl.{value_col} FROM {lookup} AS cl WHERE {cmp} LIMIT 1)"
-        if cl.default is not None:
-            return f"COALESCE({sub}, {_lit(cl.default)})"
-        return sub
-
-    @staticmethod
-    def _case_condition(col: str, c: CodeCase, case_insensitive: bool) -> str:
-        if c.is_blank:
-            return f"({col} IS NULL OR {col} = '')"
-        if c.match is not None:
-            return (
-                f"lower({col}) = lower({_lit(c.match)})"
-                if case_insensitive
-                else f"{col} = {_lit(c.match)}"
-            )
-        if c.like is not None:
-            target = f"lower({col})" if case_insensitive else col
-            pattern = c.like.lower() if case_insensitive else c.like
-            return f"{target} LIKE {_lit(pattern)}"
-        # regex
-        flag = ", 'i'" if case_insensitive else ""
-        return f"regexp_matches({col}, {_lit(c.regex)}{flag})"
-
-    def _func_expr(self, func: str) -> str:
-        # geometry-derived funcs read __geom4326 (full geometry) or
-        # __centroid4326 (point representation), provided by the final CTE
-        if func == "uuid":
-            return "uuid()::VARCHAR"
-        if func == "seq":
-            return "row_number() OVER ()"
-        if func == "now":
-            return "current_timestamp"
-        if func == "today":
-            return "current_date"
-        if func == "lon":
-            return "ROUND(ST_X(__centroid4326), 7)"
-        if func == "lat":
-            return "ROUND(ST_Y(__centroid4326), 7)"
-        if func == "x":
-            return "ROUND(ST_X(ST_Centroid(geom)), 3)"
-        if func == "y":
-            return "ROUND(ST_Y(ST_Centroid(geom)), 3)"
-        if func == "mgrs":
-            return "to_mgrs(ST_X(__centroid4326), ST_Y(__centroid4326))"
-        if func == "geohash":
-            return "to_geohash(ST_X(__centroid4326), ST_Y(__centroid4326))"
-        if func == "wkb":
-            return "ST_AsHEXWKB(__geom4326)"
-        if func == "wkt":
-            return "ST_AsText(__geom4326)"
-        if func == "geom_type":
-            return "ST_GeometryType(geom)::VARCHAR"
-        if func == "area":
-            return "ST_Area(geom)"
-        if func == "length":
-            # ST_Length only measures lines (0 for polygons) and ST_Perimeter only polygons
-            # (0 for lines), so their sum is the length of a line, the perimeter of a polygon,
-            # and the total of both for a mixed collection.
-            return "(ST_Length(geom) + ST_Perimeter(geom))"
-        raise ValueError(f"unknown func: {func}")
-
     def _check_mapping(self, con: duckdb.DuckDBPyConnection, prev: str, layer: OutputLayer) -> None:
         """Plan (not run) the SELECT written for `layer`; if a mapping item doesn't parse or
         refers to a column that isn't there, raise MappingError naming that item.
@@ -428,16 +302,16 @@ class Engine:
         except (duckdb.ParserException, duckdb.BinderException) as whole:
             failure = whole
         own = bool(layer.mapping)
-        mapping = layer.mapping if own else self.p.mapping
+        items = layer.mapping if own else self.p.mapping
         layer_idx = self.p.layers.index(layer) if own and layer in self.p.layers else 0
-        for j, item in enumerate(mapping):
+        for j, item in enumerate(items):
             try:
                 con.execute(f"DESCRIBE {self._final_select(prev, layer.model_copy(update={'mapping': [item]}))}")
                 continue
             except (duckdb.ParserException, duckdb.BinderException) as e:
                 error = e
             if item.expr is not None and isinstance(error, duckdb.ParserException):
-                # Parsed on its own (bracketed, as _map_expr does), so the message points
+                # Parsed on its own (bracketed, as mapping.map_expr does), so the message points
                 # into the expression rather than at the generated `AS "<to>"` after it.
                 try:
                     con.extract_statements(f"SELECT ({item.expr})")
@@ -448,64 +322,14 @@ class Engine:
         raise failure
 
     def _final_select(self, prev: str, layer: OutputLayer, raw: bool = False) -> str:
-        """The SELECT written for `layer`. `raw` skips the mapping (every column as-is), for
-        a rejects layer: its rows leave the chain mid-way, before columns the mapping may
-        use exist."""
-        has_geom = self.p.base_source.has_geometry
-        mapping = [] if raw else (layer.mapping or self.p.mapping)
-        geom_funcs = {
-            "lon", "lat", "x", "y", "mgrs", "geohash", "wkb", "wkt", "geom_type", "area", "length",
-        }
-        used = {m.func for m in mapping if m.func}
-        if not has_geom and (used & geom_funcs):
-            raise ValueError(
-                f"mapping uses {sorted(used & geom_funcs)} but base source "
-                f"'{self.p.base}' has no geometry"
-            )
-
-        cols = ",\n            ".join(self._map_expr(m) for m in mapping)
-        source = f"(SELECT * FROM {_ident(prev)} WHERE {layer.filter})" if layer.filter else _ident(prev)
-
-        if not has_geom:
-            return f"SELECT\n            {cols if cols else '*'}\n        FROM {source}"
-
-        geom_out = _transform("geom", self.working_crs, layer.crs)
-        # geom (working_crs, for area/length/x/y/geom_type), __geom4326 (full geometry,
-        # for wkb/wkt) and __centroid4326 (point, for lon/lat/mgrs/geohash on lines and
-        # polygons too) are all available here; geometry written as 'geom'.
-        # __geom4326 is transformed from `geom`, which is already in working_crs (see
-        # _create_source_views) — i.e. one chained reprojection (source CRS -> working_crs
-        # -> EPSG:4326) per feature, not a second independent transform from the source CRS.
-        # This keeps lon/lat/mgrs consistent with the geometry actually used for joins/steps
-        # and avoids double rounding/drift from reprojecting the same feature twice.
-        # __centroid4326 is the centroid taken in working_crs, then reprojected: a centroid
-        # computed on lon/lat degrees is distorted (~100 km off for a line spanning Norway).
-        select_cols = (
-            f"{cols},\n            " if cols
-            else "* EXCLUDE (geom, __geom4326, __centroid4326, __src_row),\n            "
+        """The SELECT written for `layer` (see mapping.final_select). `raw` skips the mapping
+        (every column as-is), for a rejects layer: its rows leave the chain mid-way, before
+        columns the mapping may use exist."""
+        return mapping.final_select(
+            prev, layer, [] if raw else (layer.mapping or self.p.mapping),
+            working_crs=self.working_crs, has_geom=self.p.base_source.has_geometry,
+            base=self.p.base,
         )
-        # With no mapping, every upstream column is written — but not GDAL's OGC_FID: ST_Read
-        # adds it for GeoJSON (and other FID-less) sources, and the GeoPackage writer rejects a
-        # field by that name, since it's GDAL's default name for the feature ID itself.
-        # COLUMNS(lambda) rather than EXCLUDE, which errors when the column isn't there (most
-        # sources have none); it can't come up empty here because `geom` always survives.
-        if not cols:
-            source = f"(SELECT COLUMNS(lambda c: lower(c) <> 'ogc_fid') FROM {source})"
-        return f"""
-        WITH base4326 AS (
-            SELECT *,
-                {_transform('geom', self.working_crs, 'EPSG:4326')} AS __geom4326
-            FROM {source}
-        ),
-        enriched AS (
-            SELECT *,
-                {_transform('ST_Centroid(geom)', self.working_crs, 'EPSG:4326')} AS __centroid4326
-            FROM base4326
-        )
-        SELECT
-            {select_cols}{geom_out} AS geom
-        FROM enriched
-        """
 
     def _check_working_crs_units(self) -> None:
         """Refuse to run distance/area operations in a geographic working CRS.
@@ -526,8 +350,8 @@ class Engine:
             ):
                 uses.append(f"step {i} (nearest_neighbor distance)")
         uses += [f"derived source '{ds.id}' (buffer)" for ds in self.p.derived_sources if ds.buffer is not None]
-        mappings = [self.p.mapping] + [l.mapping for l in self.p.layers if l.mapping]
-        funcs = sorted({m.func for mp in mappings for m in mp if m.func in ("area", "length")})
+        mappings = [self.p.mapping] + [layer.mapping for layer in self.p.layers if layer.mapping]
+        funcs = sorted({m.func for items in mappings for m in items if m.func in mapping.MEASURE_FUNCS})
         uses += [f"mapping func '{f}'" for f in funcs]
         if not uses:
             return

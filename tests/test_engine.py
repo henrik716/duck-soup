@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from duck_soup.config import CodeCase, CodeList, load_config, load_config_dict
+from duck_soup import mapping
+from duck_soup.config import MAP_FUNCS, CodeCase, CodeList, load_config, load_config_dict
 from duck_soup.engine import Engine, preview_config_pipeline, run_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -110,13 +111,11 @@ def test_preview_pipeline_returns_rows_without_writing_output(tmp_path):
 
 
 def test_case_condition_is_blank_matches_null_or_empty_string():
-    condition = Engine._case_condition('"category"', CodeCase(is_blank=True, value="Unknown"), True)
+    condition = mapping.case_condition('"category"', CodeCase(is_blank=True, value="Unknown"), True)
     assert condition == '("category" IS NULL OR "category" = \'\')'
 
 
 def test_codelist_expr_routes_blank_and_specific_value_to_same_output():
-    cfg = load_config(PIPELINES_DIR / "test.yaml")
-    engine = Engine(cfg.pipelines[0])
     cl = CodeList(
         source="category",
         cases=[
@@ -124,9 +123,16 @@ def test_codelist_expr_routes_blank_and_specific_value_to_same_output():
             CodeCase(is_blank=True, value="Unknown"),
         ],
     )
-    expr = engine._codelist_expr(cl)
+    expr = mapping.codelist_expr(cl)
     assert "IS NULL" in expr
     assert expr.count("THEN 'Unknown'") == 2
+
+
+def test_every_mapping_func_has_sql():
+    # config.MAP_FUNCS validates `func:`; mapping.FUNC_SQL compiles it. A func added to one
+    # and not the other would pass validation and then fail to compile, or the reverse.
+    assert set(mapping.FUNC_SQL) == set(MAP_FUNCS)
+    assert mapping.MEASURE_FUNCS <= mapping.GEOMETRY_FUNCS <= set(MAP_FUNCS)
 
 
 # -- one-best-match steps (spatial_join / nearest_neighbor / clip / erase) -------------
