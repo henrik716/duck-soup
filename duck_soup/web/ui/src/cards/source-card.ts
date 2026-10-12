@@ -1,4 +1,3 @@
-import { createIcons, Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw, CircleHelp } from 'lucide'
 import { inspectSource, inspectFile, refreshSource } from '../api'
 import { mkEl, val, wireCollapse, helpLink, docsUrl } from '../dom'
 import { mutate } from '../history'
@@ -9,6 +8,7 @@ import { updateSourceBadge, formatSourceProgress, PENDING_RETRY_MS } from '../sc
 import { openFileExplorer } from '../file-explorer'
 import { attachCrsFormatCheck } from '../validation'
 import type { Source } from '../types'
+import { renderIcons } from '../icons'
 
 // An xlsx/csv source whose geometry lives in a WKT/WKB column or a lon/lat pair usually
 // names those columns something predictable — check for the common spellings so the
@@ -243,7 +243,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
-  createIcons({ icons: { Database, Trash2, Folder, ChevronDown, AlertTriangle, Star, Eye, Info, Download, RefreshCw, CircleHelp } })
+  renderIcons(c)
   return c
 }
 

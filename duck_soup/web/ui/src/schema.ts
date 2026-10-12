@@ -1,10 +1,10 @@
-import { createIcons, Loader, Database, ChevronDown, AlertCircle, Plus } from 'lucide'
 import { mkEl, val, refreshIcons, esc } from './dom'
 import { SOURCE_SCHEMAS } from './state'
 import { setComboOptions, ensureComboOption, type ComboOptionDef } from './combo'
 import { mapRow } from './cards/map-row'
 import { showToast } from './toast'
 import type { SourceProgress } from './types'
+import { renderIcons } from './icons'
 
 // ---- slow-source progress (download / Parquet conversion) ----
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`
@@ -64,7 +64,7 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
     if (existing) { existing.textContent = text; return }
     badge.innerHTML = `<span style="font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:4px">
       <i data-lucide="loader" class="spin-animation" style="width:11px;height:11px"></i> <span data-loading-text>${esc(text)}</span></span>`
-    createIcons({ icons: { Loader } })
+    renderIcons(badge)
     return
   }
 
@@ -86,14 +86,14 @@ export function updateSourceBadge(card: Element, status: null | { loading?: bool
       const chevron = badge.querySelector<HTMLElement>('.schema-toggle-btn i:last-child')
       if (chevron) chevron.style.transform = hidden ? 'rotate(180deg)' : 'none'
     }
-    createIcons({ icons: { Database, ChevronDown } })
+    renderIcons(badge)
   } else {
     const msg = status.error || 'failed'
     badge.innerHTML = `<span title="${esc(msg)}" style="font-size:11px;color:var(--warn);border:1px solid rgb(var(--warn-rgb) / 0.2);background:var(--warn-soft);padding:2px 6px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;cursor:help">
       <i data-lucide="alert-circle" style="width:11px;height:11px"></i> error</span>`
     schemaList.innerHTML = `<div style="color:var(--warn);padding:4px;">${esc(msg)}</div>`
     schemaList.style.display = 'none'
-    createIcons({ icons: { AlertCircle } })
+    renderIcons(badge)
   }
 }
 
@@ -260,7 +260,7 @@ export function updateDatalistsScoped(scope: Element): void {
     if (details.length === 0) {
       fieldsListEl.innerHTML = '<div class="pool-empty">No fields available. Set base source first.</div>'
     } else {
-      createIcons({ icons: { Plus } })
+      renderIcons(fieldsListEl)
     }
   }
 

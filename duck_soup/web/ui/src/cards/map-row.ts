@@ -1,4 +1,3 @@
-import { createIcons, Trash2, GripVertical, ChevronDown } from 'lucide'
 import { mkEl, refreshIcons, esc } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS } from '../state'
@@ -8,6 +7,7 @@ import { openCodelistDrawer } from './codelist'
 import { openExprDrawer } from '../expr-drawer'
 import { collectPipelineDef } from './pipeline-card'
 import type { CodeList, Config, MapItem } from '../types'
+import { renderIcons } from '../icons'
 
 // ---- map row ----
 const FUNC_DESCRIPTIONS: Record<string, string> = {
@@ -374,6 +374,6 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     return out
   }
 
-  createIcons({ icons: { Trash2, GripVertical, ChevronDown } })
+  renderIcons(wrap)
   return wrap
 }

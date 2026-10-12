@@ -1,5 +1,4 @@
-import { createIcons } from 'lucide'
-import { mkEl, appIcons, esc, helpLink } from './dom'
+import { mkEl, esc, helpLink } from './dom'
 import { highlightExpr } from './expr-highlight'
 import { formatExpr } from './expr-format'
 import { showToast } from './toast'
@@ -8,6 +7,7 @@ import { ExprAutocomplete, type AutocompleteItem } from './expr-autocomplete'
 import { attachLiveValidation, renderValidationMsg, type LiveValidationHandle } from './validation'
 import { originLabel, type AvailableColumnDetail } from './schema'
 import type { Config } from './types'
+import { renderIcons } from './icons'
 
 function insertAtCursor(textarea: HTMLTextAreaElement, text: string) {
   const start = textarea.selectionStart
@@ -274,7 +274,7 @@ export function openExprDrawer(
   }
 
   drawer.classList.add('show')
-  createIcons({ icons: appIcons })
+  renderIcons(drawer)
   setTimeout(() => ta.focus(), 0)
   if (initVal.trim() && buildPreviewConfig) validation?.runNow()
 }

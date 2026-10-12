@@ -1,5 +1,5 @@
-import { createIcons, CheckCircle, AlertTriangle, Info, X } from 'lucide'
 import { qs, mkEl, esc } from './dom'
+import { renderIcons } from './icons'
 
 export interface ToastOptions {
   /** Optional inline action, e.g. an Undo affordance on a delete. */
@@ -76,7 +76,7 @@ export function showToast(msg: string, type: 'info' | 'ok' | 'bad' = 'info', opt
     `<button type="button" class="toast-close" aria-label="Dismiss notification"><i data-lucide="x" style="width:13px;height:13px"></i></button>`
 
   container.appendChild(t)
-  createIcons({ icons: { CheckCircle, AlertTriangle, Info, X } })
+  renderIcons(t)
 
   const entry: Live = {
     el: t,

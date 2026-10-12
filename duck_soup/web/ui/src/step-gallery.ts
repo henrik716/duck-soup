@@ -1,7 +1,7 @@
-import { createIcons } from 'lucide'
-import { mkEl, appIcons, helpLink } from './dom'
+import { mkEl, helpLink } from './dom'
 import { openOverlay, closeOverlay } from './overlay'
 import type { Step } from './types'
+import { renderIcons } from './icons'
 
 export function openStepGalleryModal(onSelect: (type: Step['type']) => void): void {
   let modal = document.getElementById('stepGalleryModal')
@@ -145,5 +145,5 @@ export function openStepGalleryModal(onSelect: (type: Step['type']) => void): vo
   // Show modal
   modal.classList.add('show')
   openOverlay(modal, close)
-  createIcons({ icons: appIcons })
+  renderIcons(modal)
 }

@@ -1,8 +1,3 @@
-import {
-  createIcons, MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser,
-  Layers, GitMerge, Split, ArrowUp, ArrowDown, ArrowRight, X, Trash2, Plus, ChevronDown,
-  Filter as FilterIcon, Combine, Camera, GripVertical, Code, CircleHelp,
-} from 'lucide'
 import { mkEl, esc, wireCollapse, helpLink } from '../dom'
 import { META } from '../state'
 import { comboField, wireCombos } from '../combo'
@@ -11,6 +6,7 @@ import { collectPipelineDef } from './pipeline-card'
 import { resolveSchemaScoped, collectAvailableColumnsScoped } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
 import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, Config } from '../types'
+import { renderIcons } from '../icons'
 
 // ---- step card ----
 const STEP_ICONS: Record<string, string> = {
@@ -270,7 +266,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   c.querySelector('[data-k="source"]')?.addEventListener('change', syncFn)
   c.querySelectorAll('[data-k]').forEach(i => i.addEventListener('input', syncFn))
 
-  createIcons({ icons: { MapPin, Link, Radar, Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, Filter: FilterIcon, Combine, Camera, GripVertical, Code, CircleHelp } })
+  renderIcons(c)
   return c
 }
 
@@ -453,7 +449,7 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
     wireCombos(r)
     fieldsBox.appendChild(r)
     updateFieldsEmpty()
-    createIcons({ icons: { ArrowRight, X, ChevronDown } })
+    renderIcons(r)
   }
   c.querySelector('[data-addfield]')?.addEventListener('click', (e) => { e.stopPropagation(); addField(); syncFn() })
 
@@ -488,7 +484,7 @@ function wireDissolveByCols(c: HTMLElement, syncFn: () => void) {
       return card ? collectAvailableColumnsScoped(card) : []
     })
     byColsBox.appendChild(r)
-    createIcons({ icons: { X, ChevronDown } })
+    renderIcons(r)
   }
   c.querySelector('[data-addby]')?.addEventListener('click', (e) => { e.stopPropagation(); addByCol(); syncFn() })
   return addByCol

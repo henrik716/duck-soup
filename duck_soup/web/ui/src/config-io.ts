@@ -1,8 +1,8 @@
-import { createIcons } from 'lucide'
-import { qs, appIcons } from './dom'
+import { qs } from './dom'
 import { pipelineCard, collectPipelineDef } from './cards/pipeline-card'
 import { METADATA_FIELDS } from './metadata'
 import type { Config, DatasetMetadata } from './types'
+import { renderIcons } from './icons'
 
 export function collectConfig(): Config {
   const name = qs<HTMLInputElement>('#cfg_name')?.value.trim() || 'config'
@@ -58,7 +58,7 @@ export function hydrate(cfg: Partial<Config>, syncFn: () => void): void {
       ;(card as HTMLElement & { _syncCollapse?: () => void })._syncCollapse?.()
     })
   }
-  createIcons({ icons: appIcons })
+  renderIcons()
 
   syncFn()
 }

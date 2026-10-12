@@ -1,29 +1,4 @@
-import {
-  createIcons,
-  Database, Trash2, Folder, File, AlertCircle, ChevronDown,
-  Plus, ArrowUp, ArrowDown, X, MapPin, Link,
-  ArrowLeft, Loader, GripVertical, CheckCircle, AlertTriangle, Info,
-  Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar,
-  UploadCloud, Filter as FilterIcon, Combine, GitBranch, Camera,
-  Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
-  FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
-  Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star, DatabaseZap,
-  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen, AlignLeft,
-} from 'lucide'
-
-// Superset of icons used across form-card modules; refreshed wholesale after
-// any innerHTML swap large enough that per-call icon subsets aren't worth tracking.
-export const appIcons = {
-  Database, Trash2, Folder, File, AlertCircle, ChevronDown,
-  Plus, ArrowUp, ArrowDown, X, MapPin, Link,
-  ArrowLeft, Loader, GripVertical, CheckCircle, AlertTriangle, Info,
-  Maximize2, Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar,
-  UploadCloud, Filter: FilterIcon, Combine, GitBranch, Camera,
-  Table, FileCode, Terminal, CheckSquare, Save, Play, Download, Copy,
-  FolderOpen, ArrowRight, PlusCircle, Package, FileSpreadsheet, Globe, Map, Server, Eye,
-  Columns2, Sparkles, Network, MapPinned, FileText, Edit3, Star, DatabaseZap,
-  Code, History, Hash, CornerDownRight, RefreshCw, CircleHelp, BookOpen, AlignLeft
-}
+import { renderIcons } from './icons'
 
 /** The docs site (GitHub Pages). Every help link in the editor goes through `docsUrl`. */
 export const DOCS_URL = 'https://henrik716.github.io/duck-soup/'
@@ -62,8 +37,9 @@ export function mkEl<K extends keyof HTMLElementTagNameMap>(
   return Object.assign(document.createElement(tag), props)
 }
 
+/** Render the icon placeholders added anywhere on the page (see icons.ts). */
 export function refreshIcons(): void {
-  createIcons({ icons: appIcons })
+  renderIcons()
 }
 
 // Read the trimmed value of a `[data-k="..."]` field within a card.

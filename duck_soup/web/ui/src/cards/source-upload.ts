@@ -1,5 +1,6 @@
 import { uploadFile } from '../api'
-import { mkEl, refreshIcons } from '../dom'
+import { mkEl } from '../dom'
+import { setIcon } from '../icons'
 import { EXT_FORMAT } from '../state'
 import { showToast } from '../toast'
 import type { Source } from '../types'
@@ -152,25 +153,23 @@ export function wireSourceUpload(card: HTMLElement, addSource: AddSource): void 
 
   const setProgress = (text: string) => { if (titleEl) titleEl.textContent = text }
 
-  // Swap the dropzone's icon. By [data-lucide], not as an <i>: createIcons has already
-  // replaced the <i> with an <svg> (keeping data-lucide and the classes), and does again here.
-  const setIcon = (name: 'loader' | 'upload-cloud') => {
+  // Swap the dropzone's icon. By [data-lucide], not as an <i>: it's rendered (an <svg>) by now.
+  const showIcon = (name: 'loader' | 'upload-cloud') => {
     const icon = dropzone.querySelector('[data-lucide]')
     if (!icon) return
-    icon.setAttribute('data-lucide', name)
     icon.classList.toggle('spin-animation', name === 'loader')
-    refreshIcons()
+    setIcon(icon, name)
   }
 
   // The dropzone's spinner and progress text while `work` uploads, put back afterwards
   // however it ends.
   const whileUploading = async (work: () => Promise<void>) => {
     const originalText = titleEl?.textContent
-    setIcon('loader')
+    showIcon('loader')
     try {
       await work()
     } finally {
-      setIcon('upload-cloud')
+      showIcon('upload-cloud')
       if (originalText) setProgress(originalText)
     }
   }

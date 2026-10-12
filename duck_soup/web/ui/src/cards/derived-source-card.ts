@@ -1,10 +1,10 @@
-import { createIcons, GitBranch, Trash2, ChevronDown } from 'lucide'
 import { mkEl, wireCollapse } from '../dom'
 import { wireCombos, comboField } from '../combo'
 import { mutate } from '../history'
 import { collectPipelineDef } from './pipeline-card'
 import { attachLiveValidation, renderValidationMsg } from '../validation'
 import type { Config, DerivedSource } from '../types'
+import { renderIcons } from '../icons'
 
 // ---- derived source card ----
 // A filtered/buffered view of an existing source, registered under its own
@@ -107,6 +107,6 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
 
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
 
-  createIcons({ icons: { GitBranch, Trash2, ChevronDown } })
+  renderIcons(c)
   return c
 }

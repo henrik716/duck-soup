@@ -1,7 +1,7 @@
-import { createIcons, Info, ChevronDown } from 'lucide'
 import { mkEl, esc } from './dom'
 import { comboField, wireCombos } from './combo'
 import type { DatasetMetadata } from './types'
+import { renderIcons } from './icons'
 
 export const METADATA_FIELDS = [
   'name', 'abstract', 'origin', 'update_frequency',
@@ -105,6 +105,6 @@ export function buildMetadataSection(
 
   wireCombos(section)
   updateProgress()
-  createIcons({ icons: { Info, ChevronDown } })
+  renderIcons(section)
   return section
 }

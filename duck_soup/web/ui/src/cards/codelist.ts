@@ -1,10 +1,10 @@
-import { createIcons, X, ChevronDown, Plus, Folder, ArrowUp, ArrowDown } from 'lucide'
-import { mkEl, appIcons, esc, helpLink } from '../dom'
+import { mkEl, esc, helpLink } from '../dom'
 import { comboField, wireCombos } from '../combo'
 import { openFileExplorer } from '../file-explorer'
 import { openOverlay, closeOverlay } from '../overlay'
 import { attachMembershipCheck } from '../validation'
 import type { CodeCase, CodeList } from '../types'
+import { renderIcons } from '../icons'
 
 // ---- codelist helpers ----
 function caseRow(cr: Partial<CodeCase> = {}, syncFn: () => void): HTMLElement {
@@ -39,7 +39,7 @@ function caseRow(cr: Partial<CodeCase> = {}, syncFn: () => void): HTMLElement {
   })
   r.querySelectorAll('select,input').forEach(i => i.addEventListener('input', syncFn))
   wireCombos(r)
-  createIcons({ icons: { X, ChevronDown, ArrowUp, ArrowDown } })
+  renderIcons(r)
   return r
 }
 
@@ -79,7 +79,7 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, available
   ;(cl.cases || []).forEach(c => casesBox.appendChild(caseRow(c, syncFn)))
   panel.querySelector('[data-addcase]')!.addEventListener('click', () => {
     casesBox.appendChild(caseRow({}, syncFn))
-    createIcons({ icons: appIcons })
+    renderIcons(casesBox)
     syncFn()
   })
 
@@ -108,7 +108,7 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, available
   // needs no network round trip (unlike the SQL-expression fields elsewhere).
   attachMembershipCheck(panel.querySelector<HTMLInputElement>('[data-cl-source]')!, () => availableColumns)
 
-  createIcons({ icons: { Plus, Folder } })
+  renderIcons(panel)
   return panel
 }
 
@@ -188,5 +188,5 @@ export function openCodelistDrawer(
 
   el.classList.add('show')
   openOverlay(el, dismiss)
-  createIcons({ icons: appIcons })
+  renderIcons(el)
 }

@@ -1,26 +1,5 @@
 import './styles.css'
-import {
-  createIcons,
-  FolderOpen, X, ArrowRight, PlusCircle, Folder, Plus, Table, FileCode,
-  Terminal, CheckSquare, Save, Play, Download, Copy, Trash2, Loader,
-  Database, ChevronDown, Info, AlertTriangle, AlertCircle, CheckCircle,
-  ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
-  Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
-  Filter as FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown,
-  Code, History, Hash, Square
-} from 'lucide'
 
-const appIcons = {
-  FolderOpen, X, ArrowRight, PlusCircle, Folder, Plus, Table, FileCode,
-  Terminal, CheckSquare, Save, Play, Download, Copy, Trash2, Loader,
-  Database, ChevronDown, Info, AlertTriangle, AlertCircle, CheckCircle,
-  ArrowLeft, MapPin, Link, ArrowUp, ArrowDown, GripVertical, Maximize2,
-  Crosshair, Scissors, Eraser, Layers, GitMerge, Split, Radar, UploadCloud,
-  Filter: FilterIcon, Combine, GitBranch, Camera,
-  Columns2, Sparkles, Network, MapPinned, FileText, Sun, Moon, ChevronsUp, ChevronsDown,
-  Code, History, Hash, Square
-}
 import {
   fetchMeta, fetchVersion, fetchPipelineNames, fetchPipeline, savePipeline,
   validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
@@ -45,6 +24,7 @@ import { openPasteYamlModal } from './paste-yaml'
 import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
 import type { Config, CountsResponse, PreviewResponse, SourceProgress, WrittenLayer } from './types'
 import { formatPendingSources, PENDING_RETRY_MS } from './schema'
+import { renderIcons } from './icons'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
 
@@ -631,7 +611,7 @@ function startRunButtonTicker(runBtn: HTMLButtonElement, startedAt: number): () 
   const renderBtn = () => {
     const secs = Math.floor((Date.now() - startedAt) / 1000)
     runBtn.innerHTML = `<i data-lucide="loader" class="spin-animation" style="width:14px;height:14px"></i> <span>running… ${secs}s</span>`
-    createIcons({ icons: appIcons })
+    renderIcons(runBtn)
   }
   renderBtn()
   const ticker = window.setInterval(renderBtn, 1000)
@@ -711,7 +691,7 @@ async function run(): Promise<void> {
     runBtn.disabled = false
     runBtn.innerHTML = originalHtml
     setRunBusy(false)
-    createIcons({ icons: appIcons })
+    renderIcons(runBtn)
     refreshRunHistory()
   }
 }
@@ -976,7 +956,7 @@ async function init(): Promise<void> {
 
   await loadInitialConfig()
 
-  createIcons({ icons: appIcons })
+  renderIcons()
 }
 
 /** The version next to the brand; it turns into an "update available" badge when PyPI has
@@ -1132,7 +1112,7 @@ function wireHeaderActions(): void {
     pushSnapshot('add pipeline')
     const container = document.querySelector<HTMLElement>('#pipelines')!
     container.appendChild(pipelineCard({}, sync))
-    createIcons({ icons: appIcons })
+    renderIcons(container)
     sync()
   })
 

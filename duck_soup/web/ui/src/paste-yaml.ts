@@ -1,8 +1,8 @@
-import { createIcons } from 'lucide'
-import { mkEl, appIcons } from './dom'
+import { mkEl } from './dom'
 import { openOverlay, closeOverlay } from './overlay'
 import { parseYaml } from './api'
 import type { Config } from './types'
+import { renderIcons } from './icons'
 
 // Paste-to-import: the only existing way YAML gets into the visual editor is a file already
 // saved under pipelines/ (via /api/pipelines/{name}). This gives a config from anywhere else
@@ -67,5 +67,5 @@ export function openPasteYamlModal(onImport: (cfg: Config) => void): void {
 
   el.classList.add('show')
   openOverlay(el, close)
-  createIcons({ icons: appIcons })
+  renderIcons(el)
 }

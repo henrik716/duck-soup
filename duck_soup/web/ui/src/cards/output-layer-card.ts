@@ -1,4 +1,3 @@
-import { createIcons, Package, Trash2, ChevronDown, Plus, Copy } from 'lucide'
 import { mkEl, refreshIcons, wireCollapse } from '../dom'
 import { comboField, wireCombos } from '../combo'
 import { CRS_COMBO_OPTIONS } from '../crs-list'
@@ -7,6 +6,7 @@ import { collectPipelineDef, wireDragReorder } from './pipeline-card'
 import { mapRow, type MapRowElement } from './map-row'
 import { attachCrsFormatCheck, attachLiveValidation, renderValidationMsg } from '../validation'
 import type { Config, MapItem, OutputLayer } from '../types'
+import { renderIcons } from '../icons'
 
 // ---- output layer card ----
 // One entry in a pipeline's `layers:` list — the same upstream chain, written
@@ -112,7 +112,7 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
   wireCollapse(c, { headerSel: '.item-head', chevronSel: '.card-chevron', bodySel: '.card-content' })
   wireCombos(c)
 
-  createIcons({ icons: { Package, Trash2, ChevronDown, Plus, Copy } })
+  renderIcons(c)
   return c
 }
 

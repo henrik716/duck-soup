@@ -1,8 +1,8 @@
-import { createIcons, Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Split, Filter, Camera, DatabaseZap, Folder, CornerDownRight, Plus } from 'lucide'
 import type { Config, CountsResponse, Step } from './types'
 import { esc } from './dom'
 import { openInFlowEditor, flowEditorTarget } from './flow-editor'
 import { openStepGalleryModal } from './step-gallery'
+import { renderIcons } from './icons'
 
 // The lineage diagram, titled "ducks in a row · pipeline flow" in the editor: an interactive flow drawn from the config — sources, the base, each
 // step (with its rejects as a side branch), the output layers and the shared output file.
@@ -483,7 +483,7 @@ export function updateLineageDiagram(cfg: Config, force = false): void {
   wireNodes(outer, cfg)
   markEditingNode()
 
-  createIcons({ icons: { Database, Play, MapPin, Link, Layers, Package, FileSpreadsheet, Globe, Map, Server, GitMerge, Maximize2, Crosshair, Scissors, Eraser, Split, Filter, Camera, DatabaseZap, Folder, CornerDownRight, Plus } })
+  renderIcons(outer)
 }
 
 // Drag-to-scroll (pan). The container element outlives every rebuild (only its children are
@@ -735,7 +735,7 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
     })
   })
 
-  createIcons({ icons: { Plus } })
+  renderIcons(outer)
 }
 
 // ---- interaction -------------------------------------------------------------
