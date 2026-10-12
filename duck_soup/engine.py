@@ -27,8 +27,9 @@ from __future__ import annotations
 
 import tempfile
 import textwrap
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator
 
 import duckdb
 
@@ -91,7 +92,8 @@ class Engine:
         self.reject_views: dict[int, str] = {}
         # Filled by run(): one {"layer", "rows", "kind", "path"} per layer written.
         self.written: list[dict] = []
-        # counts() sets this so steps become tables, each computed once (see _emit).
+        # Set by _prepare for the chain it builds: steps as tables, each computed once, for a
+        # run and counts() (see _emit).
         self._materialize = False
 
     def _emit(
@@ -366,6 +368,18 @@ class Engine:
         )
 
     # -- run ----------------------------------------------------------------
+    @contextmanager
+    def _session(self) -> Iterator[tuple[duckdb.DuckDBPyConnection, Path]]:
+        """A connection set up for the engine (derive.init_duckdb) and a temp folder for
+        this call's downloads and spills, both gone afterwards. One call at a time."""
+        with DUCKDB_LOCK, tempfile.TemporaryDirectory() as tmp:
+            con = duckdb.connect()
+            try:
+                init_duckdb(con)
+                yield con, Path(tmp)
+            finally:
+                con.close()
+
     def _prepare(
         self,
         con,
@@ -374,6 +388,7 @@ class Engine:
         max_features: int | None = None,
         limit_steps: int | None = None,
         base_limit: int | None = None,
+        materialize: bool = False,
     ) -> str:
         """Build the source → step_0 → step_N view chain; returns the final view name.
 
@@ -385,10 +400,12 @@ class Engine:
         bbox must still re-apply it to the final SELECT, since a geometry-mutating step
         (buffer, dissolve, ...) can move a feature relative to it.
 
-        `base_limit` keeps only the first N base features (counts() on a sample). With no
-        `con` (plan()), nothing is read or executed.
+        `base_limit` keeps only the first N base features (counts() on a sample).
+        `materialize` makes the steps TEMP TABLEs (see _emit). With no `con` (plan()),
+        nothing is read or executed.
         """
         self.plan, self.step_views, self.reject_views = [], {}, {}
+        self._materialize = materialize
         if con is not None:
             self._check_working_crs_units()
         self._create_source_views(con, workdir, bbox=bbox, max_features=max_features)
@@ -416,45 +433,36 @@ class Engine:
         holds (run_config clears it first when the config says `overwrite`). Returns the
         GeoPackage, or for GeoParquet the file or folder written (see parquet_output_root)."""
         out_path = Path(out_path)
-        with DUCKDB_LOCK:
-            con = duckdb.connect()
-            init_duckdb(con)
+        with self._session() as (con, workdir):
+            # Steps as TEMP TABLEs (see _emit): a run computes all of them anyway, and as
+            # views every layer's COPY (and every rejects layer's) would compute the whole
+            # chain again. What doesn't fit in memory spills to the run's temp folder.
+            con.execute(f"SET temp_directory = {_lit(str(workdir / 'spill'))}")
+            prev = self._prepare(con, workdir, materialize=True)
+            # Before writing anything, so a mapping error names its row (MappingError)
+            # instead of failing halfway through the output.
+            for layer in self.p.layers:
+                self._check_mapping(con, prev, layer)
 
-            with tempfile.TemporaryDirectory() as tmp:
-                workdir = Path(tmp)
-                # Steps as TEMP TABLEs (see _emit): a run computes all of them anyway, and as
-                # views every layer's COPY (and every rejects layer's) would compute the whole
-                # chain again. What doesn't fit in memory spills to the run's temp folder.
-                con.execute(f"SET temp_directory = {_lit(str(workdir / 'spill'))}")
-                self._materialize = True
-                try:
-                    prev = self._prepare(con, workdir)
-                finally:
-                    self._materialize = False
-                # Before writing anything, so a mapping error names its row (MappingError)
-                # instead of failing halfway through the output.
-                for layer in self.p.layers:
-                    self._check_mapping(con, prev, layer)
-
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                writes = self._layer_writes(prev)
-                self.written = []
-                if is_parquet_path(out_path):
-                    multi = self._parquet_multi()
-                    for layer, final_sql, kind in writes:
-                        target = parquet_layer_path(out_path, layer.layer, multi)
-                        rows = write_parquet_layer(
-                            con, final_sql, layer, target, self.p.base_source.has_geometry, self.log,
-                        )
-                        self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
-                    return str(parquet_output_root(out_path, multi))
-
-                for i, (layer, final_sql, kind) in enumerate(writes):
-                    rows = write_gpkg_layer(
-                        con, final_sql, layer, out_path, workdir / f"__layer_{i}.gpkg", self.log,
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            writes = self._layer_writes(prev)
+            self.written = []
+            if is_parquet_path(out_path):
+                multi = self._parquet_multi()
+                for layer, final_sql, kind in writes:
+                    target = parquet_layer_path(out_path, layer.layer, multi)
+                    rows = write_parquet_layer(
+                        con, final_sql, layer, target, self.p.base_source.has_geometry, self.log,
                     )
-                    self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
-                return str(out_path)
+                    self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
+                return str(parquet_output_root(out_path, multi))
+
+            for i, (layer, final_sql, kind) in enumerate(writes):
+                rows = write_gpkg_layer(
+                    con, final_sql, layer, out_path, workdir / f"__layer_{i}.gpkg", self.log,
+                )
+                self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
+            return str(out_path)
 
     def _parquet_multi(self) -> bool:
         """Whether a GeoParquet output gets one file per layer: run_config's say (it counts
@@ -505,44 +513,38 @@ class Engine:
     ) -> list[dict]:
         """Up to `limit` rows of the output's first layer, or of the step
         `preview_until_step` (0: the base source), or with `rejects` of that step's rejects."""
-        with DUCKDB_LOCK:
-            con = duckdb.connect()
-            init_duckdb(con)
+        with self._session() as (con, workdir):
+            prev = self._prepare(
+                con, workdir, bbox=bbox, max_features=limit, limit_steps=preview_until_step,
+            )
+            if rejects:
+                if preview_until_step not in self.reject_views:
+                    raise ValueError(f"step {preview_until_step} has no rejects layer")
+                prev = self.reject_views[preview_until_step]
 
-            with tempfile.TemporaryDirectory() as tmp:
-                workdir = Path(tmp)
-                prev = self._prepare(
-                    con, workdir, bbox=bbox, max_features=limit,
-                    limit_steps=preview_until_step,
+            if preview_until_step is not None:
+                try:
+                    con.execute(f"DESCRIBE SELECT * FROM {_ident(prev)}")
+                    cols_desc = con.fetchall()
+                    has_geom = any(col[0] == "geom" for col in cols_desc)
+                except Exception:
+                    has_geom = False
+                preview_sql = self._preview_rows_sql(
+                    _ident(prev), self.working_crs, has_geom, bbox, limit
                 )
-                if rejects:
-                    if preview_until_step not in self.reject_views:
-                        raise ValueError(f"step {preview_until_step} has no rejects layer")
-                    prev = self.reject_views[preview_until_step]
+            else:
+                layer = self.p.layers[0]
+                self._check_mapping(con, prev, layer)
+                final_sql = self._final_select(prev, layer)
+                preview_sql = self._preview_rows_sql(
+                    f"({final_sql})", layer.crs,
+                    self.p.base_source.has_geometry, bbox, limit,
+                )
 
-                if preview_until_step is not None:
-                    try:
-                        con.execute(f"DESCRIBE SELECT * FROM {_ident(prev)}")
-                        cols_desc = con.fetchall()
-                        has_geom = any(col[0] == "geom" for col in cols_desc)
-                    except Exception:
-                        has_geom = False
-                    preview_sql = self._preview_rows_sql(
-                        _ident(prev), self.working_crs, has_geom, bbox, limit
-                    )
-                else:
-                    layer = self.p.layers[0]
-                    self._check_mapping(con, prev, layer)
-                    final_sql = self._final_select(prev, layer)
-                    preview_sql = self._preview_rows_sql(
-                        f"({final_sql})", layer.crs,
-                        self.p.base_source.has_geometry, bbox, limit,
-                    )
-
-                res = con.execute(preview_sql)
-                cols = [desc[0] for desc in res.description]
-                rows = res.fetchall()
-                return [dict(zip(cols, r)) for r in rows]
+            res = con.execute(preview_sql)
+            cols = [desc[0] for desc in res.description]
+            rows = res.fetchall()
+            return [dict(zip(cols, r)) for r in rows]
 
     def sql_plan(self) -> list[dict]:
         """Every view the pipeline builds, in order, with its SQL, plus the SELECT written
@@ -570,37 +572,29 @@ class Engine:
         times. Source counts are only part of the full count: on a sample they'd still mean
         reading every source in full.
         """
-        self._materialize = True
-        with DUCKDB_LOCK:
-            con = duckdb.connect()
-            try:
-                init_duckdb(con)
-                with tempfile.TemporaryDirectory() as tmp:
-                    prev = self._prepare(
-                        con, Path(tmp), bbox=bbox, max_features=limit, base_limit=limit,
-                    )
+        with self._session() as (con, workdir):
+            prev = self._prepare(
+                con, workdir, bbox=bbox, max_features=limit, base_limit=limit, materialize=True,
+            )
 
-                    def count(rel: str) -> int:
-                        return con.execute(f"SELECT count(*) FROM {rel}").fetchone()[0]
+            def count(rel: str) -> int:
+                return con.execute(f"SELECT count(*) FROM {rel}").fetchone()[0]
 
-                    result = {
-                        "limit": limit,
-                        "base": count(_ident("step_0")),
-                        "steps": {i: count(_ident(v)) for i, v in self.step_views.items()},
-                        "rejects": {i: count(_ident(v)) for i, v in self.reject_views.items()},
-                        "layers": [
-                            count(f"({self._final_select(prev, layer)})")
-                            for layer in self.p.layers
-                        ],
-                        "sources": {},
-                    }
-                    if limit is None:
-                        ids = [s.id for s in self.p.sources] + [ds.id for ds in self.p.derived_sources]
-                        result["sources"] = {sid: count(_ident(f"src_{sid}")) for sid in ids}
-                    return result
-            finally:
-                con.close()
-                self._materialize = False
+            result = {
+                "limit": limit,
+                "base": count(_ident("step_0")),
+                "steps": {i: count(_ident(v)) for i, v in self.step_views.items()},
+                "rejects": {i: count(_ident(v)) for i, v in self.reject_views.items()},
+                "layers": [
+                    count(f"({self._final_select(prev, layer)})")
+                    for layer in self.p.layers
+                ],
+                "sources": {},
+            }
+            if limit is None:
+                ids = [s.id for s in self.p.sources] + [ds.id for ds in self.p.derived_sources]
+                result["sources"] = {sid: count(_ident(f"src_{sid}")) for sid in ids}
+            return result
 
 
 def run_config(
