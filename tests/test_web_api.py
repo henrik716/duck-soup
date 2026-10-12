@@ -125,7 +125,7 @@ def test_preview_returns_rows_for_valid_config(client):
 
 def test_preview_with_blank_base_returns_readable_error(client):
     # `base` is intentionally allowed to be blank through config validation (a pipeline
-    # can be saved mid-edit before a source is marked as base — see Pipeline._check_refs),
+    # can be saved mid-edit before a source is marked as base — see PipelineDef._check_refs),
     # but actually previewing it must fail with a readable message, not a bare
     # StopIteration (which stringifies to "") and a raw traceback.
     cfg = _test_config_dict()

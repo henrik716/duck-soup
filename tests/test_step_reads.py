@@ -71,7 +71,7 @@ def _pipeline(tmp_path, kind: str, n_steps: int, n_layers: int = 1):
         "mapping": [{"to": "name", "from": "name"}],
         "layers": [{"layer": f"out{i}"} for i in range(n_layers)],
     }]})
-    return cfg.pipelines[0].to_pipeline(cfg.output)
+    return cfg.pipelines[0]
 
 
 @pytest.mark.parametrize("kind", _STEPS)
@@ -84,7 +84,7 @@ def test_chained_steps_read_each_source_once_in_preview(tmp_path, reads, kind):
 def test_run_reads_each_source_once_for_every_layer(tmp_path, reads):
     # Two layers plus a rejects layer: three COPYs over one chain.
     pipeline = _pipeline(tmp_path, "spatial_join_rejects", n_steps=2, n_layers=2)
-    Engine(pipeline).run()
+    Engine(pipeline).run(str(tmp_path / "out.gpkg"))
     assert reads == {"base": 1, "s0": 1, "s1": 1}
 
 
@@ -113,7 +113,7 @@ def _snapshot_pipeline(tmp_path, steps):
         "sources": [{"id": "base", "format": "geojson", "uri": "unused.geojson", "crs": "EPSG:25833"}],
         "mapping": [{"to": "name", "from": "name"}], "layers": [{"layer": "out"}],
     }]})
-    return cfg.pipelines[0].to_pipeline(cfg.output)
+    return cfg.pipelines[0]
 
 
 @pytest.mark.parametrize("pattern", _SNAPSHOT_PATTERNS)

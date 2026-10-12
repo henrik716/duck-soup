@@ -173,7 +173,8 @@ pipelines:
 ```
 
 **Single pipeline**: leave out the `pipelines:` wrapper and put `sources` / `base` / `steps` /
-`mapping` at the top level, with an `output:` (or `outputs:`) block holding the path and layer:
+`mapping` at the top level, with an `output:` block (or an `outputs:` list of exactly one) holding
+the path and layer:
 
 ```yaml
 name: my_pipeline

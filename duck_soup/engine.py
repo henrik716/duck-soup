@@ -38,7 +38,7 @@ from . import sources as src_readers
 from .config import (
     AttributeJoin, Buffer, Centroid, Clip, CodeCase, CodeList, Config,
     Dissolve, Erase, Filter, IntersectOverlay, LineOverlay, MapItem, Merge, NearestNeighbor,
-    OutputLayer, Pipeline, Snapshot, SpatialJoin, is_parquet_path, reject_layer_names,
+    OutputLayer, PipelineDef, Snapshot, SpatialJoin, is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .sql_util import quote_ident as _ident, quote_literal as _lit
@@ -210,7 +210,7 @@ def _merge_gpkg_layer(main_path: Path, temp_path: Path) -> None:
 class Engine:
     def __init__(
         self,
-        pipeline: Pipeline,
+        pipeline: PipelineDef,
         log: Callable[[str], None] | None = None,
         parquet_multi: bool | None = None,
         pipeline_index: int = 0,
@@ -995,7 +995,7 @@ class Engine:
             failure = whole
         own = bool(layer.mapping)
         mapping = layer.mapping if own else self.p.mapping
-        layer_idx = self.p.outputs[0].layers.index(layer) if own and layer in self.p.outputs[0].layers else 0
+        layer_idx = self.p.layers.index(layer) if own and layer in self.p.layers else 0
         for j, item in enumerate(mapping):
             try:
                 con.execute(f"DESCRIBE {self._final_select(prev, layer.model_copy(update={'mapping': [item]}))}")
@@ -1092,7 +1092,7 @@ class Engine:
             ):
                 uses.append(f"step {i} (nearest_neighbor distance)")
         uses += [f"derived source '{ds.id}' (buffer)" for ds in self.p.derived_sources if ds.buffer is not None]
-        mappings = [self.p.mapping] + [l.mapping for o in self.p.outputs for l in o.layers if l.mapping]
+        mappings = [self.p.mapping] + [l.mapping for l in self.p.layers if l.mapping]
         funcs = sorted({m.func for mp in mappings for m in mp if m.func in ("area", "length")})
         uses += [f"mapping func '{f}'" for f in funcs]
         if not uses:
@@ -1143,19 +1143,21 @@ class Engine:
         )
         return self._build_step_views(con, "step_0", limit_steps=limit_steps)
 
-    def _layer_writes(self, prev: str, out_index: int) -> list[tuple[OutputLayer, str, str]]:
-        """(layer, SELECT, kind) for each layer written to output `out_index`. The steps'
-        rejects layers go into the first output, in the first layer's CRS."""
-        out = self.p.outputs[out_index]
-        writes = [(layer, self._final_select(prev, layer), "layer") for layer in out.layers]
-        if out_index == 0:
-            crs = out.layers[0].crs
-            for i, view in sorted(self.reject_views.items()):
-                layer = OutputLayer(layer=self.p.steps[i - 1].rejects, crs=crs)
-                writes.append((layer, self._final_select(view, layer, raw=True), "rejects"))
+    def _layer_writes(self, prev: str) -> list[tuple[OutputLayer, str, str]]:
+        """(layer, SELECT, kind) for each layer written: the pipeline's layers, then the
+        steps' rejects layers, in the first layer's CRS."""
+        writes = [(layer, self._final_select(prev, layer), "layer") for layer in self.p.layers]
+        crs = self.p.layers[0].crs
+        for i, view in sorted(self.reject_views.items()):
+            layer = OutputLayer(layer=self.p.steps[i - 1].rejects, crs=crs)
+            writes.append((layer, self._final_select(view, layer, raw=True), "rejects"))
         return writes
 
-    def run(self) -> str:
+    def run(self, out_path: str) -> str:
+        """Write the pipeline's layers to `out_path`, alongside whatever layers it already
+        holds (run_config clears it first when the config says `overwrite`). Returns the
+        GeoPackage, or for GeoParquet the file or folder written (see parquet_output_root)."""
+        out_path = Path(out_path)
         with DUCKDB_LOCK:
             con = duckdb.connect()
             init_duckdb(con)
@@ -1173,65 +1175,47 @@ class Engine:
                     self._materialize = False
                 # Before writing anything, so a mapping error names its row (MappingError)
                 # instead of failing halfway through the output.
-                for out in self.p.outputs:
-                    for layer in out.layers:
-                        self._check_mapping(con, prev, layer)
+                for layer in self.p.layers:
+                    self._check_mapping(con, prev, layer)
 
-                deleted_paths: set[Path] = set()
-                out_paths: list[str] = []
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                writes = self._layer_writes(prev)
                 self.written = []
-                for out_index, out in enumerate(self.p.outputs):
-                    out_path = Path(out.path)
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    writes = self._layer_writes(prev, out_index)
-                    if is_parquet_path(out_path):
-                        multi = self._parquet_multi(out_path)
-                        if out.overwrite and out_path not in deleted_paths:
-                            _clear_parquet_output(out_path, multi)
-                            deleted_paths.add(out_path)
-                        for layer, final_sql, kind in writes:
-                            target = parquet_layer_path(out_path, layer.layer, multi)
-                            rows = self._write_parquet_layer(con, final_sql, layer, target)
-                            self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
-                        root = str(parquet_output_root(out_path, multi))
-                        if root not in out_paths:
-                            out_paths.append(root)
-                        continue
-                    if out.overwrite and out_path not in deleted_paths:
-                        if out_path.exists():
-                            out_path.unlink()
-                        deleted_paths.add(out_path)
-                    for i, (layer, final_sql, kind) in enumerate(writes):
-                        # The GDAL writer recreates out_path on every call, so
-                        # only the very first layer written to a not-yet-existing
-                        # file can go straight there; every layer after that
-                        # (in this pipeline, or an earlier pipeline sharing the
-                        # same output path) is written to its own temp file and
-                        # spliced into out_path at the SQLite level.
-                        write_direct = not out_path.exists()
-                        target = out_path if write_direct else (workdir / f"__layer_{i}.gpkg")
-                        self.log(f"writing {out_path} layer '{layer.layer}' ({layer.crs})")
-                        final_sql = _gpkg_safe_select(con, final_sql, layer.layer, self.log)
-                        copy_sql = (
-                            f"COPY ({final_sql}) TO {_lit(str(target))} "
-                            f"(FORMAT GDAL, DRIVER 'GPKG', LAYER_NAME {_lit(layer.layer)}, "
-                            f"SRS {_lit(layer.crs)})"
-                        )
-                        (rows,) = con.execute(copy_sql).fetchone()
-                        self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
-                        if not write_direct:
-                            _merge_gpkg_layer(out_path, target)
-                    if str(out_path) not in out_paths:
-                        out_paths.append(str(out_path))
-                return out_paths
+                if is_parquet_path(out_path):
+                    multi = self._parquet_multi()
+                    for layer, final_sql, kind in writes:
+                        target = parquet_layer_path(out_path, layer.layer, multi)
+                        rows = self._write_parquet_layer(con, final_sql, layer, target)
+                        self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
+                    return str(parquet_output_root(out_path, multi))
 
-    def _parquet_multi(self, out_path: Path) -> bool:
+                for i, (layer, final_sql, kind) in enumerate(writes):
+                    # The GDAL writer recreates out_path on every call, so only the very
+                    # first layer written to a not-yet-existing file can go straight there;
+                    # every layer after that (in this pipeline, or an earlier pipeline
+                    # sharing the output) is written to its own temp file and spliced into
+                    # out_path at the SQLite level.
+                    write_direct = not out_path.exists()
+                    target = out_path if write_direct else (workdir / f"__layer_{i}.gpkg")
+                    self.log(f"writing {out_path} layer '{layer.layer}' ({layer.crs})")
+                    final_sql = _gpkg_safe_select(con, final_sql, layer.layer, self.log)
+                    copy_sql = (
+                        f"COPY ({final_sql}) TO {_lit(str(target))} "
+                        f"(FORMAT GDAL, DRIVER 'GPKG', LAYER_NAME {_lit(layer.layer)}, "
+                        f"SRS {_lit(layer.crs)})"
+                    )
+                    (rows,) = con.execute(copy_sql).fetchone()
+                    self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(out_path)})
+                    if not write_direct:
+                        _merge_gpkg_layer(out_path, target)
+                return str(out_path)
+
+    def _parquet_multi(self) -> bool:
+        """Whether a GeoParquet output gets one file per layer: run_config's say (it counts
+        every pipeline's layers) or, left to this pipeline alone, more than one layer."""
         if self.parquet_multi is not None:
             return self.parquet_multi
-        n = sum(len(o.layers) for o in self.p.outputs if Path(o.path) == out_path)
-        if Path(self.p.outputs[0].path) == out_path:
-            n += len(reject_layer_names(self.p.steps))
-        return n > 1
+        return len(self.p.layers) + len(reject_layer_names(self.p.steps)) > 1
 
     def _write_parquet_layer(self, con, final_sql: str, layer: OutputLayer, target: Path) -> int:
         """Write one layer as GeoParquet via DuckDB's native Parquet writer.
@@ -1325,7 +1309,7 @@ class Engine:
                         _ident(prev), self.working_crs, has_geom, bbox, limit
                     )
                 else:
-                    layer = self.p.outputs[0].layers[0]
+                    layer = self.p.layers[0]
                     self._check_mapping(con, prev, layer)
                     final_sql = self._final_select(prev, layer)
                     preview_sql = self._preview_rows_sql(
@@ -1343,7 +1327,7 @@ class Engine:
         for each output layer, without reading any data (see _plan_read_expr)."""
         prev = self._prepare(None, Path(tempfile.gettempdir()))
         plan = list(self.plan)
-        for layer in self.p.outputs[0].layers:
+        for layer in self.p.layers:
             plan.append({
                 "kind": "layer", "layer": layer.layer,
                 "title": f"layer '{layer.layer}' ({layer.crs})",
@@ -1384,7 +1368,7 @@ class Engine:
                         "rejects": {i: count(_ident(v)) for i, v in self.reject_views.items()},
                         "layers": [
                             count(f"({self._final_select(prev, layer)})")
-                            for layer in self.p.outputs[0].layers
+                            for layer in self.p.layers
                         ],
                         "sources": {},
                     }
@@ -1395,26 +1379,6 @@ class Engine:
             finally:
                 con.close()
                 self._materialize = False
-
-
-def run_pipeline(pipeline: Pipeline, log: Callable[[str], None] | None = None) -> list[str]:
-    engine = Engine(pipeline, log=log)
-    return engine.run()
-
-
-def preview_pipeline(
-    pipeline: Pipeline,
-    limit: int = 50,
-    preview_until_step: int | None = None,
-    bbox: tuple[float, float, float, float] | None = None,
-    rejects: bool = False,
-    log: Callable[[str], None] | None = None,
-    pipeline_index: int = 0,
-) -> list[dict]:
-    engine = Engine(pipeline, log=log, pipeline_index=pipeline_index)
-    return engine.preview(
-        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
-    )
 
 
 def run_config(
@@ -1447,10 +1411,8 @@ def run_config(
     # rather than reusing a preview's download — see sources.fresh_downloads.
     with src_readers.fresh_downloads(reuse=downloads):
         for i, pdef in enumerate(config.pipelines):
-            engine = Engine(
-                pdef.to_pipeline(config.output), log=log, parquet_multi=multi, pipeline_index=i,
-            )
-            engine.run()
+            engine = Engine(pdef, log=log, parquet_multi=multi, pipeline_index=i)
+            engine.run(config.output)
             if written is not None:
                 written.extend({"pipeline": pdef.name, **w} for w in engine.written)
     if multi is not None:
@@ -1458,10 +1420,10 @@ def run_config(
     return str(out_path)
 
 
-def _config_pipeline(config: Config, pipeline_idx: int) -> Pipeline:
+def _config_pipeline(config: Config, pipeline_idx: int) -> PipelineDef:
     if not 0 <= pipeline_idx < len(config.pipelines):
         raise ValueError(f"no pipeline at index {pipeline_idx}")
-    return config.pipelines[pipeline_idx].to_pipeline(config.output)
+    return config.pipelines[pipeline_idx]
 
 
 def preview_config_pipeline(
@@ -1474,10 +1436,9 @@ def preview_config_pipeline(
     log: Callable[[str], None] | None = None,
 ) -> list[dict]:
     """Preview one pipeline from a Config (defaults to the first)."""
-    return preview_pipeline(
-        _config_pipeline(config, pipeline_idx),
-        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects, log=log,
-        pipeline_index=pipeline_idx,
+    engine = Engine(_config_pipeline(config, pipeline_idx), log=log, pipeline_index=pipeline_idx)
+    return engine.preview(
+        limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
     )
 
 

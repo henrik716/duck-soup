@@ -1,7 +1,8 @@
 """Pipeline configuration: the YAML schema, validated with pydantic.
 
-A pipeline is: a set of sources, one base source whose features flow through,
-an ordered list of join steps, an ordered attribute mapping, and one output.
+A config is one output file and one or more pipelines, each writing its own layers to it.
+A pipeline is: a set of sources, one base source whose features flow through, an ordered
+list of steps, an ordered attribute mapping, and the output layers it writes.
 """
 from __future__ import annotations
 
@@ -12,8 +13,8 @@ from typing import Annotated, Literal, Optional, Union
 import yaml
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
-# Formats we know how to read. Everything except arcgis_rest goes through
-# DuckDB's ST_Read (GDAL); arcgis_rest is fetched (paginated) to a temp file first.
+# Formats we know how to read. Most go through DuckDB's ST_Read (GDAL); see the
+# duck_soup.sources docstring for the ones that don't.
 SOURCE_FORMATS = [
     "gpkg",       # GeoPackage
     "oapif",      # OGC API - Features endpoint
@@ -23,9 +24,9 @@ SOURCE_FORMATS = [
     "flatgeobuf", # FlatGeobuf
     "parquet",    # (Geo)Parquet
     "postgres",   # PostgreSQL/PostGIS table, read via DuckDB's postgres extension
-    "csv",        # CSV (tabular, no geometry)
-    "xlsx",       # Excel sheet (tabular, no geometry)
-    "json",       # plain JSON records (tabular, no geometry), via DuckDB's read_json
+    "csv",        # CSV (tabular; geometry from x_field/y_field/geom_field)
+    "xlsx",       # Excel sheet (tabular; geometry from x_field/y_field/geom_field)
+    "json",       # plain JSON records via DuckDB's read_json (tabular, as csv)
     "fgdb",       # Esri File Geodatabase (.gdb folder)
     "shp",        # Shapefile
     "arcgis_rest",  # ArcGIS REST FeatureServer/MapServer query endpoint
@@ -468,7 +469,7 @@ class OutputLayer(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Validator bodies shared by Output / Pipeline / PipelineDef
+# Validator bodies shared by PipelineDef, Config and the single-pipeline upgrade
 # ---------------------------------------------------------------------------
 
 def _normalise_layer_shorthand(
@@ -476,10 +477,11 @@ def _normalise_layer_shorthand(
 ) -> dict:
     """Fold the legacy singular `layer:` shorthand into a one-entry `layers:` list.
 
-    `extra_keys` and `overwrite` differ per model and are deliberately not unified:
-    `Output` also absorbs a sibling `mapping:` key (it has no pipeline-level mapping of
-    its own, so there `mapping:` can only mean the layer's override) and clobbers any
-    existing `layers:`, while `PipelineDef` leaves an explicit `layers:` list winning.
+    `extra_keys` and `overwrite` differ per caller and are deliberately not unified: the
+    single-pipeline shorthand's `output:` block also absorbs a sibling `mapping:` key (an
+    output has no mapping of its own, so there `mapping:` can only mean the layer's
+    override) and clobbers any existing `layers:`, while `PipelineDef` leaves an explicit
+    `layers:` list winning.
     """
     if "layer" not in data:
         return data
@@ -598,107 +600,6 @@ def _validate_no_geom_mapping(
         )
 
 
-class Output(BaseModel):
-    path: str
-    overwrite: bool = True
-    layers: list[OutputLayer] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalise_layers(cls, data: object) -> object:
-        if not isinstance(data, dict):
-            return data
-        return _normalise_layer_shorthand(data, ("crs", "mapping", "filter"), overwrite=True)
-
-    @model_validator(mode="after")
-    def _check_layers(self):
-        _require_layers(self.layers)
-        _check_parquet_layer_names(self.path, [layer.layer for layer in self.layers])
-        return self
-
-
-class Pipeline(BaseModel):
-    name: str
-    description: str = ""
-    working_crs: OptionalCRSStr = Field(
-        None, description="Internal CRS for joins; defaults to the base source CRS"
-    )
-    sources: list[Source]
-    derived_sources: list[DerivedSource] = Field(default_factory=list)
-    base: str
-    steps: list[Step] = Field(default_factory=list)
-    mapping: list[MapItem]
-    # Accept either singular `output` (legacy) or plural `outputs`. The
-    # validator below normalises both into `outputs`.
-    output: Optional[Output] = Field(None, exclude=True)
-    outputs: list[Output] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _normalise_outputs(self):
-        if self.output is not None and self.outputs:
-            raise ValueError("specify either 'output' or 'outputs', not both")
-        if self.output is not None:
-            object.__setattr__(self, "outputs", [self.output])
-            object.__setattr__(self, "output", None)
-        if not self.outputs:
-            raise ValueError("at least one output must be defined under 'outputs'")
-        return self
-
-    @model_validator(mode="after")
-    def _check_refs(self):
-        _validate_refs(self.sources, self.derived_sources, self.base, self.steps)
-        return self
-
-    @model_validator(mode="after")
-    def _check_no_geom_mapping(self):
-        mappings = [self.mapping]
-        for out in self.outputs:
-            mappings.extend(layer.mapping for layer in out.layers if layer.mapping)
-        _validate_no_geom_mapping(self.sources, self.base, mappings)
-        return self
-
-    @model_validator(mode="after")
-    def _check_rejects(self):
-        # Rejects layers are written into the first output (see Engine.run).
-        rejects = reject_layer_names(self.steps)
-        if rejects:
-            first = self.outputs[0]
-            _check_reject_names([layer.layer for layer in first.layers], rejects)
-            _check_parquet_layer_names(first.path, [layer.layer for layer in first.layers] + rejects)
-        return self
-
-    def source(self, sid: str) -> Source:
-        src = next((s for s in self.sources if s.id == sid), None)
-        if src is None:
-            # `base` (and derived_source `from`) are allowed to be blank/stale while a
-            # pipeline is still being edited — see _check_refs's `self.base and` guard —
-            # so this is only caught here, once something actually tries to run with it.
-            raise ValueError(f"unknown source '{sid}'" if sid else "no base source selected")
-        return src
-
-    @property
-    def base_source(self) -> Source:
-        return self.source(self.base)
-
-    @property
-    def effective_working_crs(self) -> str:
-        return self.working_crs or self.base_source.crs or self.outputs[0].layers[0].crs
-
-
-def load_pipeline(path: str | Path) -> Pipeline:
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    return Pipeline.model_validate(data)
-
-
-def load_pipeline_dict(data: dict) -> Pipeline:
-    return Pipeline.model_validate(data)
-
-
-def dump_pipeline_yaml(pipeline: Pipeline) -> str:
-    data = pipeline.model_dump(by_alias=True, exclude_none=True)
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-
-
 # ---------------------------------------------------------------------------
 # Multi-pipeline Config: one output file, N independent pipelines/layers
 # ---------------------------------------------------------------------------
@@ -742,19 +643,22 @@ class PipelineDef(BaseModel):
         _validate_no_geom_mapping(self.sources, self.base, mappings)
         return self
 
-    def to_pipeline(self, output_path: str) -> Pipeline:
-        """Convert to a single-output Pipeline for the existing engine."""
-        return Pipeline(
-            name=self.name,
-            description=self.description,
-            working_crs=self.working_crs,
-            sources=self.sources,
-            derived_sources=self.derived_sources,
-            base=self.base,
-            steps=self.steps,
-            mapping=self.mapping,
-            outputs=[Output(path=output_path, overwrite=False, layers=self.layers)],
-        )
+    def source(self, sid: str) -> Source:
+        src = next((s for s in self.sources if s.id == sid), None)
+        if src is None:
+            # `base` (and derived_source `from`) are allowed to be blank/stale while a
+            # pipeline is still being edited — see _check_refs's `self.base and` guard —
+            # so this is only caught here, once something actually tries to run with it.
+            raise ValueError(f"unknown source '{sid}'" if sid else "no base source selected")
+        return src
+
+    @property
+    def base_source(self) -> Source:
+        return self.source(self.base)
+
+    @property
+    def effective_working_crs(self) -> str:
+        return self.working_crs or self.base_source.crs or self.layers[0].crs
 
 
 class DatasetMetadata(BaseModel):
@@ -801,27 +705,38 @@ class Config(BaseModel):
         return sum(len(p.layers) + len(reject_layer_names(p.steps)) for p in self.pipelines)
 
 
-def _pipeline_to_config(p: Pipeline) -> Config:
-    """Upgrade a legacy single-pipeline YAML to Config format."""
-    out = p.outputs[0]
-    pdef = PipelineDef(
-        name=p.name,
-        description=p.description,
-        working_crs=p.working_crs,
-        sources=p.sources,
-        derived_sources=p.derived_sources,
-        base=p.base,
-        steps=p.steps,
-        mapping=p.mapping,
-        layers=out.layers,
-    )
-    return Config(
-        name=p.name,
-        description=p.description,
-        output=out.path,
-        overwrite=out.overwrite,
-        pipelines=[pdef],
-    )
+# The keys a single-pipeline file carries over to its one pipeline.
+_PIPELINE_KEYS = ("name", "description", "working_crs", "sources", "derived_sources", "base", "steps", "mapping")
+
+
+def _upgrade_single_pipeline(data: dict) -> dict:
+    """The legacy single-pipeline shorthand (no `pipelines:` wrapper; one pipeline's keys at
+    the top level, plus an `output:` block, or an `outputs:` list of one, holding the path,
+    `overwrite` and the layers) as a Config dict."""
+    if "output" in data and "outputs" in data:
+        raise ValueError("specify either 'output' or 'outputs', not both")
+    if "outputs" in data:
+        outputs = data["outputs"] or []
+        if len(outputs) != 1:
+            raise ValueError(
+                f"a single-pipeline file writes one output, but 'outputs' lists {len(outputs)}; "
+                "use the full form (output: + pipelines:) to write several layers"
+            )
+        out = outputs[0]
+    elif data.get("output") is not None:
+        out = data["output"]
+    else:
+        raise ValueError("at least one output must be defined under 'output'")
+    if not isinstance(out, dict) or "path" not in out:
+        raise ValueError("the 'output' block needs a 'path'")
+    out = _normalise_layer_shorthand(dict(out), ("crs", "mapping", "filter"), overwrite=True)
+    pipeline = {k: data[k] for k in _PIPELINE_KEYS if k in data}
+    pipeline["layers"] = out.get("layers", [])
+    upgraded = {k: data[k] for k in ("name", "description") if k in data}
+    return {
+        **upgraded, "output": out["path"], "overwrite": out.get("overwrite", True),
+        "pipelines": [pipeline],
+    }
 
 
 def load_config(path: str | Path) -> Config:
@@ -830,10 +745,9 @@ def load_config(path: str | Path) -> Config:
 
 
 def load_config_dict(data: dict) -> Config:
-    if "pipelines" in data:
-        return Config.model_validate(data)
-    # Legacy single-pipeline format — auto-upgrade
-    return _pipeline_to_config(Pipeline.model_validate(data))
+    if "pipelines" not in data:
+        data = _upgrade_single_pipeline(data)
+    return Config.model_validate(data)
 
 
 class _ConfigDumper(yaml.SafeDumper):

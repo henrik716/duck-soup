@@ -22,15 +22,15 @@ def _configure_gdal_ca_bundle() -> None:
 
 _configure_gdal_ca_bundle()
 
-from .config import Pipeline, load_pipeline, load_pipeline_dict, dump_pipeline_yaml
-from .engine import run_pipeline, Engine, preview_pipeline
+from .config import Config, dump_config_yaml, load_config, load_config_dict
+from .engine import Engine, preview_config_pipeline, run_config
 
 __all__ = [
-    "Pipeline",
-    "load_pipeline",
-    "load_pipeline_dict",
-    "dump_pipeline_yaml",
-    "run_pipeline",
-    "preview_pipeline",
+    "Config",
+    "load_config",
+    "load_config_dict",
+    "dump_config_yaml",
+    "run_config",
+    "preview_config_pipeline",
     "Engine",
 ]

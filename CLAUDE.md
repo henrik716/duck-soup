@@ -61,7 +61,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 
 ### Python modules
 
-**`config.py`** — Pydantic schemas for the entire YAML structure. `Source`, `Step` (SpatialJoin / AttributeJoin / NearestNeighbor), `MapItem`, `CodeList`, `Pipeline`, `Config`. Validates cross-references and CRS. Auto-upgrades the legacy single-output format to the multi-output/multi-layer format on load.
+**`config.py`** — Pydantic schemas for the entire YAML structure: `Config` (one output file, `pipelines`), `PipelineDef` (sources, base, steps, mapping, `layers`), `Source`, the `Step` union, `MapItem`, `CodeList`, `OutputLayer`. Validates cross-references and CRS. `PipelineDef` is the one pipeline model: the engine runs it directly. `load_config_dict` upgrades the legacy single-pipeline shorthand at the dict level (`_upgrade_single_pipeline`) before validating.
 
 **`sources/`** — Translates a `Source` config into a SQL table expression (`read_expr` in `__init__.py`, which dispatches on format). One module per concern: `remote` (downloads, progress), `services` (WFS / ArcGIS REST / OAPIF fetchers and layer listing), `gdal` (`ST_Read`, layer listing, curve linearization, aliasing the geometry column to `geom`), `parquet`, `postgres`, `tabular` (xlsx/csv/json), `large_files` (pyogrio), `crs`, `prepare` (the editor's background preparation and source-card notes). `formats.py` holds the format sets each reader handles (`GDAL_VECTOR`, `GDAL_TABULAR`, `DOWNLOADED`, …) and `alias_geom`; add a format there rather than as a literal tuple. Cache folders and size thresholds live in `settings.py`, read as `settings.X` at call time (never `from .settings import X`), so tests patch them there and `worker._SHARED_SETTINGS` hands them to the workers. Most formats produce `ST_Read(...)` strings via `gdal._st_read()`. Exceptions:
 - `arcgis_rest`: paged HTTP → temp GeoJSON → `ST_Read`
@@ -72,7 +72,7 @@ The tool replaces FME workspaces. A pipeline YAML describes sources, spatial/att
 - the editor never blocks a request on that work: `prepare_source` runs the download/conversion in a background thread and the endpoints answer `{"pending": true, "progress": …}` (`_pending_response` in `web/app.py`) until it's ready; the frontend retries (`awaitPrepared` in `main.ts`, the source card's inspect)
 - `csv`/`xlsx` of 5 MB+: read from a cached Parquet copy (`_tabular_parquet_cache`, keyed by path + mtime + size + options), since GDAL's CSV driver scans the whole file on every open
 
-**`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. The `_apply_*` step builders return a SELECT; every view goes through `Engine._emit`, which also records it in `Engine.plan`, so the same chain serves previews (views, so a `LIMIT` can cut steps short), `sql_plan()` (no connection, nothing read: the editor's SQL tab), and runs and `counts()` (steps as TEMP TABLEs, each computed once: otherwise every layer's `COPY` / every count recomputes the chain). A step builder must read the previous view only once (pull it into a `MATERIALIZED` CTE if it needs it twice): views are expanded where they're used, so a second read doubles the work of the whole chain before it, compounding across chained steps (`tests/test_step_reads.py`). For the same reason a `snapshot` that a later step reads (as `source` or `branch`) is stored once as a TEMP TABLE `step_<i>` in previews too (`_snapshot_used`). A step with `rejects` (joins, `clip`, `filter`) gets a `__matched` column and is split into `step_<i>__split` → `step_<i>` (passed) + `step_<i>__rejects`, which `run()` writes as an extra layer in the first output (unmapped, in the first layer's CRS); `Config.layer_count` counts them. `run_config(..., written=[])` reports the rows written per layer (from `COPY`'s returned count). Spatial joins (first match or largest overlap), nearest-neighbor joins, clip and erase all go through `_per_row_match_select`: a plain `JOIN` on the spatial predicate (so DuckDB plans it as its R-tree `SPATIAL_JOIN`), aggregated per base row — `arg_min` for the single best match, `ST_Union_Agg` for erase. Avoid `LATERAL` subqueries for spatial predicates: they compare every base row against every source row. Nearest-neighbor uses `ST_DWithin` as the join condition when `max_distance` is set; without it, every pair is compared. Attribute joins are 1:1 left joins. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Before a preview or a run's writes, `_check_mapping` plans (`DESCRIBE`, nothing computed) each layer's final SELECT; on a parser/binder error it plans each item alone and raises `MappingError` naming the first failing one, with its `pipelines.<i>.mapping.<j>` path on the second line (the shape the editor's Problems tab links to a card), so `Engine` takes a `pipeline_index`. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or, when the output path ends in `.parquet`/`.geoparquet`, via native `COPY … (FORMAT PARQUET)` as GeoParquet (`_write_parquet_layer`). The geometry is cast to `GEOMETRY('<layer crs>')` there, since without a CRS-typed column DuckDB omits `crs` from the `geo` metadata and readers assume OGC:CRS84. GeoParquet has no layers: 1 layer in total → that file, more → `<stem>/<layer>.parquet` (`parquet_layer_path`).
+**`engine.py`** — Core SQL builder and executor. Builds a view chain: `src_<id>` views (reprojected to `working_crs`) → `step_0`, `step_1`, … → `mapped`. The `_apply_*` step builders return a SELECT; every view goes through `Engine._emit`, which also records it in `Engine.plan`, so the same chain serves previews (views, so a `LIMIT` can cut steps short), `sql_plan()` (no connection, nothing read: the editor's SQL tab), and runs and `counts()` (steps as TEMP TABLEs, each computed once: otherwise every layer's `COPY` / every count recomputes the chain). A step builder must read the previous view only once (pull it into a `MATERIALIZED` CTE if it needs it twice): views are expanded where they're used, so a second read doubles the work of the whole chain before it, compounding across chained steps (`tests/test_step_reads.py`). For the same reason a `snapshot` that a later step reads (as `source` or `branch`) is stored once as a TEMP TABLE `step_<i>` in previews too (`_snapshot_used`). A step with `rejects` (joins, `clip`, `filter`) gets a `__matched` column and is split into `step_<i>__split` → `step_<i>` (passed) + `step_<i>__rejects`, which `run()` writes as an extra layer after the pipeline's own (unmapped, in the first layer's CRS); `Config.layer_count` counts them. An `Engine` runs one `PipelineDef`, and `run(out_path)` adds its layers to that one file; `run_config` clears the output first (when `overwrite`) and runs each pipeline into it. `run_config(..., written=[])` reports the rows written per layer (from `COPY`'s returned count). Spatial joins (first match or largest overlap), nearest-neighbor joins, clip and erase all go through `_per_row_match_select`: a plain `JOIN` on the spatial predicate (so DuckDB plans it as its R-tree `SPATIAL_JOIN`), aggregated per base row — `arg_min` for the single best match, `ST_Union_Agg` for erase. Avoid `LATERAL` subqueries for spatial predicates: they compare every base row against every source row. Nearest-neighbor uses `ST_DWithin` as the join condition when `max_distance` is set; without it, every pair is compared. Attribute joins are 1:1 left joins. `MapItem` rules (`from`/`const`/`expr`/`func`/`codelist`) are compiled to SQL column expressions. Before a preview or a run's writes, `_check_mapping` plans (`DESCRIBE`, nothing computed) each layer's final SELECT; on a parser/binder error it plans each item alone and raises `MappingError` naming the first failing one, with its `pipelines.<i>.mapping.<j>` path on the second line (the shape the editor's Problems tab links to a card), so `Engine` takes a `pipeline_index`. Output is written via DuckDB's `COPY … (FORMAT GDAL, DRIVER 'GPKG')`, or, when the output path ends in `.parquet`/`.geoparquet`, via native `COPY … (FORMAT PARQUET)` as GeoParquet (`_write_parquet_layer`). The geometry is cast to `GEOMETRY('<layer crs>')` there, since without a CRS-typed column DuckDB omits `crs` from the `geo` metadata and readers assume OGC:CRS84. GeoParquet has no layers: 1 layer in total → that file, more → `<stem>/<layer>.parquet` (`parquet_layer_path`).
 
 **`derive.py`** — Registers Python UDFs into DuckDB (`to_mgrs`, backed by the `mgrs` package, a required dependency; `to_geohash`, self-contained, since the spatial extension has no `ST_GeoHash`). Also owns connection bootstrap: `load_extensions()` (spatial + postgres) and `init_duckdb()` (extensions + UDFs) — every DuckDB connection in the codebase goes through one of these.
 
@@ -101,48 +101,54 @@ Single-page app (TypeScript + Vite + MapLibre GL + Lucide). Source/step/mapping 
 ### Pipeline YAML
 
 ```yaml
-name: my_pipeline
-working_crs: EPSG:25833      # all joins happen in this CRS
-sources:
-  - id: places
-    format: geojson           # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv | json | postgres
-    uri: data/places.geojson
-    layer: places             # layer / typename / sheet name
-    crs: EPSG:4326
-base: places                  # source features flow from here
-steps:
-  - type: spatial_join
-    source: regions
-    predicate: intersects     # intersects | contains | within
-    fields: {region_name: name}
-  - type: attribute_join
-    source: lookup
-    left: category            # column on the running row
-    right: code               # column on the lookup source
-    fields: {label: display_label}
-  - type: nearest_neighbor
-    source: stations
-    max_distance: 5000        # optional search radius, in working_crs units
-    distance_field: distance_m # optional output column for the computed distance
-    fields: {nearest_station: name}
-mapping:
-  - {to: name,     from: name}
-  - {to: category, const: "Embassy"}
-  - {to: uuid,     func: uuid}     # uuid | now | today | lon | lat | mgrs
-  - to: region
-    codelist:
-      source: region_name
-      cases:
-        - {like: "%oslo%", value: "Capital"}
-      default: "Other"
-outputs:
-  - path: output/result.gpkg
+name: my_config
+output: output/result.gpkg      # .parquet / .geoparquet → GeoParquet
+pipelines:
+  - name: my_pipeline
+    working_crs: EPSG:25833     # all joins happen in this CRS
+    sources:
+      - id: places
+        format: geojson         # gpkg | geojson | gml | fgdb | wfs | arcgis_rest | oapif | parquet | flatgeobuf | shp | xlsx | csv | json | postgres
+        uri: data/places.geojson
+        layer: places           # layer / typename / sheet name
+        crs: EPSG:4326
+    base: places                # source features flow from here
+    steps:
+      - type: spatial_join
+        source: regions
+        predicate: intersects   # intersects | contains | within
+        fields: {region_name: name}
+      - type: attribute_join
+        source: lookup
+        left: category          # column on the running row
+        right: code             # column on the lookup source
+        fields: {label: display_label}
+      - type: nearest_neighbor
+        source: stations
+        max_distance: 5000      # optional search radius, in working_crs units
+        distance_field: distance_m  # optional output column for the computed distance
+        fields: {nearest_station: name}
+    mapping:
+      - {to: name,     from: name}
+      - {to: category, const: "Embassy"}
+      - {to: uuid,     func: uuid}   # see config.MAP_FUNCS
+      - to: region
+        codelist:
+          source: region_name
+          cases:
+            - {like: "%oslo%", value: "Capital"}
+          default: "Other"
     layers:
-      - name: result_layer
+      - layer: result_layer
         crs: EPSG:25833
 ```
 
-`codelist` can also reference a CSV file: `{file: data/lookup.csv, key: code, value: label}`.
+`codelist` can also reference a CSV file:
+`{source: code, file: data/lookup.csv, file_match_col: code, file_value_col: label}`.
+
+The single-pipeline shorthand (no `pipelines:` wrapper; one pipeline's keys at the top level
+plus an `output:` block with `path` and `layer`) still loads: `config._upgrade_single_pipeline`
+turns it into the form above before validation.
 
 A source's `uri` (and a `codelist`'s `file`) can be any absolute path on disk, not just a path
 under `data/` — `sources/` passes it straight through to `ST_Read`/`read_parquet` with no

@@ -65,6 +65,56 @@ def test_legacy_single_pipeline_format_upgrades_to_config():
     assert cfg.pipelines[0].layers[0].layer == "output"
 
 
+def _legacy(**output_keys):
+    return {
+        "name": "legacy_test",
+        "working_crs": "EPSG:25833",
+        "sources": [
+            {"id": "places", "format": "geojson", "uri": "data/test.geojson", "layer": "test", "crs": "EPSG:4326"},
+        ],
+        "base": "places",
+        "steps": [{"type": "buffer", "distance": 10}],
+        "mapping": [{"to": "name", "from": "name"}],
+        **output_keys,
+    }
+
+
+def test_legacy_outputs_list_upgrades_with_layers_and_overwrite():
+    cfg = load_config_dict(_legacy(outputs=[{
+        "path": "output/legacy.gpkg", "overwrite": False,
+        "layers": [{"layer": "a", "crs": "EPSG:4326"}, {"layer": "b"}],
+    }]))
+    assert cfg.output == "output/legacy.gpkg"
+    assert cfg.overwrite is False
+    pdef = cfg.pipelines[0]
+    assert [(l.layer, l.crs) for l in pdef.layers] == [("a", "EPSG:4326"), ("b", "EPSG:25833")]
+    assert pdef.working_crs == "EPSG:25833"
+    assert pdef.steps[0].type == "buffer"
+
+
+def test_legacy_output_shorthand_keeps_its_mapping_override():
+    cfg = load_config_dict(_legacy(output={
+        "path": "output/legacy.gpkg", "layer": "out", "filter": "name IS NOT NULL",
+        "mapping": [{"to": "label", "from": "name"}],
+    }))
+    (layer,) = cfg.pipelines[0].layers
+    assert layer.layer == "out"
+    assert layer.filter == "name IS NOT NULL"
+    assert [m.to for m in layer.mapping] == ["label"]
+    assert [m.to for m in cfg.pipelines[0].mapping] == ["name"]
+
+
+@pytest.mark.parametrize("output_keys, message", [
+    ({"outputs": [{"path": "a.gpkg", "layer": "a"}, {"path": "b.gpkg", "layer": "b"}]}, "lists 2"),
+    ({"output": {"path": "a.gpkg", "layer": "a"}, "outputs": [{"path": "a.gpkg", "layer": "a"}]}, "not both"),
+    ({}, "at least one output"),
+    ({"output": {"layer": "a"}}, "needs a 'path'"),
+])
+def test_legacy_output_errors(output_keys, message):
+    with pytest.raises(ValueError, match=message):
+        load_config_dict(_legacy(**output_keys))
+
+
 def test_invalid_crs_format_rejected():
     with pytest.raises(ValidationError, match="invalid CRS"):
         Source(id="a", format="geojson", uri="x.geojson", crs="not-a-crs")

@@ -116,7 +116,7 @@ def test_case_condition_is_blank_matches_null_or_empty_string():
 
 def test_codelist_expr_routes_blank_and_specific_value_to_same_output():
     cfg = load_config(PIPELINES_DIR / "test.yaml")
-    engine = Engine(cfg.pipelines[0].to_pipeline(cfg.output))
+    engine = Engine(cfg.pipelines[0])
     cl = CodeList(
         source="category",
         cases=[
@@ -180,7 +180,7 @@ def _step_output(
         "steps": steps, "mapping": [],
         "output": {"path": str(tmp_path / "unused.gpkg"), "layer": "out", "crs": "EPSG:25833"},
     })
-    engine = Engine(cfg.pipelines[0].to_pipeline(cfg.output))
+    engine = Engine(cfg.pipelines[0])
     con = duckdb.connect()
     init_duckdb(con)
     view = engine._prepare(con, tmp_path)
@@ -379,7 +379,7 @@ def test_force_2d_drops_z_on_load(tmp_path):
         })
         con = duckdb.connect()
         init_duckdb(con)
-        Engine(cfg.pipelines[0].to_pipeline(cfg.output))._prepare(con, tmp_path)
+        Engine(cfg.pipelines[0])._prepare(con, tmp_path)
         return con.execute("SELECT ST_AsText(geom) FROM src_base").fetchone()[0]
 
     assert geom() == "LINESTRING Z (0 0 3, 10 0 5)"
