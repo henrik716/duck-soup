@@ -10,8 +10,9 @@ There are three ways to add one:
 === "Drag and drop"
 
     Drop files onto the **Drag & drop spatial files here** area (or click it to pick files).
-    The files are uploaded to the server's temp folder and a source card is created for each,
-    with the format detected from the extension.
+    The files are uploaded to the server's temp folder (the drop area shows a spinner and which
+    file it's on) and a source card is created for each, with the format detected from the
+    extension.
 
     - A **Shapefile** is uploaded together with its sidecar files (`.shx`, `.dbf`, `.prj`, …)
       and becomes one source.
@@ -136,7 +137,8 @@ button in the tab's toolbar previews the base source before any steps.
 ## The working CRS
 
 The **working CRS** field at the top of the tab sets the CRS that every join, buffer and
-area/length calculation runs in. Leave it blank to use the base source's CRS. If you buffer,
+area/length calculation runs in. Pick it from the same searchable list as a source's CRS, or
+type any code. Leave it blank to use the base source's CRS. If you buffer,
 measure or use nearest-neighbour distances, set it to a projected CRS in metres. See
 [Core concepts](../concepts.md#the-working-crs).
 

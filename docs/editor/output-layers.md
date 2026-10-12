@@ -6,7 +6,8 @@ output (the **output file** set on the config card). The YAML side is covered un
 
 - **layer name**: the table name inside the GeoPackage (for a multi-layer GeoParquet output,
   the file name).
-- **CRS**: the CRS geometry is reprojected to on write.
+- **CRS**: the CRS geometry is reprojected to on write. Pick it from the searchable list of
+  common CRSs (search by code or name, e.g. *UTM 33*), or type any `AUTHORITY:CODE`.
 - **filter**: an optional SQL condition. Rows where it's false are left out of *this* layer
   only. A live check under the field tells you whether it parses.
 
