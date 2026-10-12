@@ -289,9 +289,58 @@ class Erase(StepBase):
     predicate: Literal[tuple(JOIN_PREDICATES)] = "intersects"  # type: ignore[valid-type]
 
 
+class ExprColumn(BaseModel):
+    """A named SQL expression: a dissolve group key or aggregate."""
+
+    to: str = Field(..., description="Output column name")
+    expr: str = Field(..., description="SQL expression")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip(cls, data):
+        # Trim only, like MapItem.expr: a hand-formatted multi-line expression stays as written.
+        if isinstance(data, dict):
+            data = {k: v.strip() if k in ("to", "expr") and isinstance(v, str) else v for k, v in data.items()}
+        return data
+
+    @model_validator(mode="after")
+    def _not_blank(self):
+        if not self.to:
+            raise ValueError("an expression column needs a name ('to')")
+        if not self.expr:
+            raise ValueError(f"column '{self.to}' needs an expression")
+        return self
+
+
 class Dissolve(StepBase):
     type: Literal["dissolve"] = "dissolve"
-    by: list[str] = Field(default_factory=list, description="Columns to group by; empty = dissolve all")
+    by: list[Union[str, ExprColumn]] = Field(
+        default_factory=list,
+        description="Group keys: a column name, or {to, expr} to group by a SQL expression; "
+        "empty = dissolve all",
+    )
+    aggregates: list[ExprColumn] = Field(
+        default_factory=list,
+        description="Columns computed per group with a SQL aggregate, e.g. "
+        "{to: total, expr: 'sum(population)'}",
+    )
+
+    @model_validator(mode="after")
+    def _unique_names(self):
+        seen: set[str] = set()
+        for name in self.output_names:
+            if name.lower() in ("geom", "__src_row"):
+                raise ValueError(f"dissolve: '{name}' is reserved; give the column another name")
+            if name.lower() in seen:
+                raise ValueError(f"dissolve: column '{name}' is produced twice")
+            seen.add(name.lower())
+        return self
+
+    @property
+    def output_names(self) -> list[str]:
+        """The columns a dissolve writes besides geom: its keys, then its aggregates."""
+        keys = [k if isinstance(k, str) else k.to for k in self.by]
+        return keys + [a.to for a in self.aggregates]
 
 
 class IntersectOverlay(StepBase):
@@ -341,18 +390,6 @@ class Snapshot(StepBase):
 
     type: Literal["snapshot"] = "snapshot"
     id: str = Field(..., description="Name for this step's current state; usable as source: in a later step")
-
-
-Step = Annotated[
-    Union[
-        SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
-        Dissolve, IntersectOverlay, LineOverlay, Filter, Merge, Snapshot,
-    ],
-    Field(discriminator='type'),
-]
-
-# Every step `type`, in the order of the Step union.
-STEP_TYPES = [cls.model_fields["type"].default for cls in get_args(get_args(Step)[0])]
 
 
 class DerivedSource(BaseModel):
@@ -465,6 +502,38 @@ class MapItem(BaseModel):
                 f"mapping '{self.to}' needs exactly one of from/const/expr/func/codelist"
             )
         return self
+
+
+class Attributes(StepBase):
+    """Sets and removes attributes mid-pipeline, like FME's AttributeManager: each of
+    `columns` (the mapping's rules) adds a column or overwrites one of the same name, in
+    order, so a column can use the ones set before it; then `drop` removes columns. Every
+    other column passes through."""
+
+    type: Literal["attributes"] = "attributes"
+    columns: list[MapItem] = Field(
+        default_factory=list,
+        description="Columns to add or overwrite, with the same rules as the mapping",
+    )
+    drop: list[str] = Field(default_factory=list, description="Columns to remove")
+
+    @model_validator(mode="after")
+    def _keep_geom(self):
+        if any(c.lower() == "geom" for c in self.drop):
+            raise ValueError("attributes: 'geom' can't be dropped")
+        return self
+
+
+Step = Annotated[
+    Union[
+        SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
+        Dissolve, IntersectOverlay, LineOverlay, Filter, Merge, Snapshot, Attributes,
+    ],
+    Field(discriminator='type'),
+]
+
+# Every step `type`, in the order of the Step union.
+STEP_TYPES = [cls.model_fields["type"].default for cls in get_args(get_args(Step)[0])]
 
 
 class OutputLayer(BaseModel):

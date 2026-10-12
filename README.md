@@ -127,7 +127,8 @@ has a recipe per scheduler and shows how to swap in the new file only after a go
 - **Powered by DuckDB Spatial:** Fast columnar execution, GDAL-backed `ST_Read`/`ST_Write`, and R-tree spatial joins.
 - **Many sources:** GeoPackage, GeoJSON, Shapefile, FlatGeobuf, GML, File Geodatabase, (Geo)Parquet, CSV/Excel/JSON, PostGIS, WFS, OGC API - Features and ArcGIS REST.
 - **Flexible joins:** Spatial joins (intersects/contains/within; keep the first match, the largest overlap, or all matches), attribute joins, and nearest-neighbour searches with an optional distance cap.
-- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve, intersect overlay, filter, and merge (union), chainable like any join step, with `snapshot` to fork the chain into named branches.
+- **Geoprocessing steps:** Buffer, centroid, clip, erase, dissolve (by columns or SQL expressions, with aggregates), intersect overlay, filter, and merge (union), chainable like any join step, with `snapshot` to fork the chain into named branches.
+- **Attributes mid-pipeline:** An `attributes` step adds, overwrites or drops columns between steps, with the same rules as the mapping.
 - **Derived sources:** Build a filtered/buffered view of any source and reuse it as a join source, without a dedicated step.
 - **Rich attribute mapping:** Rename, cast, compute coordinates/MGRS/geohash/area/length, geometry as WKT/WKB, generate UUIDs/row numbers/timestamps, write SQL expressions, or apply rule-based/CSV-based codelist lookups.
 
@@ -279,12 +280,13 @@ Every source also accepts an optional `make_valid: true` to repair invalid geome
 | `centroid`           | `ST_Centroid(geom)` |
 | `clip`               | keep only the geometry intersecting a matching feature from `source` (`ST_Intersection`) |
 | `erase`              | subtract the union of all matching `source` features from the geometry (`ST_Difference`) |
-| `dissolve`           | `ST_Union_Agg(geom)` grouped `by` a list of columns (omit for one feature total) |
+| `dissolve`           | `ST_Union_Agg(geom)` grouped `by` columns or named SQL expressions (omit for one feature total), plus `aggregates` computed per group |
 | `intersect_overlay`  | inner join + `ST_Intersection`, one output row per overlapping pair |
 | `line_overlay`       | line-on-line overlay: cut lines where `source` lines lie on them, shared pieces get `fields`, the rest pass through; optional `tolerance` for lines that are only nearly on top of each other |
 | `filter`             | drop rows where `where` (SQL boolean) is false |
 | `merge`              | append another source's rows via `UNION ALL BY NAME` |
 | `snapshot`           | name the chain's current state (`id:`) so a later step can join back against it or fork a branch |
+| `attributes`         | add or overwrite `columns` (mapping rules, in order) and `drop` columns, mid-pipeline |
 
 Joins, `clip` and `filter` also accept `rejects: <layer>`, which, like an FME transformer's
 Failed port, writes the rows the step rejects (no match, outside the mask, condition not true)

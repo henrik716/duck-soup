@@ -20,12 +20,19 @@ _STEPS = {
     "clip": {},
     "erase": {},
     "dissolve": {"by": ["name"]},
+    "dissolve_exprs": {
+        "type": "dissolve", "by": ["name", {"to": "k", "expr": "upper(name)"}],
+        "aggregates": [{"to": "n", "expr": "count(*)"}],
+    },
     "intersect_overlay": {"fields": {"f": "name"}},
     "line_overlay": {"fields": {"f": "name"}},
     "filter": {"where": "name IS NOT NULL"},
     "merge": {},
+    "attributes": {
+        "columns": [{"to": "u", "expr": "upper(name)"}, {"to": "lon", "func": "lon"}], "drop": ["u"],
+    },
 }
-_SOURCELESS = {"buffer", "centroid", "dissolve", "filter"}
+_SOURCELESS = {"buffer", "centroid", "dissolve", "filter", "attributes"}
 
 
 @pytest.fixture

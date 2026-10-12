@@ -63,9 +63,10 @@ export function attachLiveValidation(opts: LiveValidationOptions): LiveValidatio
           : d.rows.map(r => JSON.stringify((r as Record<string, unknown>)[previewCol])).join(', ')
         render('ok', sample ? `✓ valid — sample: ${sample}` : '✓ valid')
       } else {
-        // A mapping error names the throwaway column the check maps into and its config path
-        // (see MappingError in engine.py): only the error itself means anything here.
-        render('bad', (d.error || 'invalid').split('\n')[0].replace(/^mapping '[^']*' \(\w+\): /, ''))
+        // A mapping error names the throwaway column the check maps into (or the step column
+        // it sets) and its config path (see MappingError in engine.py): only the error itself
+        // means anything here.
+        render('bad', (d.error || 'invalid').split('\n')[0].replace(/^(mapping|step \d+ [\w ]+) '[^']*' \(\w+\): /, ''))
       }
     } catch {
       if (disposed || mySeq !== seq) return

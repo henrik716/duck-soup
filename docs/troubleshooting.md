@@ -99,8 +99,10 @@
     Preview step by step to find which.
 
 ??? question "Columns disappeared after a step"
-    `dissolve` keeps only its `by` columns. Pull the attributes you need back in afterwards
-    with a join, or dissolve on more columns.
+    `dissolve` keeps only its `by` keys and its `aggregates`. Keep a value per group with an
+    aggregate (`any_value(name)`, `sum(population)`, `string_agg(name, ', ')`), dissolve on
+    more columns, or join the attributes back in afterwards. An `attributes` step's `drop`
+    also removes columns.
 
 ??? question "A column I cast is full of NULLs"
     `cast` uses `TRY_CAST`, so values that can't be converted become NULL instead of failing

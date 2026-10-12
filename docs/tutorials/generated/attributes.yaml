@@ -1,0 +1,9 @@
+base: places
+steps:
+- type: attributes
+  columns:
+  - {to: opened, from: opened, cast: INTEGER}
+  - {to: era, expr: "CASE WHEN opened < 1950 THEN 'historic' ELSE 'modern' END"}
+  drop:
+  - inspected
+- {type: filter, where: "era = 'historic'"}

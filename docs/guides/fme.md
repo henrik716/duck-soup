@@ -51,7 +51,7 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 | CenterPointReplacer | [`centroid`](../reference/steps.md#centroid) |
 | Clipper (*inside* output) | [`clip`](../reference/steps.md#clip); its `rejects` layer is the features entirely *outside* |
 | Clipper (*outside* output) | [`erase`](../reference/steps.md#erase) |
-| Dissolver, Aggregator | [`dissolve`](../reference/steps.md#dissolve) |
+| Dissolver, Aggregator | [`dissolve`](../reference/steps.md#dissolve), with `aggregates` for the attribute accumulation (sum, count, concatenate, …) |
 | GeometryValidator (repair) | `make_valid`, on by default for every source |
 | 2DForcer | [`force_2d: true`](../reference/sources.md#3d-geometry) on the source |
 | Reprojector | Automatic: sources are reprojected into the working CRS, and layers into their own `crs` |
@@ -67,7 +67,10 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 
 Attribute work happens in the [mapping](../reference/mapping.md), which lists every output
 column in order. Anything not mapped isn't written, which replaces most AttributeKeeper and
-AttributeRemover use.
+AttributeRemover use. When a step needs a column that doesn't exist yet (a key to dissolve or
+join on, a value to filter by), an [`attributes`](../reference/steps.md#attributes) step sets it
+partway through the pipeline. It takes the same rules as the mapping, plus `drop`, like an
+AttributeManager placed between transformers.
 
 | FME transformer | duck soup mapping |
 |---|---|

@@ -2,10 +2,10 @@ import { mkEl, refreshIcons, esc } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS } from '../state'
 import { comboField, wireCombos, type ComboOptionDef } from '../combo'
-import { collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped } from '../schema'
+import { collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped, stepOutputColumns } from '../schema'
 import { openCodelistDrawer } from './codelist'
-import { openExprDrawer } from '../expr-drawer'
-import { collectPipelineDef } from './pipeline-card'
+import { exprField } from '../expr-field'
+import { fieldPreviewConfig } from '../field-preview'
 import type { CodeList, Config, MapItem } from '../types'
 import { renderIcons } from '../icons'
 
@@ -32,7 +32,13 @@ export interface MapRowElement extends HTMLElement {
   _readMapping(): MapItem | null
 }
 
-export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'): MapRowElement {
+export interface MapRowOptions {
+  /** The preview Config the expression builder checks a draft `expr` with; by default the
+   *  pipeline as drafted, mapping just that expression (see fieldPreviewConfig). */
+  previewConfig?: (draftExpr: string) => Config | null
+}
+
+export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0', opts: MapRowOptions = {}): MapRowElement {
   const wrap = mkEl('div', { className: 'map-item' }) as unknown as MapRowElement
   const row = mkEl('div', { className: 'map-grid' })
   row.style.marginTop = '6px'
@@ -86,12 +92,11 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
 
   let panel: HTMLElement | null = null
   let currentCodelist: Partial<CodeList> = typeof m.codelist === 'object' && m.codelist ? m.codelist : {}
-  // A single-line <input> silently strips \n from its value (the HTML value-sanitization
-  // algorithm for text controls), so a multi-line expression can't live in the row's inline
-  // field without losing its formatting. The real value lives here instead; the inline
-  // input only ever shows a newline-free preview of it — see exprPreviewText() below.
+  // Kept here rather than read back from the field, which only shows a one-line preview of a
+  // multi-line expression (see expr-field.ts).
   let currentExprValue: string = typeof m.expr === 'string' ? m.expr : ''
-  const exprPreviewText = (v: string) => v.includes('\n') ? v.replace(/\s+/g, ' ').trim() : v
+  // The kind the value field was last built for (see onKindChange).
+  let renderedKind = ''
 
   const renderVal = () => {
     valWrap.innerHTML = ''
@@ -99,6 +104,7 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     wrap.classList.remove('has-detail')
 
     const k = normalizeKind(kindSel.value)
+    renderedKind = k
     if (k === 'func') {
       const FUNC_CATEGORIES: Record<string, { name: string, color: string, bg: string }> = {
         uuid: { name: 'ID', color: 'var(--accent)', bg: 'var(--accent-soft)' },
@@ -204,9 +210,7 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
           let originText = ''
           const steps = Array.from(card.querySelectorAll('.pl-steps > .card'))
           for (let i = 0; i < steps.length; i++) {
-            const stepCard = steps[i] as HTMLElement
-            const outputInputs = Array.from(stepCard.querySelectorAll('[data-fields] .kv [data-fo]')) as HTMLInputElement[]
-            if (outputInputs.some(oi => oi.value.trim() === val)) {
+            if (stepOutputColumns(steps[i] as HTMLElement).includes(val)) {
               originText = `step ${i + 1}`
               break
             }
@@ -226,77 +230,22 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
       refreshIcons()
     } else {
       if (k === 'expr') {
-        const wrapperDiv = mkEl('div')
-        const card = row.closest('.pipeline-card')
-        const available = card ? [...collectAvailableColumnsScoped(card)] : []
-        const availableOptions: ComboOptionDef[] = available.map(col => ({
-          value: col,
-          label: `<span style="font-family:var(--mono);">${esc(col)}</span> <span data-tag style="font-size:10px;color:var(--muted);">column</span>`
-        }))
-        wrapperDiv.innerHTML = comboField('', exprPreviewText(currentExprValue), availableOptions, 'SQL expression (e.g. col1 + col2)')
-        const comboEl = wrapperDiv.firstElementChild as HTMLElement
-        const inp = comboEl.querySelector<HTMLInputElement>('input')!
-        inp.classList.add('has-badge')
-
-        const syncReadonly = () => {
-          const multiLine = currentExprValue.includes('\n')
-          inp.readOnly = multiLine
-          inp.title = multiLine ? 'Multi-line expression — use the edit icon to change it' : ''
-        }
-        syncReadonly()
-
-        const editBtn = mkEl('button', { className: 'mini ghost expr-edit-btn', type: 'button' })
-        editBtn.title = 'Open SQL Expression Builder'
-        editBtn.style.cssText = 'position: absolute; right: 28px; top: 50%; transform: translateY(-50%); padding: 4px; z-index: 5; background: transparent; border: none; height: 18px; width: 18px; min-width: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer;'
-        editBtn.innerHTML = '<i data-lucide="edit-3" style="width: 11px; height: 11px; color: var(--accent);"></i>'
-        comboEl.appendChild(editBtn)
-
-        editBtn.addEventListener('click', e => {
-          e.preventDefault()
-          e.stopPropagation()
-          // Looked up here, not reused from `card` above: rows built while hydrating a loaded
-          // config aren't in the DOM yet when that runs, so `card` is null for them — which
-          // left the drawer with no columns and no live check.
-          const plCard = row.closest('.pipeline-card')
-          const availableDetails = plCard ? collectAvailableColumnDetailsScoped(plCard) : []
-          // Builds a throwaway single-column preview config from the pipeline's real
-          // sources/steps as currently drafted in the form, so the drawer can validate the
-          // expression against real sample data via /api/preview without a dedicated
-          // backend endpoint.
-          const buildPreviewConfig = plCard ? (draftExpr: string): Config | null => {
-            const pdef = collectPipelineDef(plCard as HTMLElement)
-            if (!pdef.base) return null
+        valWrap.appendChild(exprField({
+          value: currentExprValue,
+          placeholder: 'SQL expression (e.g. col1 + col2)',
+          onChange: val => { currentExprValue = val; syncFn() },
+          drawer: () => {
+            const plCard = row.closest('.pipeline-card')
             return {
-              name: 'expr_preview',
-              output: 'preview.gpkg',
-              pipelines: [{
-                ...pdef,
-                mapping: [{ to: '_expr_preview', expr: draftExpr }],
-                layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
-              }],
+              columns: plCard ? collectAvailableColumnDetailsScoped(plCard) : [],
+              // The pipeline as drafted in the form, mapping just this expression, so the
+              // drawer can check it against real sample data via /api/preview.
+              buildPreviewConfig: draft => opts.previewConfig
+                ? opts.previewConfig(draft)
+                : fieldPreviewConfig(row, [{ to: '_expr_preview', expr: draft }]),
             }
-          } : undefined
-          openExprDrawer(currentExprValue, availableDetails, val => {
-            currentExprValue = val
-            inp.value = exprPreviewText(currentExprValue)
-            syncReadonly()
-            syncFn()
-          }, buildPreviewConfig)
-        })
-
-        inp.addEventListener('input', () => {
-          if (inp.readOnly) return
-          currentExprValue = inp.value
-          syncFn()
-        })
-        inp.addEventListener('change', () => {
-          if (inp.readOnly) return
-          currentExprValue = inp.value
-          syncFn()
-        })
-        valWrap.appendChild(comboEl)
-        wireCombos(valWrap)
-        refreshIcons()
+          },
+        }))
       } else {
         const inp = mkEl('input')
         inp.placeholder = 'literal value'
@@ -307,9 +256,12 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     }
   }
   renderVal()
+  // Rebuilt only when the kind actually changes: typing a kind fires `input`, then `change`
+  // as the field loses focus, and rebuilding on that second event swapped out the value field
+  // the user had just clicked into, losing the focus and what they typed.
   const onKindChange = () => {
     if (isValidKind(kindSel.value)) lastValidKind = kindSel.value
-    renderVal()
+    if (normalizeKind(kindSel.value) !== renderedKind) renderVal()
     syncFn()
   }
   kindSel.addEventListener('input', onKindChange)

@@ -36,8 +36,8 @@ import duckdb
 from . import sources as src_readers
 from . import mapping, steps
 from .config import (
-    Buffer, Config, NearestNeighbor, OutputLayer, PipelineDef, Snapshot, is_parquet_path,
-    reject_layer_names,
+    Attributes, Buffer, Config, Dissolve, NearestNeighbor, OutputLayer, PipelineDef, Snapshot,
+    is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -50,21 +50,41 @@ from .output import (
 from .sql_util import quote_ident as _ident, quote_literal as _lit, st_transform
 
 class MappingError(ValueError):
-    """A mapping item that doesn't parse or bind (see Engine._check_mapping).
+    """A mapping item, or a column an attributes/dissolve step sets, that doesn't parse or
+    bind (see Engine._check_mapping and Engine._check_step).
 
     The message starts with a line naming the item, for the editor's status, followed by
     the item's config path and the error on the next line: the shape of a validation error,
-    which the editor's Problems tab turns into a link to the mapping row."""
+    which the editor's Problems tab turns into a link to the mapping row or step card.
+    `item` is a MapItem or ExprColumn, or a bare column name (a dissolve key); `label` says
+    what it is ("mapping", "step 3 column", ...)."""
 
-    def __init__(self, path: str, item, error: Exception):
+    def __init__(self, path: str, item, error: Exception, label: str = "mapping"):
         detail = str(error).splitlines()[0].strip()
-        kind = next(
-            k.rstrip("_") for k in ("expr", "from_", "func", "codelist", "const")
-            if getattr(item, k, None) is not None
-        )
-        head = f"mapping '{item.to}' ({kind}): {detail}"
+        if isinstance(item, str):
+            name, kind = item, "column"
+        else:
+            name = item.to
+            kind = next(
+                k.rstrip("_") for k in ("expr", "from_", "func", "codelist", "const")
+                if getattr(item, k, None) is not None
+            )
+        head = f"{label} '{name}' ({kind}): {detail}"
         super().__init__("\n".join([head, path, f"  {detail}"]))
         self.path = path
+
+
+def _parse_error_in_expr(con: duckdb.DuckDBPyConnection, item, error: Exception) -> Exception:
+    """For a parser error in an expression item, the error of parsing that expression on its
+    own (bracketed, as it's compiled), so the message points into the expression rather than
+    at the generated `AS "<to>"` after it."""
+    expr = getattr(item, "expr", None)
+    if expr is not None and isinstance(error, duckdb.ParserException):
+        try:
+            con.extract_statements(f"SELECT ({expr})")
+        except duckdb.ParserException as own_error:
+            return own_error
+    return error
 
 
 class Engine:
@@ -280,7 +300,9 @@ class Engine:
             build = steps.STEP_SQL.get(type(step))
             if build is None:  # pragma: no cover
                 raise ValueError(f"unknown step type: {step}")
-            sql = build(cur, step, lambda m, i=i: self.log(f"step {i}: {m}"))
+            sql = build(cur, step, lambda m, i=i: self.log(f"step {i}: {m}"), self._step_context())
+            if con is not None and isinstance(step, (Attributes, Dissolve)):
+                self._check_step(con, i, step, cur)
             new_view = f"step_{i}"
             self._emit_step(con, step, i, sql, new_view)
             chains[target] = new_view
@@ -289,6 +311,55 @@ class Engine:
             last_branch = target
 
         return chains[last_branch if limit_steps is not None else self._MAIN_BRANCH]
+
+    def _step_context(self) -> steps.StepContext:
+        return steps.StepContext(
+            working_crs=self.working_crs,
+            has_geom=self.p.base_source.has_geometry,
+            base=self.p.base,
+        )
+
+    def _check_step(self, con: duckdb.DuckDBPyConnection, i: int, step, prev: str) -> None:
+        """Plan (not run) step `i`, an attributes or dissolve step, over the view `prev`; if
+        one of the columns it sets doesn't parse or bind, raise MappingError naming it, with
+        its `pipelines.<p>.steps.<i-1>.<field>.<j>` path. Like _check_mapping, but the
+        attribute columns are tried as growing prefixes, since each may use the ones before
+        it."""
+        build = steps.STEP_SQL[type(step)]
+        ctx = self._step_context()
+
+        def plan_error(variant) -> Exception | None:
+            try:
+                con.execute(f"DESCRIBE {build(prev, variant, lambda m: None, ctx)}")
+            except (duckdb.ParserException, duckdb.BinderException) as e:
+                return e
+            return None
+
+        failure = plan_error(step)
+        if failure is None:
+            return
+        if isinstance(step, Attributes):
+            candidates = [
+                ("columns", j, item, "column", step.model_copy(update={"columns": step.columns[:j + 1], "drop": []}))
+                for j, item in enumerate(step.columns)
+            ]
+        else:
+            candidates = [
+                ("by", j, key, "group key", step.model_copy(update={"by": step.by[:j + 1], "aggregates": []}))
+                for j, key in enumerate(step.by)
+            ] + [
+                ("aggregates", j, agg, "aggregate", step.model_copy(update={"aggregates": [agg]}))
+                for j, agg in enumerate(step.aggregates)
+            ]
+        for field, j, item, what, variant in candidates:
+            error = plan_error(variant)
+            if error is None:
+                continue
+            raise MappingError(
+                f"pipelines.{self.pipeline_index}.steps.{i - 1}.{field}.{j}", item,
+                _parse_error_in_expr(con, item, error), label=f"step {i} {what}",
+            )
+        raise failure
 
     # -- mapping ------------------------------------------------------------
     def _check_mapping(self, con: duckdb.DuckDBPyConnection, prev: str, layer: OutputLayer) -> None:
@@ -312,13 +383,7 @@ class Engine:
                 continue
             except (duckdb.ParserException, duckdb.BinderException) as e:
                 error = e
-            if item.expr is not None and isinstance(error, duckdb.ParserException):
-                # Parsed on its own (bracketed, as mapping.map_expr does), so the message points
-                # into the expression rather than at the generated `AS "<to>"` after it.
-                try:
-                    con.extract_statements(f"SELECT ({item.expr})")
-                except duckdb.ParserException as own_error:
-                    error = own_error
+            error = _parse_error_in_expr(con, item, error)
             where = f"layers.{layer_idx}.mapping.{j}" if own else f"mapping.{j}"
             raise MappingError(f"pipelines.{self.pipeline_index}.{where}", item, error)
         raise failure
@@ -353,6 +418,7 @@ class Engine:
                 uses.append(f"step {i} (nearest_neighbor distance)")
         uses += [f"derived source '{ds.id}' (buffer)" for ds in self.p.derived_sources if ds.buffer is not None]
         mappings = [self.p.mapping] + [layer.mapping for layer in self.p.layers if layer.mapping]
+        mappings += [step.columns for step in self.p.steps if isinstance(step, Attributes)]
         funcs = sorted({m.func for items in mappings for m in items if m.func in mapping.MEASURE_FUNCS})
         uses += [f"mapping func '{f}'" for f in funcs]
         if not uses:

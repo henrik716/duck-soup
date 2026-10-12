@@ -35,7 +35,7 @@ or visually in a browser-based editor. duck soup runs it inside **DuckDB** with 
 -   :material-vector-intersection: **Join and geoprocess**
 
     Spatial joins, attribute joins, nearest-neighbour search, buffer, centroid, clip,
-    erase, dissolve, overlay, filter and merge, chained in any order.
+    erase, dissolve, overlay, filter, merge and attribute steps, chained in any order.
     [Step types →](reference/steps.md)
 
 -   :material-table-column: **Shape the output schema**

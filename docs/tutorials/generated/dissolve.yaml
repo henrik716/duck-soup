@@ -3,3 +3,6 @@ steps:
 - type: dissolve
   by:
   - ward
+  aggregates:
+  - {to: population, expr: "sum(population)"}
+  - {to: districts, expr: "string_agg(district_name, ', ' ORDER BY district_name)"}

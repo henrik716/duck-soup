@@ -144,14 +144,27 @@ export function resolveSchemaScoped(scope: Element, id: string, seen = new Set<s
   return []
 }
 
+/** The columns a step card adds to the rows: a join's pulled fields (and nearest_neighbor's
+ *  distance field), the columns an attributes step sets, a dissolve's named keys and its
+ *  aggregates. */
+export function stepOutputColumns(stepCard: Element): string[] {
+  const values = (sel: string) => [...stepCard.querySelectorAll<HTMLInputElement>(sel)]
+    .map(i => i.value.trim()).filter(Boolean)
+  // A dissolve key without a name is a column that's already there.
+  return [
+    ...values('[data-fields] .kv [data-fo]'),
+    ...values('[data-k="distance_field"]'),
+    ...values('.st-columns > .map-item [data-to]'),
+    ...values('[data-by-as]'),
+    ...values('[data-agg-to]'),
+  ]
+}
+
 export function collectAvailableColumnsScoped(scope: Element): Set<string> {
   const baseId = scope.querySelector<HTMLInputElement>('.pl-base')?.value
   const cols = new Set<string>()
   if (baseId && SOURCE_SCHEMAS[baseId]) SOURCE_SCHEMAS[baseId].forEach(c => cols.add(c.name))
-  scope.querySelectorAll('.pl-steps [data-fields] .kv').forEach(r => {
-    const out = r.querySelector<HTMLInputElement>('[data-fo]')?.value?.trim()
-    if (out) cols.add(out)
-  })
+  scope.querySelectorAll('.pl-steps > .card').forEach(st => stepOutputColumns(st).forEach(c => cols.add(c)))
   return cols
 }
 
@@ -203,8 +216,7 @@ export function collectAvailableColumnDetailsScoped(scope: Element): AvailableCo
     for (let i = 0; i < steps.length; i++) {
       const stepCard = steps[i] as HTMLElement
       const stepType = stepCard.dataset['type'] || ''
-      const outputInputs = Array.from(stepCard.querySelectorAll('[data-fields] .kv [data-fo]')) as HTMLInputElement[]
-      if (outputInputs.some(oi => oi.value.trim() === col)) {
+      if (stepOutputColumns(stepCard).includes(col)) {
         origin = `step ${i + 1} (${stepType})`
         break
       }

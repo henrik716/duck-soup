@@ -12,7 +12,7 @@ import { openStepGalleryModal } from '../step-gallery'
 import { sourceCard } from './source-card'
 import { wireSourceUpload } from './source-upload'
 import { derivedSourceCard } from './derived-source-card'
-import { stepCard, KINDS_WITH_REJECTS } from './step-card'
+import { stepCard, KINDS_WITH_REJECTS, readAggregates, readAttributes, readByKeys } from './step-card'
 import { mapRow, type MapRowElement } from './map-row'
 import { outputLayerCard, readLayerMapping } from './output-layer-card'
 import type { DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
@@ -693,8 +693,15 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
       st['distance'] = parseFloat(val(c, 'distance')) || 0
     }
     if (t === 'dissolve') {
-      st['by'] = [...c.querySelectorAll<HTMLInputElement>('[data-by-col]')]
-        .map(i => i.value.trim()).filter(Boolean)
+      st['by'] = readByKeys(c)
+      // Only written when there are any, so existing YAML round-trips unchanged.
+      const aggregates = readAggregates(c)
+      if (aggregates.length) st['aggregates'] = aggregates
+    }
+    if (t === 'attributes') {
+      const { columns, drop } = readAttributes(c)
+      st['columns'] = columns
+      if (drop.length) st['drop'] = drop
     }
     if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay'].includes(t)) {
       const f: Record<string, string> = {}

@@ -306,7 +306,7 @@ def test_plan_lists_every_view_without_reading_data(tmp_path):
     sql = "\n".join(e["sql"] for e in plan)
     assert "missing.geojson" in sql and "ST_Transform" in sql
     assert "s3cret" not in sql
-    assert plan[-1]["sql"].startswith("WITH base4326")
+    assert plan[-1]["sql"].startswith("WITH enriched")
     assert "WHERE NOT __matched" in plan[7]["sql"]
 
 

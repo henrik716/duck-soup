@@ -71,6 +71,13 @@ export function openStepGalleryModal(onSelect: (type: Step['type']) => void): vo
                 <span class="desc">Merge geometries that share the same group-by attribute value.</span>
               </div>
             </div>
+            <div class="step-gallery-item" data-type="attributes">
+              <div class="step-gallery-icon"><i data-lucide="table-properties"></i></div>
+              <div class="step-gallery-info">
+                <span class="name">Attribute Manager</span>
+                <span class="desc">Add, overwrite or remove columns mid-pipeline, with the mapping's rules (SQL, functions, codelists).</span>
+              </div>
+            </div>
             <div class="step-gallery-item" data-type="intersect_overlay">
               <div class="step-gallery-icon"><i data-lucide="git-merge"></i></div>
               <div class="step-gallery-info">

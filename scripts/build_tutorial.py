@@ -328,8 +328,13 @@ EXAMPLES: dict[str, dict] = {
         },
     },
     "dissolve": {
-        "pipeline": {"base": "districts", "steps": [{"type": "dissolve", "by": ["ward"]}]},
-        "table": [("ward", "ward"), ("area_ha", "round(ST_Area(geom) / 10000, 1)")],
+        "pipeline": {"base": "districts", "steps": [{"type": "dissolve", "by": ["ward"], "aggregates": [
+            {"to": "population", "expr": "sum(population)"},
+            {"to": "districts", "expr": "string_agg(district_name, ', ' ORDER BY district_name)"},
+        ]}]},
+        "table": [("ward", "ward"), ("population", "population"), ("districts", "districts"),
+                  ("area_ha", "round(ST_Area(geom) / 10000, 1)")],
+        "order": "ward",
         "figure": {
             "before": [("SELECT geom FROM districts", "base")],
             "after": [("SELECT geom FROM out", "out")],
@@ -403,6 +408,17 @@ EXAMPLES: dict[str, dict] = {
                       ("SELECT ST_Buffer(geom, 250) FROM places WHERE bread_crumbs >= 50000", "ref"),
                       ("SELECT DISTINCT ON (name) geom, CASE WHEN near_hotspot IS NULL THEN 'miss' ELSE 'out' END FROM out ORDER BY name", None)],
         },
+    },
+    "attributes": {
+        "pipeline": {"base": "places", "steps": [
+            {"type": "attributes", "columns": [
+                {"to": "opened", "from": "opened", "cast": "INTEGER"},
+                {"to": "era", "expr": "CASE WHEN opened < 1950 THEN 'historic' ELSE 'modern' END"},
+            ], "drop": ["inspected"]},
+            {"type": "filter", "where": "era = 'historic'"},
+        ]},
+        "table": [("name", "name"), ("opened", "opened"), ("era", "era")],
+        "order": "opened",
     },
 }
 

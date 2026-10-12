@@ -486,6 +486,9 @@ pipelines:
   - type: dissolve
     by:
     - ward
+    aggregates:
+    - {to: population, expr: "sum(population)"}
+    - {to: districts, expr: "string_agg(district_name, ', ' ORDER BY district_name)"}
   mapping: []
   layers:
   - {layer: dissolve, crs: 'EPSG:32631'}
@@ -739,6 +742,58 @@ pipelines:
   mapping: []
   layers:
   - {layer: snapshot, crs: 'EPSG:32631'}
+- name: attributes
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  base: places
+  steps:
+  - type: attributes
+    columns:
+    - {to: opened, from: opened, cast: INTEGER}
+    - {to: era, expr: "CASE WHEN opened < 1950 THEN 'historic' ELSE 'modern' END"}
+    drop:
+    - inspected
+  - {type: filter, where: "era = 'historic'"}
+  mapping: []
+  layers:
+  - {layer: attributes, crs: 'EPSG:32631'}
 - name: map_basic
   working_crs: EPSG:32631
   sources:

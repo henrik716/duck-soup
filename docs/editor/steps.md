@@ -29,6 +29,7 @@ step somewhere in the middle, click the **+** on that connection in the
 | Filter | `filter` | Drop rows where a SQL condition is false. |
 | Merge / Union | `merge` | Append another source's rows, matched by column name. |
 | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
+| Attribute Manager | `attributes` | Add, overwrite or remove columns partway through the pipeline. |
 
 ## The step card
 
@@ -36,7 +37,9 @@ step somewhere in the middle, click the **+** on that connection in the
 ![The steps tab with an expanded spatial join](../assets/screenshots/steps-tab-dark.png#only-dark){ .screenshot loading=lazy }
 
 The header shows the step's type and a short summary, such as `→ ponds` for a join source,
-`(50m)` for a buffer, or `@personal_space` when the step runs on a branch. Hover the type to see what the step does. The header buttons are:
+`(50m)` for a buffer, `by pond · Σ 2` for a dissolve with two aggregates, `+3 · −1` for an
+attributes step that sets three columns and drops one, or `@personal_space` when the step runs
+on a branch. Hover the type to see what the step does. The header buttons are:
 
 - :material-eye: **Preview up to this step** shows the rows exactly as they are after this
   step, on the map and in the table, before the mapping is applied. The card is highlighted
@@ -65,8 +68,21 @@ The body depends on the step type:
 - **where**: for a filter, a SQL boolean such as `pond IS NOT NULL`, checked live against
   sample data.
 - **distance**, **max distance**, **distance field**: in working-CRS units.
-- **group by columns**: for dissolve. Leave it empty to dissolve everything into one feature.
-  Every column not listed is dropped.
+- **group by**: for dissolve, the keys features are grouped on. A key is a column, or a SQL
+  expression with a name in **as**, to group by a computed value. Leave the list empty to
+  dissolve everything into one feature.
+- **aggregates**: for dissolve, columns computed per group: a name, and a SQL aggregate such as
+  `sum(population)` or `string_agg(name, ', ')`. The expression builder (the pencil icon) lists
+  the aggregate functions first. Its live check runs the dissolve, so it catches a column used
+  outside an aggregate. Only the keys and aggregates are kept. Every other column is dropped.
+- **set columns**: for an attributes step, rows like the [mapping](mapping.md)'s: a column
+  name, a rule (`from`, `const`, `expr`, `func`, `codelist`) and an optional cast. They run top
+  to bottom, so an expression can use a column set in a row above it, and its live check sees
+  that column. Drag the grip to reorder.
+- **drop columns**: for an attributes step, columns to remove after the ones above are set.
+- **expressions**: any SQL field with a pencil icon (a mapping or attribute `expr`, a dissolve
+  key or aggregate) opens the [expression builder](mapping.md#expression-builder), which checks
+  the expression against the rows that reach this step.
 - **rejects → output layer**: on joins, `clip` and `filter`, a layer for the rows the step
   rejects (no match, outside the mask, condition not true). Those rows then go there instead of
   on down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).

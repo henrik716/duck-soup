@@ -156,6 +156,7 @@ const STEP_ICON: Record<string, string> = {
   spatial_join: 'map-pin', attribute_join: 'git-merge', nearest_neighbor: 'crosshair', buffer: 'maximize-2',
   centroid: 'crosshair', clip: 'scissors', erase: 'eraser', dissolve: 'layers', intersect_overlay: 'crosshair',
   line_overlay: 'split', filter: 'filter', snapshot: 'camera', merge: 'git-merge',
+  attributes: 'table-properties',
 }
 
 // ---- row counts --------------------------------------------------------------

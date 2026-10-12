@@ -1,6 +1,6 @@
 """The SQL of each pipeline step.
 
-Each `<type>_sql(prev, step, log)` returns the SELECT computing the step from the view
+Each `<type>_sql(prev, step, log, ctx)` returns the SELECT computing the step from the view
 `prev`; Engine._build_step_views creates it as the view `step_<i>`. Source `x` is read
 from its view `src_x`. With `step.rejects` set, the SELECT carries a boolean `__matched`
 column that Engine._emit_step splits on (see the engine module docstring).
@@ -11,15 +11,26 @@ chain before it (tests/test_step_reads.py).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Callable
 
+from . import mapping
 from .config import (
-    AttributeJoin, Buffer, Centroid, Clip, Dissolve, Erase, Filter, IntersectOverlay,
-    LineOverlay, Merge, NearestNeighbor, SpatialJoin,
+    AttributeJoin, Attributes, Buffer, Centroid, Clip, Dissolve, Erase, ExprColumn, Filter,
+    IntersectOverlay, LineOverlay, Merge, NearestNeighbor, SpatialJoin,
 )
 from .sql_util import quote_ident as _ident, quote_literal as _lit
 
 Log = Callable[[str], None]
+
+
+@dataclass(frozen=True)
+class StepContext:
+    """What a builder may need to know about the pipeline besides its own step."""
+
+    working_crs: str
+    has_geom: bool  # whether the base source has geometry
+    base: str  # the base source's id, for error messages
 
 _PREDICATE_SQL = {
     "intersects": "ST_Intersects",
@@ -52,7 +63,7 @@ def _src(sid: str) -> str:
     return _ident(f"src_{sid}")
 
 
-def spatial_join_sql(prev: str, step: SpatialJoin, log: Log) -> str:
+def spatial_join_sql(prev: str, step: SpatialJoin, log: Log, _ctx: StepContext) -> str:
     pred = _PREDICATE_SQL[step.predicate]
     src_view = _src(step.source)
 
@@ -86,7 +97,7 @@ def spatial_join_sql(prev: str, step: SpatialJoin, log: Log) -> str:
     log(f"spatial_join {step.predicate} {step.source} (on_multiple={step.on_multiple})")
     return select
 
-def nearest_neighbor_sql(prev: str, step: NearestNeighbor, log: Log) -> str:
+def nearest_neighbor_sql(prev: str, step: NearestNeighbor, log: Log, _ctx: StepContext) -> str:
     src_view = _src(step.source)
     dist_expr = "ST_Distance(a.geom, b.geom)"
     fields = {out: f"b.{_ident(col)}" for out, col in step.fields.items()}
@@ -173,7 +184,7 @@ def _best_match_select(
         columns=f"a.* EXCLUDE (__a_row){pulled}{matched}",
     )
 
-def attribute_join_sql(prev: str, step: AttributeJoin, log: Log) -> str:
+def attribute_join_sql(prev: str, step: AttributeJoin, log: Log, _ctx: StepContext) -> str:
     src_view = _src(step.source)
     pulled = ", ".join(f"j.{_ident(out)}" for out in step.fields)
     inner = [f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()]
@@ -181,20 +192,23 @@ def attribute_join_sql(prev: str, step: AttributeJoin, log: Log) -> str:
     if step.rejects:
         inner.append("1 AS __hit")
         matched = ", j.__hit IS NOT NULL AS __matched"
+    # `left` is computed on the running row before the join: written inside the subquery, an
+    # unqualified column in it would resolve to the join source's column of that name
+    # whenever there is one, matching every row against itself.
     sql = f"""
-    SELECT a.*{(', ' + pulled) if pulled else ''}{matched}
-    FROM {_ident(prev)} a
+    SELECT a.* EXCLUDE (__left){(', ' + pulled) if pulled else ''}{matched}
+    FROM (SELECT *, ({step.left}) AS __left FROM {_ident(prev)}) a
     LEFT JOIN LATERAL (
         SELECT {', '.join(inner) if inner else '1'}
         FROM {src_view} b
-        WHERE b.{_ident(step.right)} = ({step.left})
+        WHERE b.{_ident(step.right)} = a.__left
         LIMIT 1
     ) j ON true
     """
     log(f"attribute_join {step.source} on {step.right}")
     return sql
 
-def buffer_sql(prev: str, step: Buffer, log: Log) -> str:
+def buffer_sql(prev: str, step: Buffer, log: Log, _ctx: StepContext) -> str:
     sql = f"""
     SELECT * EXCLUDE (geom), ST_Buffer(geom, {step.distance}) AS geom
     FROM {_ident(prev)}
@@ -202,7 +216,7 @@ def buffer_sql(prev: str, step: Buffer, log: Log) -> str:
     log(f"buffer {step.distance}")
     return sql
 
-def centroid_sql(prev: str, _step: Centroid, log: Log) -> str:
+def centroid_sql(prev: str, _step: Centroid, log: Log, _ctx: StepContext) -> str:
     sql = f"""
     SELECT * EXCLUDE (geom), ST_Centroid(geom) AS geom
     FROM {_ident(prev)}
@@ -210,7 +224,7 @@ def centroid_sql(prev: str, _step: Centroid, log: Log) -> str:
     log("centroid")
     return sql
 
-def clip_sql(prev: str, step: Clip, log: Log) -> str:
+def clip_sql(prev: str, step: Clip, log: Log, _ctx: StepContext) -> str:
     pred = _PREDICATE_SQL[step.predicate]
     src_view = _src(step.source)
     on = f"{pred}(a.geom, b.geom)"
@@ -242,7 +256,7 @@ def clip_sql(prev: str, step: Clip, log: Log) -> str:
     """
     return select
 
-def erase_sql(prev: str, step: Erase, log: Log) -> str:
+def erase_sql(prev: str, step: Erase, log: Log, _ctx: StepContext) -> str:
     pred = _PREDICATE_SQL[step.predicate]
     src_view = _src(step.source)
     select = _erase_select(prev, src_view, f"{pred}(a.geom, b.geom)")
@@ -262,28 +276,72 @@ def _erase_select(prev: str, src_view: str, on: str) -> str:
         ),
     ))
 
-def dissolve_sql(prev: str, step: Dissolve, log: Log) -> str:
+def _expr_column(col: ExprColumn) -> str:
+    """`col` as a SELECT item. Bracketed, like mapping.map_expr, so an expression with a
+    top-level operator stays one expression."""
+    return f"({col.expr}) AS {_ident(col.to)}"
+
+
+def dissolve_sql(prev: str, step: Dissolve, log: Log, _ctx: StepContext) -> str:
     # Dissolved features are new rows, so they get a fresh __src_row: later steps and
     # the final SELECT expect every feature to carry one (match ranking when this branch
     # is a join source, and the default "all columns" output, which excludes it).
-    if step.by:
-        by_cols = ", ".join(_ident(c) for c in step.by)
+    keys = [_ident(k) if isinstance(k, str) else _expr_column(k) for k in step.by]
+    aggs = "".join(f", {_expr_column(a)}" for a in step.aggregates)
+    if keys:
+        # Grouped by position, so an expression key is written once (with its name).
+        positions = ", ".join(str(n) for n in range(1, len(keys) + 1))
         sql = f"""
         SELECT *, row_number() OVER () AS __src_row FROM (
-            SELECT {by_cols}, ST_Union_Agg(geom) AS geom
+            SELECT {', '.join(keys)}, ST_Union_Agg(geom) AS geom{aggs}
             FROM {_ident(prev)}
-            GROUP BY {by_cols}
+            GROUP BY {positions}
         )
         """
     else:
         sql = f"""
-        SELECT ST_Union_Agg(geom) AS geom, 1 AS __src_row
+        SELECT ST_Union_Agg(geom) AS geom{aggs}, 1 AS __src_row
         FROM {_ident(prev)}
         """
-    log(f"dissolve by {step.by or '(all)'}")
+    names = [k if isinstance(k, str) else f"{k.to} = {k.expr}" for k in step.by]
+    suffix = f" with {', '.join(a.to for a in step.aggregates)}" if step.aggregates else ""
+    log(f"dissolve by {names or '(all)'}{suffix}")
     return sql
 
-def intersect_overlay_sql(prev: str, step: IntersectOverlay, log: Log) -> str:
+
+def attributes_sql(prev: str, step: Attributes, log: Log, ctx: StepContext) -> str:
+    """Every column of `prev`, with step.columns set in order (each one added, or replacing
+    the column of that name) and step.drop removed.
+
+    One SELECT per column, each over the one before it, so a column can use the ones set
+    before it, as in FME's AttributeManager. They're nested subqueries over one read of
+    `prev`, which DuckDB folds into a single projection. The column being set is left out
+    of the SELECT * with COLUMNS(lambda), not EXCLUDE, which errors when the column isn't
+    there yet; a replaced column therefore moves to the end of the row. `__keep` rides along
+    so that lambda never matches nothing (COLUMNS errors on an empty set), e.g. when the only
+    column of a table without geometry is replaced.
+    """
+    mapping.check_geometry_funcs(step.columns, ctx.has_geom, ctx.base)
+    helpers = ctx.has_geom and any(c.func in mapping.GEO4326_FUNCS for c in step.columns)
+    sql = f"SELECT *, NULL AS __keep FROM {_ident(prev)}"
+    if helpers:
+        sql = mapping.with_geo_helpers(f"({sql})", ctx.working_crs)
+    for col in step.columns:
+        sql = f"""
+        SELECT COLUMNS(lambda c: lower(c) <> {_lit(col.to.lower())}), {mapping.map_expr(col)}
+        FROM ({sql})"""
+    hidden = [c.lower() for c in step.drop] + ["__keep"]
+    hidden += ["__geom4326", "__centroid4326"] if helpers else []
+    listed = ", ".join(_lit(c) for c in hidden)
+    sql = f"""
+        SELECT COLUMNS(lambda c: lower(c) NOT IN ({listed}))
+        FROM ({sql})"""
+    parts = [f"set {', '.join(c.to for c in step.columns)}"] if step.columns else []
+    parts += [f"drop {', '.join(step.drop)}"] if step.drop else []
+    log(f"attributes: {'; '.join(parts) or '(nothing)'}")
+    return sql
+
+def intersect_overlay_sql(prev: str, step: IntersectOverlay, log: Log, _ctx: StepContext) -> str:
     src_view = _src(step.source)
     b_fields = ", ".join(
         f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()
@@ -309,7 +367,7 @@ _LINE_OVERLAY_EXACT = 1e-6
 # otherwise leave a stretch of 2 x tolerance around the crossing.
 _LINE_OVERLAY_MIN_ALIGNMENT = 0.95
 
-def line_overlay_sql(prev: str, step: LineOverlay, log: Log) -> str:
+def line_overlay_sql(prev: str, step: LineOverlay, log: Log, _ctx: StepContext) -> str:
     """Each running line cut where it lies within `tolerance` of a source line; every
     piece is one row, with `fields` from the source line it lies on (the first one, in
     source row order, where several do) or NULL.
@@ -414,7 +472,7 @@ def line_overlay_sql(prev: str, step: LineOverlay, log: Log) -> str:
     log(f"line_overlay {step.source}{suffix}")
     return select
 
-def filter_sql(prev: str, step: Filter, log: Log) -> str:
+def filter_sql(prev: str, step: Filter, log: Log, _ctx: StepContext) -> str:
     if step.rejects:
         sql = f"SELECT *, ({step.where}) IS TRUE AS __matched FROM {_ident(prev)}"
     else:
@@ -425,7 +483,7 @@ def filter_sql(prev: str, step: Filter, log: Log) -> str:
     log(f"filter {step.where}")
     return sql
 
-def merge_sql(prev: str, step: Merge, log: Log) -> str:
+def merge_sql(prev: str, step: Merge, log: Log, _ctx: StepContext) -> str:
     src_view = _src(step.source)
     sql = f"""
     SELECT * FROM {_ident(prev)}
@@ -459,4 +517,5 @@ STEP_SQL: dict[type, Callable[..., str]] = {
     LineOverlay: line_overlay_sql,
     Filter: filter_sql,
     Merge: merge_sql,
+    Attributes: attributes_sql,
 }

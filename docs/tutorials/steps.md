@@ -256,8 +256,12 @@ shape itself.
 
 - The four districts become the two wards, Upstream and Downstream. Leave `by` out to merge
   everything into a single feature (a town boundary, for example).
-- **Every column not listed in `by` is dropped**, since there's no single value to keep for
-  it. Join the attributes back afterwards if you need them.
+- **Only the `by` keys and the `aggregates` are kept**, since the other columns have no
+  single value per ward. An aggregate computes one: `sum(population)` adds up the districts'
+  populations, and `string_agg` lists their names. `count(*)`, `min`, `max`, `avg` and
+  `any_value` work the same way.
+- A key can also be a SQL expression with a name, such as
+  `{to: initial, expr: "left(district_name, 1)"}`, to group by a computed value.
 
 ## Rows: choose which rows flow on
 
@@ -327,3 +331,24 @@ What happens, step by step:
 
 Output layers are always written from the main chain. A branch is only useful as the `source`
 of a later step.
+
+## Attributes: set columns between steps
+
+### `attributes`
+
+**Adds, overwrites or removes columns** partway through the chain, for a later step to use.
+
+```yaml
+--8<-- "docs/tutorials/generated/attributes.yaml"
+```
+
+--8<-- "docs/tutorials/generated/attributes.md"
+
+- `columns` takes the same rules as the [mapping](mapping.md). `opened` is text in the
+  source, and the first column overwrites it with a number (`cast: INTEGER`).
+- The columns are set in order, so `era` can compare the `opened` set just above it.
+- The `filter` after it can then use `era`, a column that doesn't exist in the source.
+  Without the attributes step, the filter would have to repeat the whole `CASE` expression.
+- `drop` removes columns. Every column not mentioned passes through unchanged. Here that's
+  everything except `inspected`.
+

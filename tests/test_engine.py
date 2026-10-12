@@ -650,3 +650,183 @@ def test_run_reports_a_mapping_error_before_writing(tmp_path):
     head, path, _ = _mapping_error(tmp_path, [{"to": "x", "expr": "nope + 1"}], run=True)
     assert head.startswith("mapping 'x' (expr): Binder Error") and path == "pipelines.0.mapping.0"
     assert not (tmp_path / "out.gpkg").exists()
+
+
+# ---- attributes step / dissolve keys and aggregates -------------------------
+
+def test_attributes_step_sets_columns_in_order_and_drops(tmp_path):
+    base = [("oslo-1", _point(262000, 6649000)), ("oslo-2", _point(262100, 6649000))]
+    steps = [{"type": "attributes", "columns": [
+        {"to": "city", "expr": "split_part(name, '-', 1)"},
+        {"to": "key", "expr": "upper(city)"},  # uses the column set just before it
+        {"to": "n", "expr": "split_part(name, '-', 2)", "cast": "INTEGER"},
+        {"to": "kind", "codelist": {"source": "city", "cases": [{"match": "oslo", "value": "capital"}]}},
+        {"to": "lon", "func": "lon"},
+        {"to": "label", "from": "name"},
+        {"to": "name", "expr": "name || '!'"},  # overwrites in place
+    ], "drop": ["label"]}]
+    cfg = _config(tmp_path, base, steps, [], working_crs="EPSG:25833")
+    rows = sorted(preview_config_pipeline(cfg, limit=10), key=lambda r: r["n"])
+    assert [(r["name"], r["city"], r["key"], r["n"], r["kind"]) for r in rows] == [
+        ("oslo-1!", "oslo", "OSLO", 1, "capital"), ("oslo-2!", "oslo", "OSLO", 2, "capital"),
+    ]
+    assert rows[0]["lon"] == pytest.approx(10.7, abs=0.1)
+    assert not {"label", "__keep", "__geom4326", "__centroid4326"} & set(rows[0])
+
+
+def test_attributes_step_feeds_later_steps(tmp_path):
+    base = [("a", _point(0, 0)), ("b", _point(10, 0)), ("c", _point(20, 0))]
+    steps = [
+        {"type": "attributes", "columns": [{"to": "keep", "expr": "name <> 'b'"}]},
+        {"type": "filter", "where": "keep"},
+    ]
+    cfg = _config(tmp_path, base, steps, [{"to": "name", "from": "name"}], working_crs="EPSG:25833")
+    assert sorted(r["name"] for r in preview_config_pipeline(cfg, limit=10)) == ["a", "c"]
+    with sqlite3.connect(run_config(cfg)) as con:
+        assert sorted(n for (n,) in con.execute('SELECT name FROM "out"')) == ["a", "c"]
+
+
+def test_attributes_step_replaces_the_only_column_of_a_table():
+    import duckdb
+
+    from duck_soup.config import Attributes
+    from duck_soup.derive import init_duckdb
+    from duck_soup.steps import StepContext, attributes_sql
+
+    con = duckdb.connect()
+    init_duckdb(con)
+    con.execute("CREATE VIEW one_col AS SELECT 'a' AS name")
+    step = Attributes(columns=[{"to": "name", "expr": "upper(name)"}])
+    sql = attributes_sql("one_col", step, lambda m: None, StepContext("EPSG:25833", False, "b"))
+    assert con.execute(sql).fetchall() == [("A",)]
+
+
+def test_attributes_step_refuses_geometry_funcs_and_measures_in_degrees(tmp_path):
+    csv = tmp_path / "plain.csv"
+    csv.write_text("name\na\n", encoding="utf-8")
+    cfg = load_config_dict({
+        "name": "t", "sources": [{"id": "base", "format": "csv", "uri": str(csv)}], "base": "base",
+        "steps": [{"type": "attributes", "columns": [{"to": "x", "func": "x"}]}],
+        "mapping": [], "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out"},
+    })
+    with pytest.raises(ValueError, match="has no geometry"):
+        preview_config_pipeline(cfg, limit=10)
+
+    area = [{"type": "attributes", "columns": [{"to": "a", "func": "area"}]}]
+    geographic = _config(tmp_path, [("p", _point(10.75, 59.91))], area, [], base_crs="EPSG:4326")
+    with pytest.raises(ValueError, match="in degrees"):
+        preview_config_pipeline(geographic, limit=10)
+
+
+def test_attributes_step_cannot_drop_geom(tmp_path):
+    with pytest.raises(ValueError, match="'geom' can't be dropped"):
+        _config(tmp_path, [("p", _point(0, 0))], [{"type": "attributes", "drop": ["geom"]}], [])
+
+
+def test_dissolve_by_expression_with_aggregates(tmp_path):
+    base = [("a-1", _square(0, 0, 1, 1)), ("a-22", _square(1, 0, 2, 1)), ("b-1", _square(5, 0, 6, 1))]
+    steps = [{"type": "dissolve", "by": [{"to": "group", "expr": "split_part(name, '-', 1)"}], "aggregates": [
+        {"to": "n", "expr": "count(*)"},
+        {"to": "total", "expr": "sum(length(name))"},
+        {"to": "names", "expr": "string_agg(name, ',' ORDER BY name)"},
+        {"to": "area", "expr": "sum(ST_Area(geom))"},
+    ]}]
+    cfg = _config(tmp_path, base, steps, [], working_crs="EPSG:25833")
+    rows = sorted(preview_config_pipeline(cfg, limit=10), key=lambda r: r["group"])
+    assert [(r["group"], r["n"], r["total"], r["names"], r["area"]) for r in rows] == [
+        ("a", 2, 7, "a-1,a-22", 2.0), ("b", 1, 3, "b-1", 1.0),
+    ]
+    assert _gpkg_layers(Path(run_config(cfg))) == {"out": 2}
+
+
+def test_dissolve_mixes_column_and_expression_keys_and_aggregates_without_keys(tmp_path):
+    base = [("a", _square(0, 0, 1, 1)), ("a", _square(1, 0, 2, 1)), ("b", _square(5, 0, 6, 1))]
+    keyed = [{"type": "dissolve", "by": ["name", {"to": "big", "expr": "upper(name)"}]}]
+    rows = preview_config_pipeline(_config(tmp_path, base, keyed, [], working_crs="EPSG:25833"), limit=10)
+    assert sorted((r["name"], r["big"]) for r in rows) == [("a", "A"), ("b", "B")]
+
+    everything = [{"type": "dissolve", "aggregates": [{"to": "n", "expr": "count(*)"}]}]
+    (row,) = preview_config_pipeline(_config(tmp_path, base, everything, [], working_crs="EPSG:25833"), limit=10)
+    assert row["n"] == 3
+
+
+def test_dissolve_output_names_must_be_unique(tmp_path):
+    steps = [{"type": "dissolve", "by": ["name"], "aggregates": [{"to": "NAME", "expr": "count(*)"}]}]
+    with pytest.raises(ValueError, match="column 'NAME' is produced twice"):
+        _config(tmp_path, [("p", _point(0, 0))], steps, [])
+
+
+def _step_error(tmp_path, steps):
+    from duck_soup.engine import MappingError
+
+    base = [("a", _square(0, 0, 1, 1))]
+    cfg = _config(tmp_path, base, steps, [], working_crs="EPSG:25833")
+    with pytest.raises(MappingError) as info:
+        preview_config_pipeline(cfg, limit=5)
+    return str(info.value).split("\n")
+
+
+def test_step_column_errors_name_the_column_and_its_path(tmp_path):
+    buffer = {"type": "buffer", "distance": 1}
+    good = {"to": "up", "expr": "upper(name)"}
+
+    head, path, _ = _step_error(tmp_path, [buffer, {"type": "attributes", "columns": [
+        good, {"to": "w", "expr": "least(1, 2"},
+    ]}])
+    assert head.startswith("step 2 column 'w' (expr): Parser Error: syntax error at end of input")
+    assert path == "pipelines.0.steps.1.columns.1"
+
+    head, path, _ = _step_error(tmp_path, [{"type": "attributes", "columns": [
+        good, {"to": "c", "from": "nmae"},
+    ]}])
+    assert head.startswith("step 1 column 'c' (from): Binder Error") and path == "pipelines.0.steps.0.columns.1"
+
+
+def test_dissolve_errors_name_the_key_or_aggregate(tmp_path):
+    head, path, _ = _step_error(tmp_path, [{"type": "dissolve", "by": ["name", "nmae"]}])
+    assert head.startswith("step 1 group key 'nmae' (column): Binder Error")
+    assert path == "pipelines.0.steps.0.by.1"
+
+    head, path, _ = _step_error(tmp_path, [{"type": "dissolve", "by": ["name"], "aggregates": [
+        {"to": "n", "expr": "count(*)"}, {"to": "bad", "expr": "ST_Area(geom)"},  # not aggregated
+    ]}])
+    assert head.startswith("step 1 aggregate 'bad' (expr): Binder Error")
+    assert path == "pipelines.0.steps.0.aggregates.1"
+
+
+def test_attribute_and_dissolve_steps_in_plan_counts_branches_and_geoparquet(tmp_path):
+    import duckdb
+
+    from duck_soup.derive import init_duckdb
+    from duck_soup.engine import plan_config_pipeline
+
+    base = [("a-1", _square(0, 0, 1, 1)), ("a-2", _square(1, 0, 2, 1)), ("b-1", _square(5, 0, 6, 1))]
+    steps = [
+        {"type": "attributes", "columns": [{"to": "grp", "expr": "split_part(name, '-', 1)"}]},
+        {"type": "snapshot", "id": "copy"},
+        # on the branch only: the main chain keeps its three rows and their names
+        {"type": "attributes", "branch": "copy", "drop": ["name"]},
+        {"type": "dissolve", "branch": "copy", "by": ["grp"], "aggregates": [{"to": "n", "expr": "count(*)"}]},
+        # `left` names a column the join source has too: it must still mean the running row's
+        # (it used to resolve to the source's own, so every row matched the first group)
+        {"type": "attribute_join", "source": "copy", "left": "grp", "right": "grp", "fields": {"n": "n"}},
+    ]
+    mapping = [{"to": "name", "from": "name"}, {"to": "n", "from": "n"}]
+    cfg = _config(tmp_path, base, steps, mapping, working_crs="EPSG:25833")
+
+    rows = sorted((r["name"], r["n"]) for r in preview_config_pipeline(cfg, limit=10))
+    assert rows == [("a-1", 2), ("a-2", 2), ("b-1", 1)]
+
+    # The SQL tab shows the new steps without reading anything.
+    sql = "\n".join(e["sql"] for e in plan_config_pipeline(cfg))
+    assert "split_part(name, '-', 1)" in sql and "count(*)" in sql and "GROUP BY 1" in sql
+
+    engine = Engine(cfg.pipelines[0])
+    counts = engine.counts()
+    assert counts["steps"] == {1: 3, 2: 3, 3: 3, 4: 2, 5: 3} and counts["layers"] == [3]
+
+    cfg.output = str(tmp_path / "out.parquet")
+    out = run_config(cfg)
+    con = duckdb.connect()
+    init_duckdb(con)
+    assert sorted(con.execute(f"SELECT name, n FROM read_parquet('{out}')").fetchall()) == rows

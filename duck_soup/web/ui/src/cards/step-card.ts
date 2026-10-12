@@ -2,10 +2,14 @@ import { mkEl, esc, wireCollapse, helpLink } from '../dom'
 import { META } from '../state'
 import { comboField, wireCombos } from '../combo'
 import { mutate } from '../history'
-import { collectPipelineDef } from './pipeline-card'
-import { resolveSchemaScoped, collectAvailableColumnsScoped } from '../schema'
+import { wireDragReorder } from './pipeline-card'
+import { mapRow, type MapRowElement } from './map-row'
+import { resolveSchemaScoped, collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, Config } from '../types'
+import { exprField, exprValue } from '../expr-field'
+import { AGGREGATE_SNIPPETS } from '../expr-snippets'
+import { fieldPreviewConfig } from '../field-preview'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, Attributes, ExprColumn, MapItem } from '../types'
 import { renderIcons } from '../icons'
 
 // ---- step card ----
@@ -23,6 +27,7 @@ const STEP_ICONS: Record<string, string> = {
   filter: 'filter',
   merge: 'combine',
   snapshot: 'camera',
+  attributes: 'table-properties',
 }
 
 const STEP_LABELS: Record<string, string> = {
@@ -39,6 +44,7 @@ const STEP_LABELS: Record<string, string> = {
   filter: 'filter',
   merge: 'merge',
   snapshot: 'snapshot',
+  attributes: 'attributes',
 }
 
 const STEP_HINTS: Record<string, string> = {
@@ -49,13 +55,17 @@ const STEP_HINTS: Record<string, string> = {
   centroid: 'Replaces each feature\'s geometry with its centroid point. Requires a spatial base source.',
   clip: 'Clips base features to their overlap with a mask source. Features with no overlap are dropped. Both sources must be spatial.',
   erase: 'Removes the overlap with a mask source from base feature geometry. Non-overlapping features are kept unchanged. Both sources must be spatial.',
-  dissolve: 'Merges features that share the same group-by column values, combining their geometries via union. All columns not in the group-by list are dropped.',
+  dissolve: 'Merges features that share the same group-by values, combining their geometries via union. Group by columns or SQL expressions; keep other values per group with aggregates (sum, count, string_agg, …). Every other column is dropped.',
   intersect_overlay: 'Produces one output row per intersecting (base × source) pair with the intersection as geometry. Row count may increase significantly. Both sources must be spatial.',
   line_overlay: 'Cuts the lines where they lie on top of the source lines. Shared stretches get the source fields; every other piece is kept with empty fields, so the complete network flows on to the next step. Chain one per overlay dataset.',
   filter: 'Drops rows where this SQL condition is false — e.g. reject rows a prior join left unmatched.',
   merge: 'Appends rows from another source (matched by column name; non-overlapping columns become NULL). Row count adds rather than multiplies.',
   snapshot: 'Names this step\'s current state so a later step can join back against it — fork mid-pipeline (after some processing), not just from a raw source.',
+  attributes: 'Adds, overwrites or removes columns mid-pipeline, with the same rules as the mapping (like FME\'s AttributeManager). Columns are set in order, so each can use the ones above it; every other column passes through.',
 }
+
+const HEAD_STYLE = 'font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px'
+const PLUS_ICON = '<i data-lucide="plus" style="width:12px;height:12px"></i>'
 
 const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge']
 const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
@@ -139,11 +149,29 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['centroid']}</p>`
   }
   if (kind === 'dissolve') {
-    bodyHtml += `<p class="hint" style="margin-top:8px">⚠ All attributes not listed here are dropped after this step.</p>`
+    bodyHtml += `<p class="hint" style="margin-top:8px">⚠ Only the group-by keys and aggregates below are kept after this step.</p>`
     bodyHtml += `<div style="margin-top:10px">
-      <span class="head" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">group by columns&nbsp;<span style="font-weight:normal">(empty = dissolve all)</span></span>
+      <span class="head" style="${HEAD_STYLE}">group by&nbsp;<span style="font-weight:normal">(a column, or a SQL expression with a name · empty = dissolve all)</span></span>
       <div data-by-cols></div>
-      <button class="mini ghost" data-addby style="margin-top:6px"><i data-lucide="plus" style="width:12px;height:12px"></i> column</button>
+      <button class="mini ghost" data-addby style="margin-top:6px">${PLUS_ICON} key</button>
+    </div>
+    <div style="margin-top:10px">
+      <span class="head" style="${HEAD_STYLE}">aggregates&nbsp;<span style="font-weight:normal">(one value per group, e.g. sum(population))</span></span>
+      <div data-aggs></div>
+      <button class="mini ghost" data-addagg style="margin-top:6px">${PLUS_ICON} aggregate</button>
+    </div>`
+  }
+  if (kind === 'attributes') {
+    bodyHtml += `<div style="margin-top:10px">
+      <span class="head" style="${HEAD_STYLE}">set columns&nbsp;<span style="font-weight:normal">(in order · each can use the ones above it)</span></span>
+      <div class="st-columns"></div>
+      <div class="fields-empty" data-columns-empty>No columns set yet — add one to create or overwrite a column.</div>
+      <button class="mini ghost" data-addcolumn style="margin-top:6px">${PLUS_ICON} column</button>
+    </div>
+    <div style="margin-top:10px">
+      <span class="head" style="${HEAD_STYLE}">drop columns</span>
+      <div data-drop-cols></div>
+      <button class="mini ghost" data-adddrop style="margin-top:6px">${PLUS_ICON} column</button>
     </div>`
   }
   if (hasFields) {
@@ -230,11 +258,12 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   wireStepReorder(c, syncFn)
 
   const { addField, updateFieldsEmpty } = wireFieldsList(c, syncFn)
-  const addByCol = wireDissolveByCols(c, syncFn)
+  const { addByKey, addAggregate } = wireDissolveLists(c, syncFn)
+  const { addColumn, addDropCol } = wireAttributeLists(c, syncFn)
 
   // hydrate scalar fields
   for (const [k, v] of Object.entries(st)) {
-    if (k === 'fields' || k === 'by' || k === 'type') continue
+    if (['fields', 'by', 'aggregates', 'columns', 'drop', 'type'].includes(k)) continue
     const inp = c.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)
     if (inp && v != null) inp.value = String(v)
   }
@@ -243,9 +272,14 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay | LineOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
     updateFieldsEmpty()
   }
-  // hydrate dissolve by-cols
+  // hydrate dissolve keys and aggregates, attribute columns and drops
   if (kind === 'dissolve') {
-    ;((st as Partial<Dissolve>).by || []).forEach(col => addByCol(col))
+    ;((st as Partial<Dissolve>).by || []).forEach(key => addByKey(key))
+    ;((st as Partial<Dissolve>).aggregates || []).forEach(agg => addAggregate(agg))
+  }
+  if (kind === 'attributes') {
+    ;((st as Partial<Attributes>).columns || []).forEach(m => addColumn(m))
+    ;((st as Partial<Attributes>).drop || []).forEach(col => addDropCol(col))
   }
 
   // on_multiple is a tie-break for match: first — with match: all every match is kept,
@@ -281,29 +315,14 @@ function stepLocation(c: HTMLElement): { stepIdx: number; pipelineIdx: number } 
   return { stepIdx, pipelineIdx }
 }
 
-// Builds a throwaway single-column preview Config scoped to the steps that run *before*
-// this card, mirroring the pipeline state this field's SQL actually executes against —
-// reused by both attribute_join.left and filter.where. Only called from user interaction
-// (not on hydrate), so loading a saved pipeline with many such steps doesn't fire a burst
-// of /api/preview requests for fields nobody is currently looking at.
-function buildStepFieldPreviewConfig(c: HTMLElement, fieldExpr: string, wrapBoolean: boolean): Config | null {
-  const card = c.closest('.pipeline-card') as HTMLElement | null
-  if (!card) return null
-  const pdef = collectPipelineDef(card)
-  if (!pdef.base) return null
-  const idx = c.parentElement ? Array.from(c.parentElement.children).indexOf(c) : -1
-  const priorSteps = idx >= 0 ? pdef.steps.slice(0, idx) : pdef.steps
+// A throwaway single-column preview Config over the steps that run *before* this card, the
+// rows this field's SQL actually executes against — used by attribute_join.left and
+// filter.where. Only called from user interaction (not on hydrate), so loading a saved
+// pipeline with many such steps doesn't fire a burst of /api/preview requests for fields
+// nobody is currently looking at.
+function buildStepFieldPreviewConfig(c: HTMLElement, fieldExpr: string, wrapBoolean: boolean) {
   const expr = wrapBoolean ? `CASE WHEN (${fieldExpr}) THEN 1 ELSE 0 END` : fieldExpr
-  return {
-    name: 'field_preview',
-    output: 'preview.gpkg',
-    pipelines: [{
-      ...pdef,
-      steps: priorSteps,
-      mapping: [{ to: '_check', expr }],
-      layers: [{ layer: 'preview', crs: pdef.working_crs || 'EPSG:25833' }],
-    }],
-  }
+  return fieldPreviewConfig(c, [{ to: '_check', expr }])
 }
 
 function wireFieldValidation(c: HTMLElement, kind: Step['type']): void {
@@ -383,17 +402,21 @@ function wireStepReorder(c: HTMLElement, syncFn: () => void): void {
   // as the keyboard-only equivalent.
   const dragHandle = c.querySelector<HTMLElement>('.drag-handle')!
   dragHandle.addEventListener('mousedown', () => { c.draggable = true })
-  c.addEventListener('dragstart', () => { c.classList.add('dragging') })
-  c.addEventListener('dragend', () => {
+  // Only the card's own drag: an attributes step's column rows are draggable too, and their
+  // drag events bubble up here.
+  c.addEventListener('dragstart', e => { if (e.target === c) c.classList.add('dragging') })
+  c.addEventListener('dragend', e => {
+    if (e.target !== c) return
     c.draggable = false
     c.classList.remove('dragging')
     c.parentElement?.querySelectorAll('.drop-target-above, .drop-target-below')
       .forEach(el => el.classList.remove('drop-target-above', 'drop-target-below'))
   })
 
-  // Keyboard equivalent for the drag/click-only reorder.
+  // Keyboard equivalent for the drag/click-only reorder. Not from inside a column row, whose
+  // Alt+Arrow moves the row (map-row.ts).
   c.addEventListener('keydown', e => {
-    if (!e.altKey) return
+    if (!e.altKey || (e.target as Element).closest('.map-item')) return
     if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); upBtn.focus() }
     else if (e.key === 'ArrowDown') { e.preventDefault(); move(1); downBtn.focus() }
   })
@@ -466,16 +489,147 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
   return { addField, updateFieldsEmpty }
 }
 
-function wireDissolveByCols(c: HTMLElement, syncFn: () => void) {
-  const byColsBox = c.querySelector<HTMLElement>('[data-by-cols]')
-  const addByCol = (col = '') => {
-    if (!byColsBox) return
+// dissolve: group keys (a column, or an expression with a name) and aggregates
+function wireDissolveLists(c: HTMLElement, syncFn: () => void) {
+  const byBox = c.querySelector<HTMLElement>('[data-by-cols]')
+  const aggBox = c.querySelector<HTMLElement>('[data-aggs]')
+  const columns = () => {
+    const card = c.closest('.pipeline-card')
+    return card ? collectAvailableColumnDetailsScoped(card) : []
+  }
+
+  const addByKey = (key: string | ExprColumn = '') => {
+    if (!byBox) return
+    const r = mkEl('div', { className: 'kv' })
+    r.dataset['byRow'] = ''
+    r.style.marginTop = '6px'
+    const isExpr = typeof key !== 'string'
+    let check: { check: () => void } | undefined
+    const field = exprField({
+      value: isExpr ? key.expr : key,
+      placeholder: 'column, or SQL expression',
+      attrs: 'data-by-col',
+      onChange: () => { check?.check(); syncFn() },
+      drawer: () => ({
+        columns: columns(),
+        buildPreviewConfig: draft => fieldPreviewConfig(c, [{ to: '_expr_preview', expr: draft }]),
+      }),
+    })
+    r.appendChild(field)
+    r.insertAdjacentHTML('beforeend', `<span class="arrow" title="An expression key needs a name">as</span>
+      <input data-by-as placeholder="name (for an expression)" value="${esc(isExpr ? key.to : '')}" style="flex:0 0 32%">
+      <button class="mini danger ghost" data-bydel aria-label="Remove this group key"><i data-lucide="x" style="width:12px;height:12px"></i></button>`)
+    const inp = field.querySelector<HTMLInputElement>('[data-by-col]')!
+    const asInp = r.querySelector<HTMLInputElement>('[data-by-as]')!
+    // Only a key without a name is a plain column to look up; with one, it's an expression.
+    check = attachMembershipCheck(inp, () => {
+      const card = c.closest('.pipeline-card')
+      return card && !asInp.value.trim() ? collectAvailableColumnsScoped(card) : []
+    })
+    asInp.addEventListener('input', () => { check?.check(); syncFn() })
+    r.querySelector('[data-bydel]')!.addEventListener('click', () => { r.remove(); syncFn() })
+    byBox.appendChild(r)
+    renderIcons(r)
+  }
+
+  const addAggregate = (agg: Partial<ExprColumn> = {}) => {
+    if (!aggBox) return
+    const r = mkEl('div', { className: 'kv' })
+    r.dataset['aggRow'] = ''
+    r.style.marginTop = '6px'
+    r.innerHTML = `<input data-agg-to placeholder="output_name" value="${esc(agg.to ?? '')}" style="flex:0 0 32%">
+      <span class="arrow">=</span>`
+    const toInp = r.querySelector<HTMLInputElement>('[data-agg-to]')!
+    r.appendChild(exprField({
+      value: agg.expr ?? '',
+      placeholder: 'sum(population), count(*), …',
+      attrs: 'data-agg-expr',
+      onChange: syncFn,
+      drawer: () => ({
+        columns: columns(),
+        // The steps before this one, then this dissolve with only the draft as its aggregate:
+        // an aggregate is only valid over the group.
+        buildPreviewConfig: draft => fieldPreviewConfig(c, [], {
+          type: 'dissolve', by: readByKeys(c), aggregates: [{ to: '_expr_preview', expr: draft }],
+        }),
+        snippets: [AGGREGATE_SNIPPETS],
+      }),
+    }))
+    r.insertAdjacentHTML('beforeend', `<button class="mini danger ghost" data-aggdel aria-label="Remove this aggregate"><i data-lucide="x" style="width:12px;height:12px"></i></button>`)
+    toInp.addEventListener('input', syncFn)
+    r.querySelector('[data-aggdel]')!.addEventListener('click', () => { r.remove(); syncFn() })
+    aggBox.appendChild(r)
+    renderIcons(r)
+  }
+
+  c.querySelector('[data-addby]')?.addEventListener('click', e => { e.stopPropagation(); addByKey(); syncFn() })
+  c.querySelector('[data-addagg]')?.addEventListener('click', e => { e.stopPropagation(); addAggregate(); syncFn() })
+  return { addByKey, addAggregate }
+}
+
+/** A dissolve card's group keys: a plain column name, or `{to, expr}` once it has a name. */
+export function readByKeys(c: Element): (string | ExprColumn)[] {
+  return [...c.querySelectorAll('[data-by-row]')].flatMap(r => {
+    const expr = exprValue(r.querySelector<HTMLInputElement>('[data-by-col]')!).trim()
+    const to = r.querySelector<HTMLInputElement>('[data-by-as]')!.value.trim()
+    if (!expr) return []
+    return [to ? { to, expr } : expr]
+  })
+}
+
+/** A dissolve card's aggregates (rows missing a name or an expression left out). */
+export function readAggregates(c: Element): ExprColumn[] {
+  return [...c.querySelectorAll('[data-agg-row]')].flatMap(r => {
+    const to = r.querySelector<HTMLInputElement>('[data-agg-to]')!.value.trim()
+    const expr = exprValue(r.querySelector<HTMLInputElement>('[data-agg-expr]')!).trim()
+    return to && expr ? [{ to, expr }] : []
+  })
+}
+
+/** An attributes card's set columns and drops. */
+export function readAttributes(c: Element): { columns: MapItem[]; drop: string[] } {
+  const columns = [...c.querySelectorAll('.st-columns > .map-item')]
+    .map(w => (w as MapRowElement)._readMapping?.() ?? null)
+    .filter((x): x is MapItem => x !== null)
+  const drop = [...c.querySelectorAll<HTMLInputElement>('[data-drop-col]')]
+    .map(i => i.value.trim()).filter(Boolean)
+  return { columns, drop }
+}
+
+// attributes: mapping rows that set columns, and columns to drop
+function wireAttributeLists(c: HTMLElement, syncFn: () => void) {
+  const listEl = c.querySelector<HTMLElement>('.st-columns')
+  const emptyEl = c.querySelector<HTMLElement>('[data-columns-empty]')
+  const dropBox = c.querySelector<HTMLElement>('[data-drop-cols]')
+  const updateEmpty = () => { if (emptyEl && listEl) emptyEl.hidden = listEl.children.length > 0 }
+  const sync = () => { updateEmpty(); syncFn() }
+
+  const addColumn = (m: Partial<MapItem> = {}) => {
+    if (!listEl) return null
+    const row: MapRowElement = mapRow(m, sync, '0', {
+      // The steps before this one, then this step with only the columns above the row, which
+      // an expression can use.
+      previewConfig: draft => {
+        const rows = [...listEl.querySelectorAll<HTMLElement>(':scope > .map-item')]
+        const above = rows.slice(0, rows.indexOf(row))
+          .map(w => (w as MapRowElement)._readMapping?.() ?? null)
+          .filter((x): x is MapItem => x !== null)
+        return fieldPreviewConfig(c, [{ to: '_expr_preview', expr: draft }], { type: 'attributes', columns: above })
+      },
+    })
+    listEl.appendChild(row)
+    updateEmpty()
+    return row
+  }
+
+  const addDropCol = (col = '') => {
+    if (!dropBox) return
     const r = mkEl('div', { className: 'kv' })
     r.style.marginTop = '6px'
-    r.innerHTML = `${comboField('data-by-col data-from-list="1"', col, [], 'column_name')}
-      <button class="mini danger ghost" data-bydel><i data-lucide="x" style="width:12px;height:12px"></i></button>`
-    r.querySelector('[data-bydel]')!.addEventListener('click', () => { r.remove(); syncFn() })
-    const inp = r.querySelector<HTMLInputElement>('[data-by-col]')!
+    r.innerHTML = `${comboField('data-drop-col data-from-list="1"', col, [], 'column_name')}
+      <button class="mini danger ghost" data-dropdel aria-label="Keep this column"><i data-lucide="x" style="width:12px;height:12px"></i></button>`
+    r.querySelector('[data-dropdel]')!.addEventListener('click', () => { r.remove(); syncFn() })
+    const inp = r.querySelector<HTMLInputElement>('[data-drop-col]')!
     inp.addEventListener('input', syncFn)
     inp.addEventListener('change', syncFn)
     wireCombos(r)
@@ -483,11 +637,22 @@ function wireDissolveByCols(c: HTMLElement, syncFn: () => void) {
       const card = c.closest('.pipeline-card')
       return card ? collectAvailableColumnsScoped(card) : []
     })
-    byColsBox.appendChild(r)
+    dropBox.appendChild(r)
     renderIcons(r)
   }
-  c.querySelector('[data-addby]')?.addEventListener('click', (e) => { e.stopPropagation(); addByCol(); syncFn() })
-  return addByCol
+
+  c.querySelector('[data-addcolumn]')?.addEventListener('click', e => {
+    e.stopPropagation()
+    mutate('add attribute column')
+    const row = addColumn()
+    renderIcons(c)
+    sync()
+    setTimeout(() => row?.querySelector<HTMLInputElement>('[data-to]')?.focus(), 50)
+  })
+  c.querySelector('[data-adddrop]')?.addEventListener('click', e => { e.stopPropagation(); addDropCol(); syncFn() })
+  if (listEl) wireDragReorder(listEl, '.map-item.dragging', undefined, 'reorder attribute columns', sync)
+  updateEmpty()
+  return { addColumn, addDropCol }
 }
 
 function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
@@ -507,6 +672,13 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
     } else if (kind === 'snapshot') {
       const idv = c.querySelector<HTMLInputElement>('[data-k="id"]')?.value ?? ''
       text = idv ? `» ${idv}` : ''
+    } else if (kind === 'attributes') {
+      const { columns, drop } = readAttributes(c)
+      text = [columns.length ? `+${columns.length}` : '', drop.length ? `−${drop.length}` : ''].filter(Boolean).join(' · ')
+    } else if (kind === 'dissolve') {
+      const keys = readByKeys(c).map(k => typeof k === 'string' ? k : k.to)
+      const aggs = readAggregates(c).length
+      text = [keys.length ? `by ${keys.join(', ')}` : '', aggs ? `Σ ${aggs}` : ''].filter(Boolean).join(' · ')
     } else {
       text = ''
     }
@@ -524,5 +696,11 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   c.querySelector('[data-k="branch"]')?.addEventListener('change', updateTitle)
   c.querySelector('[data-k="rejects"]')?.addEventListener('input', updateTitle)
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
+  // List rows come and go, each with several fields: refresh on any edit or row change.
+  if (kind === 'attributes' || kind === 'dissolve') {
+    c.addEventListener('input', updateTitle)
+    c.addEventListener('change', updateTitle)
+    new MutationObserver(updateTitle).observe(c.querySelector('.card-content')!, { childList: true, subtree: true })
+  }
   updateTitle()
 }

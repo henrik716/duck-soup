@@ -39,6 +39,40 @@ GEOMETRY_FUNCS = frozenset(FUNC_SQL) - {"uuid", "seq", "now", "today"}
 # Engine._check_working_crs_units).
 MEASURE_FUNCS = frozenset({"area", "length"})
 
+# The funcs that read __geom4326 / __centroid4326 (see with_geo_helpers).
+GEO4326_FUNCS = frozenset({"lon", "lat", "mgrs", "geohash", "wkb", "wkt"})
+
+
+def check_geometry_funcs(items: list[MapItem], has_geom: bool, base: str) -> None:
+    """Refuse geometry funcs in `items` when the base source has no geometry."""
+    used = {m.func for m in items if m.func}
+    if not has_geom and (used & GEOMETRY_FUNCS):
+        raise ValueError(
+            f"mapping uses {sorted(used & GEOMETRY_FUNCS)} but base source "
+            f"'{base}' has no geometry"
+        )
+
+
+def with_geo_helpers(source: str, working_crs: str) -> str:
+    """SELECT * from `source` (a table expression with a working-CRS `geom`) plus
+    __geom4326 (the full geometry in lon/lat, for wkb/wkt) and __centroid4326 (its centroid,
+    for lon/lat/mgrs/geohash on lines and polygons too).
+
+    __geom4326 is transformed from `geom`, which is already in working_crs (see
+    Engine._create_source_views): one chained reprojection (source CRS -> working_crs ->
+    EPSG:4326) per feature, not a second independent transform from the source CRS. This
+    keeps lon/lat/mgrs consistent with the geometry actually used for joins/steps and avoids
+    double rounding/drift from reprojecting the same feature twice. __centroid4326 is the
+    centroid taken in working_crs, then reprojected: a centroid computed on lon/lat degrees
+    is distorted (~100 km off for a line spanning Norway)."""
+    return f"""
+        SELECT *,
+            {st_transform('ST_Centroid(geom)', working_crs, 'EPSG:4326')} AS __centroid4326
+        FROM (
+            SELECT *, {st_transform('geom', working_crs, 'EPSG:4326')} AS __geom4326
+            FROM {source}
+        )"""
+
 
 def map_expr(item: MapItem) -> str:
     if item.from_ is not None:
@@ -136,12 +170,7 @@ def final_select(
     """The SELECT written for `layer` from the view `prev`: `mapping`'s columns (every
     column as-is when it's empty), the layer's `filter`, and `geom` in the layer's CRS.
     `base` names the base source in the error for a geometry func without geometry."""
-    used = {m.func for m in mapping if m.func}
-    if not has_geom and (used & GEOMETRY_FUNCS):
-        raise ValueError(
-            f"mapping uses {sorted(used & GEOMETRY_FUNCS)} but base source "
-            f"'{base}' has no geometry"
-        )
+    check_geometry_funcs(mapping, has_geom, base)
 
     exprs = [map_expr(m) for m in mapping]
     source = f"(SELECT * FROM {_ident(prev)} WHERE {layer.filter})" if layer.filter else _ident(prev)
@@ -151,16 +180,8 @@ def final_select(
         return f"SELECT\n            {cols}\n        FROM {source}"
 
     geom_out = st_transform("geom", working_crs, layer.crs)
-    # geom (working_crs, for area/length/x/y/geom_type), __geom4326 (full geometry,
-    # for wkb/wkt) and __centroid4326 (point, for lon/lat/mgrs/geohash on lines and
-    # polygons too) are all available here; geometry written as 'geom'.
-    # __geom4326 is transformed from `geom`, which is already in working_crs (see
-    # Engine._create_source_views) — i.e. one chained reprojection (source CRS ->
-    # working_crs -> EPSG:4326) per feature, not a second independent transform from the
-    # source CRS. This keeps lon/lat/mgrs consistent with the geometry actually used for
-    # joins/steps and avoids double rounding/drift from reprojecting the same feature twice.
-    # __centroid4326 is the centroid taken in working_crs, then reprojected: a centroid
-    # computed on lon/lat degrees is distorted (~100 km off for a line spanning Norway).
+    # geom (working_crs, for area/length/x/y/geom_type) and the lon/lat helper columns
+    # (see with_geo_helpers) are all available here; geometry written as 'geom'.
     cols = ",\n        ".join(exprs)
     select_cols = (
         f"{cols},\n        " if cols
@@ -174,15 +195,7 @@ def final_select(
     if not cols:
         source = f"(SELECT COLUMNS(lambda c: lower(c) <> 'ogc_fid') FROM {source})"
     return f"""
-    WITH base4326 AS (
-        SELECT *,
-            {st_transform('geom', working_crs, 'EPSG:4326')} AS __geom4326
-        FROM {source}
-    ),
-    enriched AS (
-        SELECT *,
-            {st_transform('ST_Centroid(geom)', working_crs, 'EPSG:4326')} AS __centroid4326
-        FROM base4326
+    WITH enriched AS ({with_geo_helpers(source, working_crs)}
     )
     SELECT
         {select_cols}{geom_out} AS geom

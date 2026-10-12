@@ -93,10 +93,28 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
   }
 ]
 
+// Shown (first) only where an aggregate is written: a dissolve step's aggregate columns,
+// which compute one value per group from its rows.
+export const AGGREGATE_SNIPPETS: ExprSnippetCategory = {
+  category: 'Aggregate (per group)',
+  snippets: [
+    { name: 'count(*)', code: 'count(*)', doc: 'Number of rows in the group' },
+    { name: 'sum', code: 'sum(column)', doc: 'Total of a numeric column' },
+    { name: 'avg', code: 'avg(column)', doc: 'Mean of a numeric column' },
+    { name: 'min', code: 'min(column)', doc: 'Smallest value' },
+    { name: 'max', code: 'max(column)', doc: 'Largest value' },
+    { name: 'string_agg', code: `string_agg(DISTINCT column, ', ' ORDER BY column)`, doc: 'The values joined into one string' },
+    { name: 'list', code: 'list(DISTINCT column)', doc: 'The values as a list' },
+    { name: 'any_value', code: 'any_value(column)', doc: 'A value from one of the rows (when they all share it)' },
+    { name: 'arg_max', code: 'arg_max(column, ST_Area(geom))', doc: 'The value from the row with the largest second argument' },
+    { name: 'count(DISTINCT)', code: 'count(DISTINCT column)', doc: 'Number of different values' },
+  ],
+}
+
 // Flat function-name list (upper- and lower-case forms as typically written), used by
 // expr-highlight.ts to color known functions and by expr-autocomplete.ts to suggest them.
 export const EXPR_FUNCTION_NAMES: string[] = Array.from(new Set(
-  EXPR_SNIPPET_CATEGORIES.flatMap(cat => cat.snippets.map(s => {
+  [...EXPR_SNIPPET_CATEGORIES, AGGREGATE_SNIPPETS].flatMap(cat => cat.snippets.map(s => {
     const m = s.name.match(/^[A-Za-z_][A-Za-z0-9_]*/)
     return m ? m[0] : s.name
   }))

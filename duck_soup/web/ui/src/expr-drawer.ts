@@ -2,7 +2,7 @@ import { mkEl, esc, helpLink } from './dom'
 import { highlightExpr } from './expr-highlight'
 import { formatExpr } from './expr-format'
 import { showToast } from './toast'
-import { EXPR_SNIPPET_CATEGORIES, EXPR_FUNCTION_NAMES } from './expr-snippets'
+import { EXPR_SNIPPET_CATEGORIES, EXPR_FUNCTION_NAMES, type ExprSnippetCategory } from './expr-snippets'
 import { ExprAutocomplete, type AutocompleteItem } from './expr-autocomplete'
 import { attachLiveValidation, renderValidationMsg, type LiveValidationHandle } from './validation'
 import { originLabel, type AvailableColumnDetail } from './schema'
@@ -68,6 +68,7 @@ export function openExprDrawer(
   cols: AvailableColumnDetail[],
   onSave: (val: string) => void,
   buildPreviewConfig?: (draftExpr: string) => Config | null,
+  extraSnippets: ExprSnippetCategory[] = [],
 ): void {
   let drawer = document.getElementById('exprDrawer') as HTMLElement | null
   if (!drawer) {
@@ -254,7 +255,7 @@ export function openExprDrawer(
 
   const funcList = drawer.querySelector<HTMLElement>('#exprFuncList')!
   funcList.innerHTML = ''
-  EXPR_SNIPPET_CATEGORIES.forEach(cat => {
+  ;[...extraSnippets, ...EXPR_SNIPPET_CATEGORIES].forEach(cat => {
     const details = mkEl('details', { className: 'expr-snippet-category', open: true })
     details.appendChild(mkEl('summary', { textContent: cat.category }))
     cat.snippets.forEach(s => {

@@ -21,10 +21,11 @@ layer of their own.
 | | [`centroid`](#centroid) | same | ✓ | – |
 | | [`clip`](#clip) | may shrink | ✓ | – |
 | | [`erase`](#erase) | may shrink | ✓ | – |
-| | [`dissolve`](#dissolve) | shrinks | ✓ | drops all but `by` |
+| | [`dissolve`](#dissolve) | shrinks | ✓ | keeps only `by` and `aggregates` |
 | Rows | [`filter`](#filter) | may shrink | – | – |
 | | [`merge`](#merge) | grows | – | ✓ (union of columns) |
 | | [`snapshot`](#snapshot) | – | – | – |
+| Attributes | [`attributes`](#attributes) | same | – | ✓ (set, overwrite, drop) |
 
 `fields` on join steps is always a map of **`output_name: source_column`**.
 
@@ -190,14 +191,33 @@ pass through unchanged, and features erased completely are dropped.
 
 ## `dissolve`
 
-Merges geometries that share the same values in the `by` columns.
+Merges geometries that share the same group-by values.
 
 ```yaml
 - type: dissolve
   by: [pond, species]   # omit or [] to dissolve everything into one feature
 ```
 
-**Every column not listed in `by` is dropped.**
+A `by` entry is a column name, or a SQL expression with a name (`{to, expr}`) to group by a
+computed value. `aggregates` adds columns computed per group with a SQL aggregate function:
+
+```yaml
+- type: dissolve
+  by:
+    - pond
+    - {to: decade, expr: "floor(year(spotted) / 10) * 10"}
+  aggregates:
+    - {to: ducks, expr: "count(*)"}
+    - {to: crumbs, expr: "sum(bread_crumbs)"}
+    - {to: names, expr: "string_agg(DISTINCT name, ', ' ORDER BY name)"}
+    - {to: biggest, expr: "arg_max(name, ST_Area(geom))"}
+```
+
+**Only the `by` keys and the `aggregates` are kept.** Every other column is dropped. An
+aggregate can use any column of the rows going in, but only inside an aggregate function
+(`count`, `sum`, `avg`, `min`, `max`, `string_agg`, `list`, `any_value`, `arg_max`, …). A
+bare column that isn't a key is an error. Without `by`, the aggregates are computed over
+everything, in the one feature that's left.
 
 ## `filter`
 
@@ -233,6 +253,35 @@ Names the chain's current state without changing it.
 Later steps can use `after_pond_join` as a `source:` (join back against processed rows) or as a
 `branch:` (keep transforming that copy). With `branch:` set on the snapshot itself, it copies
 that branch instead of the main chain.
+
+## `attributes`
+
+Adds, overwrites and removes columns partway through the pipeline, like FME's
+AttributeManager. Use it when a later step needs a value that isn't a column yet: a key to
+dissolve or join on, or a value to filter by.
+
+```yaml
+- type: attributes
+  columns:
+    - {to: pond_code, expr: "upper(left(pond, 3))"}
+    - {to: label, expr: "pond_code || '-' || name"}   # uses the column above
+    - {to: bread_crumbs, from: bread_crumbs, cast: INTEGER}   # overwrites it
+    - {to: lon, func: lon}
+    - {to: size, codelist: {source: species, cases: [{match: Mute swan, value: big}], default: small}}
+  drop: [notes]
+```
+
+`columns` takes the same rules as the [mapping](mapping.md): `from`, `const`, `expr`, `func`
+and `codelist`, each with an optional `cast`. A column with the name of an existing one
+replaces it. Otherwise it's added. The columns are set **in order**, so each one can use the
+ones set before it. `drop` then removes columns. Every other column passes through
+unchanged.
+
+A replaced column moves to the end of the row. Column order only matters for the output,
+where the mapping sets it. A `func` such as `uuid` or `now` gets one value per feature for
+the whole run. A preview may recompute it, though, so it can differ between previews.
+`geom` can't be dropped. Setting it with an `expr` replaces the geometry, so the expression
+must return one.
 
 ---
 

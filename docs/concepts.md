@@ -77,6 +77,8 @@ Steps run in order. Each step takes the rows produced so far and returns a new s
 - **Joins** add columns: `spatial_join`, `attribute_join`, `nearest_neighbor`, `intersect_overlay`, `line_overlay`.
 - **Geoprocessing** changes the geometry: `buffer`, `centroid`, `clip`, `erase`, `dissolve`.
 - **Row operations** change which rows exist: `filter`, `merge`.
+- **`attributes`** adds, overwrites or drops columns, with the mapping's rules, for a later
+  step to use.
 - **`snapshot`** names the current state so later steps can refer back to it.
 
 Each join step pulls specific columns from the joined source through `fields`, written as
