@@ -257,7 +257,7 @@ that branch instead of the main chain.
 ## `attributes`
 
 Adds, overwrites and removes columns partway through the pipeline, like FME's
-AttributeManager. Use it when a later step needs a value that isn't a column yet: a key to
+AttributeManager. In the editor's step gallery it's **Update Attributes**. Use it when a later step needs a value that isn't a column yet: a key to
 dissolve or join on, or a value to filter by.
 
 ```yaml

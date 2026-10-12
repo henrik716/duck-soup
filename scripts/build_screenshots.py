@@ -245,7 +245,16 @@ def capture(url: str, channel: str, only: set[str]) -> None:
 
             tabs = [t for t in (("sources", "sources-tab", True), ("mapping", "mapping-tab", False),
                                 ("output", "output-layers", True)) if want(t[1])]
-            if tabs or want("map-popup") or want("step-gallery"):
+            if want("step-gallery"):
+                # Tall enough for every group of the gallery, which otherwise scrolls.
+                gp = open_page(url, b, theme, 1600, 1700, 1.5, lineage_collapsed=True)
+                pl_tab(gp, "steps")
+                gp.locator(".pipeline-card >> nth=0 >> .pl-add-step").click()
+                gp.mouse.move(0, 0)
+                gp.wait_for_timeout(600)
+                gp.locator("#stepGalleryModal .modal-card").screenshot(path=str(OUT / f"step-gallery-{theme}.png"))
+                gp.close()
+            if tabs or want("map-popup"):
                 # Wider than the main framing at a smaller scale, so the mapping grid isn't
                 # squeezed and these shots aren't zoomed in.
                 cp = open_page(url, b, theme, 1600, 1000, 1.5, lineage_collapsed=True)
@@ -258,15 +267,6 @@ def capture(url: str, channel: str, only: set[str]) -> None:
                     if cp.locator(".maplibregl-popup-close-button").count():
                         cp.locator(".maplibregl-popup-close-button").click()
                     cp.mouse.move(5, 990)
-                if want("step-gallery"):
-                    pl_tab(cp, "steps")
-                    cp.locator(".pipeline-card >> nth=0 >> .pl-add-step").click()
-                    cp.mouse.move(0, 0)
-                    cp.wait_for_timeout(600)
-                    cp.locator("#stepGalleryModal .modal-card").screenshot(path=str(OUT / f"step-gallery-{theme}.png"))
-                    cp.keyboard.press("Escape")
-                    cp.wait_for_timeout(300)
-                    collapse_all(cp)
                 for sec, name, first in tabs:
                     pl_tab(cp, sec, open_first=first)
                     card_from_tabs(cp, str(OUT / f"{name}-{theme}.png"))

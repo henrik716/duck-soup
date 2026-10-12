@@ -1,7 +1,65 @@
-import { mkEl, helpLink } from './dom'
+import { mkEl, esc, helpLink } from './dom'
 import { openOverlay, closeOverlay } from './overlay'
 import type { Step } from './types'
 import { renderIcons } from './icons'
+
+interface GalleryItem { type: Step['type']; icon: string; name: string; desc: string }
+interface GalleryGroup { name: string; what: string; items: GalleryItem[] }
+
+// The gallery's cards, grouped like the step reference (Joins, Geometry, Rows, Attributes),
+// each group with a duck name and its plain meaning.
+export const STEP_GALLERY: GalleryGroup[] = [
+  {
+    name: 'Paddling together', what: 'joins: add columns from another source',
+    items: [
+      { type: 'spatial_join', icon: 'map-pin', name: 'Spatial Join', desc: 'Copy attributes from the feature in another source that intersects, contains or lies within each feature.' },
+      { type: 'attribute_join', icon: 'link', name: 'Attribute Join', desc: 'Link attributes from another source using matching column values.' },
+      { type: 'nearest_neighbor', icon: 'radar', name: 'Nearest Neighbour', desc: 'Find the closest feature in another source and optionally record the distance.' },
+      { type: 'intersect_overlay', icon: 'git-merge', name: 'Intersect Overlay', desc: 'One row per overlapping pair, with the overlap as its geometry.' },
+      { type: 'line_overlay', icon: 'split', name: 'Line Overlay', desc: 'Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network.' },
+    ],
+  },
+  {
+    name: 'Shaping up', what: 'geometry: change the shapes',
+    items: [
+      { type: 'buffer', icon: 'maximize-2', name: 'Buffer Geometry', desc: 'Expand or shrink features by a specified buffer distance.' },
+      { type: 'centroid', icon: 'crosshair', name: 'Centroid', desc: 'Replace polygon or line features with their center point.' },
+      { type: 'clip', icon: 'scissors', name: 'Clip', desc: 'Intersect base features with a clip mask to keep only overlapping areas.' },
+      { type: 'erase', icon: 'eraser', name: 'Erase / Difference', desc: 'Remove geometries that overlap with a mask source.' },
+      { type: 'dissolve', icon: 'layers', name: 'Dissolve', desc: 'Merge features that share the same group-by values, with per-group aggregates (sum, count, …).' },
+    ],
+  },
+  {
+    name: 'Pecking order', what: 'rows: choose which rows flow on',
+    items: [
+      { type: 'filter', icon: 'filter', name: 'Filter', desc: 'Drop rows where a SQL condition is false — e.g. reject unmatched joins.' },
+      { type: 'merge', icon: 'combine', name: 'Merge / Union', desc: 'Append rows from another source, matched by column name.' },
+      { type: 'snapshot', icon: 'camera', name: 'Snapshot', desc: 'Name this step\'s current state so a later step can join back against it — fork mid-pipeline, after some processing.' },
+    ],
+  },
+  {
+    name: 'Ruffling feathers', what: 'attributes: calculate, overwrite or drop columns',
+    items: [
+      { type: 'attributes', icon: 'table-properties', name: 'Update Attributes', desc: 'Add, overwrite or remove columns mid-pipeline, with the mapping\'s rules (SQL, functions, codelists).' },
+    ],
+  },
+]
+
+function galleryHtml(): string {
+  return STEP_GALLERY.map(g => `
+    <div class="step-gallery-group">
+      <h4 class="step-gallery-group-head">${esc(g.name)} <span>(${esc(g.what)})</span></h4>
+      <div class="step-gallery-grid">${g.items.map(it => `
+        <div class="step-gallery-item" data-type="${it.type}">
+          <div class="step-gallery-icon"><i data-lucide="${it.icon}"></i></div>
+          <div class="step-gallery-info">
+            <span class="name">${esc(it.name)}</span>
+            <span class="desc">${esc(it.desc)}</span>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`).join('')
+}
 
 export function openStepGalleryModal(onSelect: (type: Step['type']) => void): void {
   let modal = document.getElementById('stepGalleryModal')
@@ -13,107 +71,7 @@ export function openStepGalleryModal(onSelect: (type: Step['type']) => void): vo
           <h3><i data-lucide="git-merge" style="width:16px;height:16px;color:var(--accent)"></i> Select Operation ${helpLink('reference/steps/', '', 'step types')}</h3>
           <button class="mini ghost" id="closeStepModalBtn" aria-label="Close modal"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
-        <div class="modal-body">
-          <div class="step-gallery-grid">
-            <div class="step-gallery-item" data-type="spatial_join">
-              <div class="step-gallery-icon"><i data-lucide="map-pin"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Spatial Join</span>
-                <span class="desc">Copy attributes from the nearest or intersecting feature in another source.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="attribute_join">
-              <div class="step-gallery-icon"><i data-lucide="link"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Attribute Join</span>
-                <span class="desc">Link attributes from another source using matching column values.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="nearest_neighbor">
-              <div class="step-gallery-icon"><i data-lucide="radar"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Nearest Neighbour</span>
-                <span class="desc">Find the closest feature in another source and optionally record the distance.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="buffer">
-              <div class="step-gallery-icon"><i data-lucide="maximize-2"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Buffer Geometry</span>
-                <span class="desc">Expand or shrink features by a specified buffer distance.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="centroid">
-              <div class="step-gallery-icon"><i data-lucide="crosshair"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Centroid</span>
-                <span class="desc">Replace polygon or line features with their center point.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="clip">
-              <div class="step-gallery-icon"><i data-lucide="scissors"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Clip</span>
-                <span class="desc">Intersect base features with a clip mask to keep only overlapping areas.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="erase">
-              <div class="step-gallery-icon"><i data-lucide="eraser"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Erase / Difference</span>
-                <span class="desc">Remove geometries that overlap with a mask source.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="dissolve">
-              <div class="step-gallery-icon"><i data-lucide="layers"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Dissolve</span>
-                <span class="desc">Merge geometries that share the same group-by attribute value.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="attributes">
-              <div class="step-gallery-icon"><i data-lucide="table-properties"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Attribute Manager</span>
-                <span class="desc">Add, overwrite or remove columns mid-pipeline, with the mapping's rules (SQL, functions, codelists).</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="intersect_overlay">
-              <div class="step-gallery-icon"><i data-lucide="git-merge"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Intersect Overlay</span>
-                <span class="desc">Perform full overlap analysis, keeping intersecting intersections.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="line_overlay">
-              <div class="step-gallery-icon"><i data-lucide="split"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Line Overlay</span>
-                <span class="desc">Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="filter">
-              <div class="step-gallery-icon"><i data-lucide="filter"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Filter</span>
-                <span class="desc">Drop rows where a SQL condition is false — e.g. reject unmatched joins.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="merge">
-              <div class="step-gallery-icon"><i data-lucide="combine"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Merge / Union</span>
-                <span class="desc">Append rows from another source, matched by column name.</span>
-              </div>
-            </div>
-            <div class="step-gallery-item" data-type="snapshot">
-              <div class="step-gallery-icon"><i data-lucide="camera"></i></div>
-              <div class="step-gallery-info">
-                <span class="name">Snapshot</span>
-                <span class="desc">Name this step's current state so a later step can join back against it — fork mid-pipeline, after some processing.</span>
-              </div>
-            </div>
-          </div>
+        <div class="modal-body">${galleryHtml()}
         </div>
       </div>`
     document.body.appendChild(modal)

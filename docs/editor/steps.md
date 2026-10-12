@@ -14,22 +14,25 @@ step somewhere in the middle, click the **+** on that connection in the
 ![The step gallery](../assets/screenshots/step-gallery-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![The step gallery](../assets/screenshots/step-gallery-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
-| Gallery card | Step type | In one line |
-|---|---|---|
-| Spatial Join | `spatial_join` | Copy attributes from intersecting / containing / contained features. |
-| Attribute Join | `attribute_join` | Copy attributes from a row matched on a column value. |
-| Nearest Neighbour | `nearest_neighbor` | Copy attributes from the closest feature, optionally recording the distance. |
-| Buffer Geometry | `buffer` | Grow (or shrink, with a negative distance) each geometry. |
-| Centroid | `centroid` | Replace each geometry with its centre point. |
-| Clip | `clip` | Keep only the part of each feature that overlaps a mask source. |
-| Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
-| Dissolve | `dissolve` | Merge features that share the same group-by values. |
-| Intersect Overlay | `intersect_overlay` | One row per overlapping pair, with the intersection as geometry. |
-| Line Overlay | `line_overlay` | Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network. |
-| Filter | `filter` | Drop rows where a SQL condition is false. |
-| Merge / Union | `merge` | Append another source's rows, matched by column name. |
-| Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
-| Attribute Manager | `attributes` | Add, overwrite or remove columns partway through the pipeline. |
+The gallery groups the steps the way the [Step types reference](../reference/steps.md) does,
+each group with a duck name:
+
+| Gallery group | Gallery card | Step type | In one line |
+|---|---|---|---|
+| **Paddling together** (joins: add columns from another source) | Spatial Join | `spatial_join` | Copy attributes from intersecting / containing / contained features. |
+| | Attribute Join | `attribute_join` | Copy attributes from a row matched on a column value. |
+| | Nearest Neighbour | `nearest_neighbor` | Copy attributes from the closest feature, optionally recording the distance. |
+| | Intersect Overlay | `intersect_overlay` | One row per overlapping pair, with the intersection as geometry. |
+| | Line Overlay | `line_overlay` | Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network. |
+| **Shaping up** (geometry: change the shapes) | Buffer Geometry | `buffer` | Grow (or shrink, with a negative distance) each geometry. |
+| | Centroid | `centroid` | Replace each geometry with its centre point. |
+| | Clip | `clip` | Keep only the part of each feature that overlaps a mask source. |
+| | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
+| | Dissolve | `dissolve` | Merge features that share the same group-by values, with per-group aggregates. |
+| **Pecking order** (rows: choose which rows flow on) | Filter | `filter` | Drop rows where a SQL condition is false. |
+| | Merge / Union | `merge` | Append another source's rows, matched by column name. |
+| | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
+| **Ruffling feathers** (attributes: calculate, overwrite or drop columns) | Update Attributes | `attributes` | Add, overwrite or remove columns partway through the pipeline. |
 
 ## The step card
 
@@ -75,7 +78,7 @@ The body depends on the step type:
   `sum(population)` or `string_agg(name, ', ')`. The expression builder (the pencil icon) lists
   the aggregate functions first. Its live check runs the dissolve, so it catches a column used
   outside an aggregate. Only the keys and aggregates are kept. Every other column is dropped.
-- **set columns**: for an attributes step, rows like the [mapping](mapping.md)'s: a column
+- **set columns**: for an attributes step (**Update Attributes**), rows like the [mapping](mapping.md)'s: a column
   name, a rule (`from`, `const`, `expr`, `func`, `codelist`) and an optional cast. They run top
   to bottom, so an expression can use a column set in a row above it, and its live check sees
   that column. Drag the grip to reorder.

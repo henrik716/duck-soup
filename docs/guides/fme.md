@@ -68,7 +68,8 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 Attribute work happens in the [mapping](../reference/mapping.md), which lists every output
 column in order. Anything not mapped isn't written, which replaces most AttributeKeeper and
 AttributeRemover use. When a step needs a column that doesn't exist yet (a key to dissolve or
-join on, a value to filter by), an [`attributes`](../reference/steps.md#attributes) step sets it
+join on, a value to filter by), an [`attributes`](../reference/steps.md#attributes) step
+(**Update Attributes** in the editor) sets it
 partway through the pipeline. It takes the same rules as the mapping, plus `drop`, like an
 AttributeManager placed between transformers.
 

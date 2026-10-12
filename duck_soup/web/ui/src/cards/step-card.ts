@@ -44,7 +44,7 @@ const STEP_LABELS: Record<string, string> = {
   filter: 'filter',
   merge: 'merge',
   snapshot: 'snapshot',
-  attributes: 'attributes',
+  attributes: 'update attributes',
 }
 
 const STEP_HINTS: Record<string, string> = {

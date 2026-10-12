@@ -1052,6 +1052,18 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .step-gallery-modal {
   max-width: 680px !important;
 }
+.step-gallery-group + .step-gallery-group { margin-top: 18px; }
+.step-gallery-group-head {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+.step-gallery-group-head span {
+  font-weight: 400;
+  color: var(--muted);
+}
 .step-gallery-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
