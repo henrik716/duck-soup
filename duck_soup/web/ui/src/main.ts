@@ -43,7 +43,7 @@ import { setPreviewBusy, resetPreviewBusy, setRunBusy } from './busy'
 import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from './history'
 import { openPasteYamlModal } from './paste-yaml'
 import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
-import type { Config, CountsResponse, PreviewRow, SourceProgress, WrittenLayer } from './types'
+import type { Config, CountsResponse, PreviewResponse, SourceProgress, WrittenLayer } from './types'
 import { formatPendingSources, PENDING_RETRY_MS } from './schema'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
@@ -453,12 +453,14 @@ async function awaitPrepared<T extends { pending?: boolean; progress?: SourcePro
 async function runPreview(): Promise<void> {
   const cfg = collectConfig()
   if (!cfg.pipelines.length) return
+  const bbox = bboxMode ? getMapBounds() ?? undefined : undefined
 
   if (activePreview.type === 'source' && activePreview.id) {
-    return previewSource(activePreview.id, cfg)
+    const srcCfg = sourcePreviewConfig(cfg, activePreview.id)
+    if (!srcCfg) return
+    return showPreview(() => previewConfig(srcCfg, 0, previewLimit, undefined, bbox))
   }
 
-  const seq = ++previewSeq
   const pipelineIdx = Math.min(activePreview.pipelineIdx ?? 0, cfg.pipelines.length - 1)
   const rejects = activePreview.type === 'rejects'
   const preview_until_step = activePreview.type === 'step' || rejects ? activePreview.stepIdx : undefined
@@ -469,12 +471,39 @@ async function runPreview(): Promise<void> {
     activeStep = cfg.pipelines[pipelineIdx]?.steps?.[(activePreview.stepIdx as number) - 1] ?? null
   }
 
-  const bbox = bboxMode ? getMapBounds() ?? undefined : undefined
+  return showPreview(
+    () => previewConfig(cfg, pipelineIdx, previewLimit, preview_until_step, bbox, rejects),
+    activeStep,
+  )
+}
 
+/** A throwaway config previewing source `sourceId` on its own, with no steps or mapping. */
+function sourcePreviewConfig(cfg: Config, sourceId: string): Config | null {
+  const src = cfg.pipelines.flatMap(p => p.sources).find(s => s.id === sourceId)
+  if (!src) return null
+  return {
+    name: 'preview',
+    output: 'preview.gpkg',
+    pipelines: [{
+      name: 'preview',
+      sources: [src],
+      base: sourceId,
+      steps: [],
+      mapping: [],
+      layers: [{ layer: 'preview', crs: src.crs || 'EPSG:4326' }],
+    }],
+  }
+}
+
+/** Send a preview `request` and show its rows on the map and in the table. A newer preview
+ *  supersedes it; while a source is still being downloaded or converted, its progress is
+ *  shown instead (see awaitPrepared). `activeStep` is the step being previewed, if any. */
+async function showPreview(request: () => Promise<PreviewResponse>, activeStep?: unknown): Promise<void> {
+  const seq = ++previewSeq
   setPreviewBusy(true)
-  // A slow pipeline's preview takes seconds: count them in the status rather than leave it
-  // on "valid" while nothing seems to happen. Not while it shows a source's download or
-  // conversion progress (awaitPrepared), which says more.
+  // A slow preview takes seconds: count them in the status rather than leave it on "valid"
+  // while nothing seems to happen. Not while it shows a source's download or conversion
+  // progress (awaitPrepared), which says more.
   const started = Date.now()
   let ticking = false
   let progressAt = 0
@@ -487,7 +516,7 @@ async function runPreview(): Promise<void> {
   try {
     let waited = false
     const d = await awaitPrepared(
-      () => previewConfig(cfg, pipelineIdx, previewLimit, preview_until_step, bbox, rejects),
+      request,
       text => { waited = true; progressAt = Date.now(); setStatus('busy', text) },
       () => seq !== previewSeq, // a newer edit superseded this request
     )
@@ -509,56 +538,6 @@ async function runPreview(): Promise<void> {
   } finally {
     clearInterval(ticker)
     setPreviewBusy(false)
-  }
-}
-
-/** Preview a single source on its own, with no steps or mapping applied. */
-async function previewSource(sourceId: string, cfg: Config): Promise<void> {
-  for (const pdef of cfg.pipelines) {
-    const src = pdef.sources.find(s => s.id === sourceId)
-    if (!src) continue
-
-    const fakeCfg: Config = {
-      name: 'preview',
-      output: 'preview.gpkg',
-      pipelines: [{
-        name: 'preview',
-        sources: [src],
-        base: sourceId,
-        steps: [],
-        mapping: [],
-        layers: [{ layer: 'preview', crs: src.crs || 'EPSG:4326' }],
-      }],
-    }
-    const seq = ++previewSeq
-    const bbox = bboxMode ? getMapBounds() ?? undefined : undefined
-
-    setPreviewBusy(true)
-    try {
-      let waited = false
-      const d = await awaitPrepared(
-        () => previewConfig(fakeCfg, 0, previewLimit, undefined, bbox),
-        text => { waited = true; setStatus('busy', text) },
-        () => seq !== previewSeq,
-      )
-      if (!d || d.stale) return
-      if (waited) setStatus('ok', 'valid')
-      if (d.ok && d.rows) {
-        updateMap(d.rows as PreviewRow[], undefined, { fitBounds: !bboxMode })
-        updateTable(d.rows as Record<string, unknown>[], previewLimit)
-        problemFixed()
-      } else {
-        setStatus('bad', d.error?.split('\n')[0] || 'preview failed', d.error || 'unknown error')
-        showTableError(d.error || 'unknown error')
-      }
-    } catch (e) {
-      console.error('Source preview failed:', e)
-      setStatus('bad', 'preview request failed', String(e))
-      showTableError(String(e))
-    } finally {
-      setPreviewBusy(false)
-    }
-    return
   }
 }
 
