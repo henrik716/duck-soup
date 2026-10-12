@@ -29,7 +29,7 @@ each group with a duck name:
 | | Clip | `clip` | Keep only the part of each feature that overlaps a mask source. |
 | | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
 | | Dissolve | `dissolve` | Merge features that share the same group-by values, with per-group aggregates. |
-| **Pecking order** (rows: choose which rows flow on) | Filter | `filter` | Drop rows where a SQL condition is false. |
+| **Pecking order** (rows: keep some, add more, or set a copy aside) | Filter | `filter` | Drop rows where a SQL condition is false. |
 | | Merge / Union | `merge` | Append another source's rows, matched by column name. |
 | | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
 | **Ruffling feathers** (attributes: calculate, overwrite or drop columns) | Update Attributes | `attributes` | Add, overwrite or remove columns partway through the pipeline. |

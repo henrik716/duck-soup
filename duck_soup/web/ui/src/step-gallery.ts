@@ -30,7 +30,7 @@ export const STEP_GALLERY: GalleryGroup[] = [
     ],
   },
   {
-    name: 'Pecking order', what: 'rows: choose which rows flow on',
+    name: 'Pecking order', what: 'rows: keep some, add more, or set a copy aside',
     items: [
       { type: 'filter', icon: 'filter', name: 'Filter', desc: 'Drop rows where a SQL condition is false — e.g. reject unmatched joins.' },
       { type: 'merge', icon: 'combine', name: 'Merge / Union', desc: 'Append rows from another source, matched by column name.' },

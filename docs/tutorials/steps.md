@@ -263,7 +263,7 @@ shape itself.
 - A key can also be a SQL expression with a name, such as
   `{to: initial, expr: "left(district_name, 1)"}`, to group by a computed value.
 
-## Rows: choose which rows flow on
+## Rows: keep some, add more, or set a copy aside
 
 ### `filter`
 
