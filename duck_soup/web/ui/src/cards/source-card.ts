@@ -31,8 +31,6 @@ const FORMAT_DOCS_ANCHORS: Record<string, string> = {
   wfs: 'wfs', oapif: 'ogc-api-features', arcgis_rest: 'arcgis-rest',
 }
 
-const TABULAR_GEOM_FORMATS = ['xlsx', 'csv', 'json']
-const HEADER_ROW_FORMATS = ['xlsx', 'csv']
 const WKT_COLUMN_NAMES = ['geom', 'geometry', 'wkt', 'the_geom', 'shape', 'wkt_geom', 'geom_wkt']
 const X_COLUMN_NAMES = ['lon', 'lng', 'long', 'longitude', 'x']
 const Y_COLUMN_NAMES = ['lat', 'latitude', 'y']
@@ -433,7 +431,7 @@ function createInspectors(
           updateDownloadNote(c, d.download)
           // Offer the just-inspected columns as suggestions for the geometry-column
           // pickers below — same idea as doInspectFile populating the `layer` combo.
-          if (TABULAR_GEOM_FORMATS.includes(format)) {
+          if (META.tabular_geom_formats.includes(format)) {
             const colOptions = d.columns.map(col => col.name)
             ;['x_field', 'y_field', 'geom_field'].forEach(k => {
               const sel = c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)
@@ -677,7 +675,7 @@ function wireFormatToggles(
   // Header-row override: xlsx/csv only (GDAL's HEADERS open option exists for both drivers).
   const toggleHeaderRow = () => {
     const row = c.querySelector<HTMLElement>('[data-header-row]')!
-    row.style.display = HEADER_ROW_FORMATS.includes(fmt.value) ? 'flex' : 'none'
+    row.style.display = META.header_row_formats.includes(fmt.value) ? 'flex' : 'none'
   }
   // Geometry-from-columns: xlsx/csv/json only. Not a GDAL feature any of these readers
   // provides — the XLSX driver has no geometry support at all, the CSV driver's own
@@ -687,12 +685,12 @@ function wireFormatToggles(
   const geomModeSel = c.querySelector<HTMLSelectElement>('[data-geom-mode]')!
   const toggleTabularGeom = () => {
     const row = c.querySelector<HTMLElement>('[data-tabular-geom]')!
-    row.style.display = TABULAR_GEOM_FORMATS.includes(fmt.value) ? 'flex' : 'none'
+    row.style.display = META.tabular_geom_formats.includes(fmt.value) ? 'flex' : 'none'
   }
   const toggleTabularGeomSub = () => {
     const xyRow = c.querySelector<HTMLElement>('[data-tabular-geom-xy]')!
     const wktRow = c.querySelector<HTMLElement>('[data-tabular-geom-wkt]')!
-    const active = TABULAR_GEOM_FORMATS.includes(fmt.value) ? geomModeSel.value : ''
+    const active = META.tabular_geom_formats.includes(fmt.value) ? geomModeSel.value : ''
     xyRow.style.display = active === 'xy' ? 'flex' : 'none'
     wktRow.style.display = active === 'wkt' ? 'flex' : 'none'
   }

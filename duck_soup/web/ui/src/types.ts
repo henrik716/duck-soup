@@ -213,6 +213,10 @@ export interface MetaResponse {
   predicates: JoinPredicate[]
   funcs: MapFunc[]
   step_types: string[]
+  // Formats that build geometry from columns (x_field/y_field/geom_field), and the ones
+  // taking header_row: config.TABULAR_GEOM_FORMATS / HEADER_ROW_FORMATS.
+  tabular_geom_formats: SourceFormat[]
+  header_row_formats: SourceFormat[]
 }
 
 export interface VersionResponse {

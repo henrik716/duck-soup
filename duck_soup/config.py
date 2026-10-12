@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Literal, Optional, Union, get_args
 
 import yaml
 from pydantic import AfterValidator, BaseModel, Field, model_validator
@@ -40,6 +40,9 @@ SPATIAL_FORMATS = {
 
 # Tabular formats whose geometry can be built from columns (x_field/y_field/geom_field).
 TABULAR_GEOM_FORMATS = ("xlsx", "csv", "json")
+
+# Formats that take `header_row`.
+HEADER_ROW_FORMATS = ("xlsx", "csv")
 
 JOIN_PREDICATES = ["intersects", "contains", "within"]
 
@@ -153,7 +156,7 @@ class Source(BaseModel):
 
     @model_validator(mode="after")
     def _check_header_row_format(self):
-        if self.header_row is not None and self.format not in ("xlsx", "csv"):
+        if self.header_row is not None and self.format not in HEADER_ROW_FORMATS:
             raise ValueError(
                 f"source '{self.id}': 'header_row' only applies to xlsx/csv sources"
             )
@@ -347,6 +350,9 @@ Step = Annotated[
     ],
     Field(discriminator='type'),
 ]
+
+# Every step `type`, in the order of the Step union.
+STEP_TYPES = [cls.model_fields["type"].default for cls in get_args(get_args(Step)[0])]
 
 
 class DerivedSource(BaseModel):

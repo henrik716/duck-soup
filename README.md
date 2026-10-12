@@ -438,6 +438,8 @@ duck_soup/           # Python package
   config.py          # YAML schema (pydantic) + load/save
   sources/           # one reader per format (mostly DuckDB ST_Read / GDAL)
   engine.py          # builds a chain of SQL views
+  steps.py           # the SQL of each step type
+  mapping.py         # the mapping compiled to a layer's SELECT
   output.py          # writes the layers to GeoPackage / GeoParquet
   derive.py          # DuckDB bootstrap (extensions) + python UDFs (MGRS)
   sql_util.py        # identifier / literal quoting

@@ -24,9 +24,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..config import (
+    HEADER_ROW_FORMATS,
     JOIN_PREDICATES,
     MAP_FUNCS,
     SOURCE_FORMATS,
+    STEP_TYPES,
+    TABULAR_GEOM_FORMATS,
     Source,
     dump_config_yaml,
     load_config,
@@ -75,7 +78,9 @@ def meta() -> dict:
         "formats": SOURCE_FORMATS,
         "predicates": JOIN_PREDICATES,
         "funcs": MAP_FUNCS,
-        "step_types": ["spatial_join", "attribute_join", "nearest_neighbor", "buffer", "centroid", "clip", "erase", "dissolve", "intersect_overlay", "line_overlay", "filter", "merge", "snapshot"],
+        "step_types": STEP_TYPES,
+        "tabular_geom_formats": list(TABULAR_GEOM_FORMATS),
+        "header_row_formats": list(HEADER_ROW_FORMATS),
     }
 
 
