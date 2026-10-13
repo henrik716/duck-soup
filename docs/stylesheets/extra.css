@@ -189,9 +189,16 @@ svg.ds-diagram circle.miss { fill: var(--md-default-bg-color); stroke: var(--ds-
    a table that gets too wide scrolls sideways. */
 .md-typeset table:not([class]) code { word-break: normal; overflow-wrap: normal; }
 
-/* The line under a diagram that says what to look at. */
-.md-typeset .ds-caption { font-size: .7rem; color: var(--md-default-fg-color--light); text-align: center; max-width: 780px; margin: -.6rem auto 1.2rem; }
-.md-typeset .ds-key + .ds-caption { margin-top: .4rem; }
+/* A diagram and its caption, as a figure: the caption sits right under the picture, small and
+   italic, so it reads as belonging to it. */
+.md-typeset figure.ds-figure { display: block; width: 100%; max-width: 780px; margin: 1.2rem auto 1.4rem; }
+.md-typeset figure.ds-figure svg.ds-diagram { margin: 0 auto; }
+.md-typeset figure.ds-figure > p { margin: 0; }  /* the paragraph Markdown puts the svg in */
+.md-typeset figure.ds-figure .ds-key { margin-top: .5rem; }
+.md-typeset figure.ds-figure figcaption {
+  max-width: none; margin: .5rem auto 0; font-size: .7rem; font-style: italic; line-height: 1.5;
+  color: var(--md-default-fg-color--light); text-align: center;
+}
 .ds-key { font-size: .7rem; color: var(--md-default-fg-color--light); text-align: center; margin-top: -.6rem; }
 .ds-key span { display: inline-flex; align-items: center; gap: .3em; margin: 0 .6em; }
 .ds-key i { width: .8em; height: .8em; border-radius: 50%; display: inline-block; }

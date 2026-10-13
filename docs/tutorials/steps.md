@@ -28,10 +28,10 @@ to answer "which district is each place in?".
 --8<-- "docs/tutorials/generated/spatial_join.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/spatial_join.svg"
-
-After: each place now carries the name of the district it's in. The Old Lighthouse, outside every district, gets none.
-{ .ds-caption }
+<figcaption markdown>After: each place now carries the name of the district it's in. The Old Lighthouse, outside every district, gets none.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/spatial_join.md"
 
@@ -52,10 +52,10 @@ still gets exactly one match, and `on_multiple` decides which:
 --8<-- "docs/tutorials/generated/spatial_join_overlap.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/spatial_join_overlap.svg"
-
-After: the district each option picks for Central Puddle Park. `first` takes Old Puddleton (dashed), `largest_overlap` takes Mallard Quay (filled).
-{ .ds-caption }
+<figcaption markdown>After: the district each option picks for Central Puddle Park. `first` takes Old Puddleton (dashed), `largest_overlap` takes Mallard Quay (filled).</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/spatial_join_overlap.md"
 
@@ -106,10 +106,10 @@ geometry is involved, so the other source can be a plain CSV.
 --8<-- "docs/tutorials/generated/nearest_neighbor.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/nearest_neighbor.svg"
-
-After: each place is linked to its nearest stop. The Old Lighthouse has no stop within 300 m.
-{ .ds-caption }
+<figcaption markdown>After: each place is linked to its nearest stop. The Old Lighthouse has no stop within 300 m.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/nearest_neighbor.md"
 
@@ -129,10 +129,10 @@ overlapping pair with the shared area as its geometry.
 --8<-- "docs/tutorials/generated/intersect_overlay.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/intersect_overlay.svg"
-
-After: Central Puddle Park is cut into four pieces along the district borders. The other parks each lie in one district and stay whole.
-{ .ds-caption }
+<figcaption markdown>After: Central Puddle Park is cut into four pieces along the district borders. The other parks each lie in one district and stay whole.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/intersect_overlay.md"
 
@@ -155,16 +155,15 @@ Here the footpath network collects attributes from two datasets: the lamp regist
 --8<-- "docs/tutorials/generated/line_overlay.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/line_overlay.svg"
-
 <div class="ds-key" markdown>
 <span><i class="k-path"></i>footpaths</span>
 <span><i class="k-lamp"></i>lit (`lit_paths`)</span>
 <span><i class="k-board"></i>boardwalk (`boardwalks`)</span>
 </div>
-
-Each gap in **After** is where one row ends and the next begins: 10 pieces in all. Mill Lane and Waddle Bridge only end on Riverside Walk, so it has no gap there.
-{ .ds-caption }
+<figcaption markdown>Each gap in **After** is where one row ends and the next begins: 10 pieces in all. Mill Lane and Waddle Bridge only end on Riverside Walk, so it has no gap there.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/line_overlay.md"
 
@@ -212,10 +211,10 @@ joined, buffered and mapped like any other layer.
 --8<-- "docs/tutorials/generated/buffer.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/buffer.svg"
-
-After: each stop is a 150 m circle.
-{ .ds-caption }
+<figcaption markdown>After: each stop is a 150 m circle.</figcaption>
+</figure>
 
 - The distance is in working-CRS units: 150 m here, roughly how far a duck will waddle for a
   bus. Like other distance operations, it needs a projected working CRS.
@@ -231,10 +230,10 @@ After: each stop is a 150 m circle.
 --8<-- "docs/tutorials/generated/centroid.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/centroid.svg"
-
-After: each park is replaced by its centre point. The dashed outlines are the parks they came from.
-{ .ds-caption }
+<figcaption markdown>After: each park is replaced by its centre point. The dashed outlines are the parks they came from.</figcaption>
+</figure>
 
 Useful for labelling, or for joining polygons to other polygons by "where is its middle?"
 instead of by overlap. For a curved or C-shaped polygon, the centroid can fall outside the
@@ -248,10 +247,10 @@ shape itself.
 --8<-- "docs/tutorials/generated/clip.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/clip.svg"
-
-After: only the corner of Central Puddle Park inside Old Puddleton (teal, dashed) is left. The dashed grey parks are dropped.
-{ .ds-caption }
+<figcaption markdown>After: only the corner of Central Puddle Park inside Old Puddleton (teal, dashed) is left. The dashed grey parks are dropped.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/clip.md"
 
@@ -274,10 +273,10 @@ After: only the corner of Central Puddle Park inside Old Puddleton (teal, dashed
 --8<-- "docs/tutorials/generated/erase.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/erase.svg"
-
-After: the river's strip is cut out of Central Puddle Park, leaving it in two parts. The other parks don't touch the river.
-{ .ds-caption }
+<figcaption markdown>After: the river's strip is cut out of Central Puddle Park, leaving it in two parts. The other parks don't touch the river.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/erase.md"
 
@@ -296,10 +295,10 @@ After: the river's strip is cut out of Central Puddle Park, leaving it in two pa
 --8<-- "docs/tutorials/generated/dissolve.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/dissolve.svg"
-
-After: the four districts are merged into their two wards.
-{ .ds-caption }
+<figcaption markdown>After: the four districts are merged into their two wards.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/dissolve.md"
 
@@ -322,10 +321,10 @@ values.
 --8<-- "docs/tutorials/generated/combine_lines.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/combine_lines.svg"
-
-**Before** is what the step gets: the 10 pieces of the two `line_overlay` steps, a gap between each. **After**, pieces of the same path with the same lighting that meet end to end are one line again: 7 lines.
-{ .ds-caption }
+<figcaption markdown>**Before** is what the step gets: the 10 pieces of the two `line_overlay` steps, a gap between each. **After**, pieces of the same path with the same lighting that meet end to end are one line again: 7 lines.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/combine_lines.md"
 
@@ -349,10 +348,10 @@ the noding a network needs before routing or counting segments.
 --8<-- "docs/tutorials/generated/split_lines.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/split_lines.svg"
-
-Each gap in **After** is a cut: Riverside Walk where Mill Lane and Waddle Bridge meet it, and Reed Way where the bridge ends on it.
-{ .ds-caption }
+<figcaption markdown>Each gap in **After** is a cut: Riverside Walk where Mill Lane and Waddle Bridge meet it, and Reed Way where the bridge ends on it.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/split_lines.md"
 
@@ -391,10 +390,10 @@ to a metre short of Reedy Reach, leaving a thin gap between them.
 --8<-- "docs/tutorials/generated/simplify.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/simplify.svg"
-
-The dots are the vertices. After simplifying, each wiggly edge keeps a fraction of them, and the edge two zones share is still a single edge.
-{ .ds-caption }
+<figcaption markdown>The dots are the vertices. After simplifying, each wiggly edge keeps a fraction of them, and the edge two zones share is still a single edge.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/simplify.md"
 
@@ -416,10 +415,10 @@ The dots are the vertices. After simplifying, each wiggly edge keeps a fraction 
 --8<-- "docs/tutorials/generated/snap_to_grid.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/snap_to_grid.svg"
-
-After: each place has moved to the nearest point of a 50 m grid. The grey dots are where they were.
-{ .ds-caption }
+<figcaption markdown>After: each place has moved to the nearest point of a 50 m grid. The grey dots are where they were.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/snap_to_grid.md"
 
@@ -437,10 +436,10 @@ After: each place has moved to the nearest point of a 50 m grid. The grey dots a
 --8<-- "docs/tutorials/generated/fill_holes.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/fill_holes.svg"
-
-**Before**: the parks (teal) are erased from the districts. **After**: the small hole in Featherhill is filled (dashed); the two larger ones stay. The square in the middle isn't a hole: Central Puddle Park took a corner off each of four districts.
-{ .ds-caption }
+<figcaption markdown>**Before**: the parks (teal) are erased from the districts. **After**: the small hole in Featherhill is filled (dashed); the two larger ones stay. The square in the middle isn't a hole: Central Puddle Park took a corner off each of four districts.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/fill_holes.md"
 
@@ -460,10 +459,10 @@ Featherhill (5 600 m², teal below) is too small to keep.
 --8<-- "docs/tutorials/generated/eliminate_slivers.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/eliminate_slivers.svg"
-
-**Before**: the pieces the overlay cuts the parks into, the sliver in teal. **After**: it's part of the Old Puddleton piece above it.
-{ .ds-caption }
+<figcaption markdown>**Before**: the pieces the overlay cuts the parks into, the sliver in teal. **After**: it's part of the Old Puddleton piece above it.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/eliminate_slivers.md"
 
@@ -499,10 +498,10 @@ Featherhill (5 600 m², teal below) is too small to keep.
 --8<-- "docs/tutorials/generated/filter.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/filter.svg"
-
-After: the places that pass the condition. The grey ones are dropped.
-{ .ds-caption }
+<figcaption markdown>After: the places that pass the condition. The grey ones are dropped.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/filter.md"
 
@@ -537,10 +536,10 @@ After: the places that pass the condition. The grey ones are dropped.
 --8<-- "docs/tutorials/generated/merge.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/merge.svg"
-
-**Before**: the two new places (teal) and the chain's own. **After**: all of them are rows of the chain.
-{ .ds-caption }
+<figcaption markdown>**Before**: the two new places (teal) and the chain's own. **After**: all of them are rows of the chain.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/merge.md"
 
@@ -562,10 +561,10 @@ bread crumbs a year), where the ducks are bound to gather:
 --8<-- "docs/tutorials/generated/snapshot.yaml"
 ```
 
+<figure class="ds-figure" markdown>
 --8<-- "docs/tutorials/generated/snapshot.svg"
-
-After: the two crumb hotspots' 250 m circles. A place inside another hotspot's circle gets `near_hotspot`; the red ones have no hotspot nearby.
-{ .ds-caption }
+<figcaption markdown>After: the two crumb hotspots' 250 m circles. A place inside another hotspot's circle gets `near_hotspot`; the red ones have no hotspot nearby.</figcaption>
+</figure>
 
 --8<-- "docs/tutorials/generated/snapshot.md"
 
