@@ -756,6 +756,50 @@ def test_dissolve_output_names_must_be_unique(tmp_path):
         _config(tmp_path, [("p", _point(0, 0))], steps, [])
 
 
+def _chains(tmp_path, base, step):
+    cfg = _config(tmp_path, base, [{"type": "combine_lines", **step}], [], working_crs="EPSG:25833")
+    return [(r["name"], r.get("ids"), r.get("len")) for r in preview_config_pipeline(cfg, limit=50)]
+
+
+def test_combine_lines_joins_each_connected_chain_with_its_own_aggregates(tmp_path):
+    base = [
+        ("a", _line((0, 0), (10, 0))), ("a", _line((10, 0), (20, 0))), ("a", _line((20, 0), (30, 0))),
+        ("a", _line((100, 0), (110, 0))),  # same name, not connected: a chain of its own
+        ("b", _line((30, 0), (40, 0))),  # connected, but another name
+    ]
+    aggs = [{"to": "ids", "expr": "count(*)"}, {"to": "len", "expr": "sum(ST_Length(geom))"}]
+    assert sorted(_chains(tmp_path, base, {"by": ["name"], "aggregates": aggs})) == [
+        ("a", 1, 10.0), ("a", 3, 30.0), ("b", 1, 10.0),
+    ]
+    cfg = _config(tmp_path, base, [{"type": "combine_lines", "by": ["name"]}], [], working_crs="EPSG:25833")
+    assert _gpkg_layers(Path(run_config(cfg))) == {"out": 3}
+
+
+def test_combine_lines_stops_at_junctions_and_keeps_direction_unless_told(tmp_path):
+    aggs = [{"to": "name", "expr": "min(name)"}, {"to": "ids", "expr": "string_agg(name, ',' ORDER BY name)"}]
+    # c starts where a and b meet: a chain stops where three lines meet
+    junction = [("a", _line((0, 0), (10, 0))), ("b", _line((10, 0), (20, 0))), ("c", _line((10, 0), (10, 10)))]
+    assert sorted(ids for _, ids, _ in _chains(tmp_path, junction, {"aggregates": aggs})) == ["a", "b", "c"]
+    # b runs the other way
+    opposed = [("a", _line((0, 0), (10, 0))), ("b", _line((20, 0), (10, 0)))]
+    assert sorted(ids for _, ids, _ in _chains(tmp_path, opposed, {"aggregates": aggs})) == ["a", "b"]
+    assert _chains(tmp_path, opposed, {"aggregates": aggs, "preserve_direction": False}) == [("a", "a,b", None)]
+
+
+def test_combine_lines_keeps_features_that_arent_lines(tmp_path):
+    base = [("a", _line((0, 0), (10, 0))), ("a", _line((10, 0), (20, 0))), ("p", _point(5, 5)), ("s", _square(0, 0, 1, 1))]
+    rows = _chains(tmp_path, base, {"by": ["name"], "aggregates": [{"to": "ids", "expr": "count(*)"}]})
+    assert rows == [("a", 2, None), ("p", 1, None), ("s", 1, None)]
+
+
+def test_combine_lines_errors_name_the_aggregate(tmp_path):
+    head, path, _ = _step_error(tmp_path, [{"type": "combine_lines", "aggregates": [
+        {"to": "bad", "expr": "ST_Length(geom)"},  # not aggregated
+    ]}])
+    assert head.startswith("step 1 aggregate 'bad' (expr): Binder Error")
+    assert path == "pipelines.0.steps.0.aggregates.0"
+
+
 def _step_error(tmp_path, steps):
     from duck_soup.engine import MappingError
 

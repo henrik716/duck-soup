@@ -29,6 +29,7 @@ each group with a duck name:
 | | Clip | `clip` | Keep only the part of each feature that overlaps a mask source. |
 | | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
 | | Dissolve | `dissolve` | Merge features that share the same group-by values, with per-group aggregates. |
+| | Combine Lines | `combine_lines` | Join lines that meet end to end into longer lines, one per connected chain with the same group-by values. |
 | **Pecking order** (rows: keep some, add more, or set a copy aside) | Filter | `filter` | Drop rows where a SQL condition is false. |
 | | Merge / Union | `merge` | Append another source's rows, matched by column name. |
 | | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
@@ -71,13 +72,15 @@ The body depends on the step type:
 - **where**: for a filter, a SQL boolean such as `pond IS NOT NULL`, checked live against
   sample data.
 - **distance**, **max distance**, **distance field**: in working-CRS units.
-- **group by**: for dissolve, the keys features are grouped on. A key is a column, or a SQL
+- **group by**: for dissolve and combine lines, the keys features are grouped on. A key is a column, or a SQL
   expression with a name in **as**, to group by a computed value. Leave the list empty to
-  dissolve everything into one feature.
-- **aggregates**: for dissolve, columns computed per group: a name, and a SQL aggregate such as
+  dissolve everything into one feature (or, for combine lines, to join any lines that meet).
+- **aggregates**: for dissolve, columns computed per group (for combine lines, per chain): a name, and a SQL aggregate such as
   `sum(population)` or `string_agg(name, ', ')`. The expression builder (the pencil icon) lists
   the aggregate functions first. Its live check runs the dissolve, so it catches a column used
   outside an aggregate. Only the keys and aggregates are kept. Every other column is dropped.
+- **only join lines running the same way**: for combine lines, on by default. Untick it to let
+  a line be reversed so it joins one running the other way.
 - **Update Attributes** (an attributes step) changes only what you list. Every other column is
   kept as it is and goes on to the next step, as the card says at the top. Its parts:
     - **available here**: the columns that reach this step, grouped by where they come from

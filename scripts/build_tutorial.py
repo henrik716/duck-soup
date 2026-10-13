@@ -342,6 +342,26 @@ EXAMPLES: dict[str, dict] = {
                        "after": "SELECT ward, ST_Centroid(geom) FROM out"},
         },
     },
+    "combine_lines": {
+        "pipeline": {"base": "paths", "steps": [
+            {"type": "line_overlay", "source": "lit_paths", "fields": {"lamps": "lamps"}, "tolerance": 0.1},
+            {"type": "line_overlay", "source": "boardwalks", "fields": {"material": "material"}, "tolerance": 0.1},
+            {"type": "combine_lines", "by": ["name", "lamps"], "aggregates": [
+                {"to": "pieces", "expr": "count(*)"},
+                {"to": "materials", "expr": "string_agg(DISTINCT material, ', ' ORDER BY material)"},
+            ]},
+        ]},
+        "table": [("name", "name"), ("lamps", "lamps"), ("pieces", "pieces"), ("materials", "materials"),
+                  ("length_m", "round(ST_Length(geom), 1)")],
+        "order": "name, ST_XMin(geom), ST_YMin(geom) DESC",
+        "figure": {
+            "before": [BG_DISTRICTS, ("SELECT geom FROM lit_paths", "lit"),
+                       ("SELECT geom FROM paths", "path"), ("SELECT geom FROM boardwalks", "board")],
+            "after": [BG_DISTRICTS, ("SELECT geom FROM out WHERE lamps IS NOT NULL", "lit"),
+                      ("SELECT geom FROM out", "path"),
+                      ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
+        },
+    },
     "intersect_overlay": {
         "pipeline": {"base": "parks", "steps": [
             {"type": "intersect_overlay", "source": "districts", "fields": {"district": "district_name"}},

@@ -98,7 +98,7 @@ export interface Erase {
   branch?: string
 }
 
-/** A named SQL expression: a dissolve group key or aggregate. */
+/** A named SQL expression: a dissolve or combine_lines group key or aggregate. */
 export interface ExprColumn {
   to: string
   expr: string
@@ -109,6 +109,16 @@ export interface Dissolve {
   /** A column name, or a named expression to group by. */
   by: (string | ExprColumn)[]
   aggregates?: ExprColumn[]
+  branch?: string
+}
+
+export interface CombineLines {
+  type: 'combine_lines'
+  /** A column name, or a named expression to group by. */
+  by: (string | ExprColumn)[]
+  aggregates?: ExprColumn[]
+  /** Only join lines running the same way (default true). */
+  preserve_direction?: boolean
   branch?: string
 }
 
@@ -153,7 +163,7 @@ export interface Attributes {
   branch?: string
 }
 
-export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | IntersectOverlay | LineOverlay | Filter | Merge | Snapshot | Attributes
+export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | IntersectOverlay | LineOverlay | Filter | Merge | Snapshot | Attributes
 
 export interface CodeCase {
   value: string

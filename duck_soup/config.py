@@ -290,7 +290,7 @@ class Erase(StepBase):
 
 
 class ExprColumn(BaseModel):
-    """A named SQL expression: a dissolve group key or aggregate."""
+    """A named SQL expression: a dissolve or combine_lines group key or aggregate."""
 
     to: str = Field(..., description="Output column name")
     expr: str = Field(..., description="SQL expression")
@@ -312,12 +312,13 @@ class ExprColumn(BaseModel):
         return self
 
 
-class Dissolve(StepBase):
-    type: Literal["dissolve"] = "dissolve"
+class _GroupedStep(StepBase):
+    """Group keys and per-group aggregates, shared by dissolve and combine_lines."""
+
     by: list[Union[str, ExprColumn]] = Field(
         default_factory=list,
         description="Group keys: a column name, or {to, expr} to group by a SQL expression; "
-        "empty = dissolve all",
+        "empty = one group",
     )
     aggregates: list[ExprColumn] = Field(
         default_factory=list,
@@ -330,17 +331,34 @@ class Dissolve(StepBase):
         seen: set[str] = set()
         for name in self.output_names:
             if name.lower() in ("geom", "__src_row"):
-                raise ValueError(f"dissolve: '{name}' is reserved; give the column another name")
+                raise ValueError(f"{self.type}: '{name}' is reserved; give the column another name")
             if name.lower() in seen:
-                raise ValueError(f"dissolve: column '{name}' is produced twice")
+                raise ValueError(f"{self.type}: column '{name}' is produced twice")
             seen.add(name.lower())
         return self
 
     @property
     def output_names(self) -> list[str]:
-        """The columns a dissolve writes besides geom: its keys, then its aggregates."""
+        """The columns the step writes besides geom: its keys, then its aggregates."""
         keys = [k if isinstance(k, str) else k.to for k in self.by]
         return keys + [a.to for a in self.aggregates]
+
+
+class Dissolve(_GroupedStep):
+    type: Literal["dissolve"] = "dissolve"
+
+
+class CombineLines(_GroupedStep):
+    """Joins lines end to end into longer lines: one feature per connected chain of lines
+    that share the `by` values, with `aggregates` computed over the features that make up
+    each chain. Features that aren't lines are kept one per feature."""
+
+    type: Literal["combine_lines"] = "combine_lines"
+    preserve_direction: bool = Field(
+        True,
+        description="Only join lines that run the same way (end to start); false lets a "
+        "line be reversed to fit",
+    )
 
 
 class IntersectOverlay(StepBase):
@@ -527,7 +545,8 @@ class Attributes(StepBase):
 Step = Annotated[
     Union[
         SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
-        Dissolve, IntersectOverlay, LineOverlay, Filter, Merge, Snapshot, Attributes,
+        Dissolve, CombineLines, IntersectOverlay, LineOverlay, Filter, Merge, Snapshot,
+        Attributes,
     ],
     Field(discriminator='type'),
 ]

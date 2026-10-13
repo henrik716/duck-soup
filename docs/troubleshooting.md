@@ -99,7 +99,7 @@
     Preview step by step to find which.
 
 ??? question "Columns disappeared after a step"
-    `dissolve` keeps only its `by` keys and its `aggregates`. Keep a value per group with an
+    `dissolve` and `combine_lines` keep only their `by` keys and their `aggregates`. Keep a value per group with an
     aggregate (`any_value(name)`, `sum(population)`, `string_agg(name, ', ')`), dissolve on
     more columns, or join the attributes back in afterwards. An `attributes` step's `drop`
     also removes columns.

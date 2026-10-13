@@ -145,12 +145,12 @@ export function resolveSchemaScoped(scope: Element, id: string, seen = new Set<s
 }
 
 /** The columns a step card adds to the rows: a join's pulled fields (and nearest_neighbor's
- *  distance field), the columns an attributes step sets, a dissolve's named keys and its
- *  aggregates. */
+ *  distance field), the columns an attributes step sets, a dissolve's (or combine_lines')
+ *  named keys and its aggregates. */
 export function stepOutputColumns(stepCard: Element): string[] {
   const values = (sel: string) => [...stepCard.querySelectorAll<HTMLInputElement>(sel)]
     .map(i => i.value.trim()).filter(Boolean)
-  // A dissolve key without a name is a column that's already there.
+  // A dissolve/combine_lines key without a name is a column that's already there.
   return [
     ...values('[data-fields] .kv [data-fo]'),
     ...values('[data-k="distance_field"]'),
@@ -163,7 +163,8 @@ export function stepOutputColumns(stepCard: Element): string[] {
 /**
  * The columns the rows have when they reach `stepCard`: the base source's, then what each
  * step before it adds (pulled fields, set columns, merged sources' columns), overwrites or
- * removes (an attributes step's drops; a dissolve keeps only its keys and aggregates). Steps
+ * removes (an attributes step's drops; a dissolve or combine_lines keeps only its keys and
+ * aggregates). Steps
  * on another branch don't count; a step on a branch sees the chain as it was at the snapshot
  * that made the branch. Unlike collectAvailableColumnsScoped, nothing from a later step.
  */
@@ -199,7 +200,7 @@ export function collectColumnsBeforeStep(scope: Element, stepCard: Element): Ava
     const target = branchOf(card)
     const cols = chains.get(target) ?? new Map(main)
     chains.set(target, cols)
-    if (type === 'dissolve') {
+    if (type === 'dissolve' || type === 'combine_lines') {
       const kept: Cols = new Map()
       const geom = cols.get('geom')
       if (geom) kept.set('geom', geom)

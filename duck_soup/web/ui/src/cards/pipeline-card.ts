@@ -692,11 +692,14 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     if (t === 'buffer') {
       st['distance'] = parseFloat(val(c, 'distance')) || 0
     }
-    if (t === 'dissolve') {
+    if (t === 'dissolve' || t === 'combine_lines') {
       st['by'] = readByKeys(c)
       // Only written when there are any, so existing YAML round-trips unchanged.
       const aggregates = readAggregates(c)
       if (aggregates.length) st['aggregates'] = aggregates
+    }
+    if (t === 'combine_lines' && !c.querySelector<HTMLInputElement>('[data-k="preserve_direction"]')?.checked) {
+      st['preserve_direction'] = false
     }
     if (t === 'attributes') {
       const { columns, drop } = readAttributes(c)

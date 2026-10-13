@@ -9,7 +9,7 @@ import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from
 import { exprField, exprValue } from '../expr-field'
 import { AGGREGATE_SNIPPETS } from '../expr-snippets'
 import { fieldPreviewConfig } from '../field-preview'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, Attributes, ExprColumn, MapItem } from '../types'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Attributes, ExprColumn, MapItem } from '../types'
 import { renderIcons } from '../icons'
 import { showToast } from '../toast'
 
@@ -23,6 +23,7 @@ const STEP_ICONS: Record<string, string> = {
   clip: 'scissors',
   erase: 'eraser',
   dissolve: 'layers',
+  combine_lines: 'spline',
   intersect_overlay: 'git-merge',
   line_overlay: 'split',
   filter: 'filter',
@@ -40,6 +41,7 @@ const STEP_LABELS: Record<string, string> = {
   clip: 'clip',
   erase: 'erase',
   dissolve: 'dissolve',
+  combine_lines: 'combine lines',
   intersect_overlay: 'intersect overlay',
   line_overlay: 'line overlay',
   filter: 'filter',
@@ -57,6 +59,7 @@ const STEP_HINTS: Record<string, string> = {
   clip: 'Clips base features to their overlap with a mask source. Features with no overlap are dropped. Both sources must be spatial.',
   erase: 'Removes the overlap with a mask source from base feature geometry. Non-overlapping features are kept unchanged. Both sources must be spatial.',
   dissolve: 'Merges features that share the same group-by values, combining their geometries via union. Group by columns or SQL expressions; keep other values per group with aggregates (sum, count, string_agg, …). Every other column is dropped.',
+  combine_lines: 'Joins lines that meet end to end into longer lines: one feature per connected chain of lines that share the group-by values. A chain stops where three or more lines meet. Keep other values per chain with aggregates (sum, count, string_agg, …); every other column is dropped. Features that are not lines are kept one per feature.',
   intersect_overlay: 'Produces one output row per intersecting (base × source) pair with the intersection as geometry. Row count may increase significantly. Both sources must be spatial.',
   line_overlay: 'Cuts the lines where they lie on top of the source lines. Shared stretches get the source fields; every other piece is kept with empty fields, so the complete network flows on to the next step. Chain one per overlay dataset.',
   filter: 'Drops rows where this SQL condition is false — e.g. reject rows a prior join left unmatched.',
@@ -149,15 +152,24 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
   if (kind === 'centroid') {
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['centroid']}</p>`
   }
-  if (kind === 'dissolve') {
+  if (kind === 'dissolve' || kind === 'combine_lines') {
+    const per = kind === 'dissolve' ? 'group' : 'chain'
+    const empty = kind === 'dissolve' ? 'dissolve all' : 'combine all lines'
     bodyHtml += `<p class="hint" style="margin-top:8px">⚠ Only the group-by keys and aggregates below are kept after this step.</p>`
+    if (kind === 'combine_lines') {
+      const preserve = (st as Partial<CombineLines>).preserve_direction !== false
+      bodyHtml += `<div class="row" style="margin-top:8px">
+        <label class="field-check" title="Unticked, a line may be reversed to join one that runs the other way. Leave it ticked when direction matters (one-way streets, measures).">
+          <input type="checkbox" data-k="preserve_direction" ${preserve ? 'checked' : ''}> only join lines running the same way</label>
+      </div>`
+    }
     bodyHtml += `<div style="margin-top:10px">
-      <span class="head" style="${HEAD_STYLE}">group by&nbsp;<span style="font-weight:normal">(a column, or a SQL expression with a name · empty = dissolve all)</span></span>
+      <span class="head" style="${HEAD_STYLE}">group by&nbsp;<span style="font-weight:normal">(a column, or a SQL expression with a name · empty = ${empty})</span></span>
       <div data-by-cols></div>
       <button class="mini ghost" data-addby style="margin-top:6px">${PLUS_ICON} key</button>
     </div>
     <div style="margin-top:10px">
-      <span class="head" style="${HEAD_STYLE}">aggregates&nbsp;<span style="font-weight:normal">(one value per group, e.g. sum(population))</span></span>
+      <span class="head" style="${HEAD_STYLE}">aggregates&nbsp;<span style="font-weight:normal">(one value per ${per}, e.g. ${kind === 'dissolve' ? 'sum(population)' : 'sum(ST_Length(geom))'})</span></span>
       <div data-aggs></div>
       <button class="mini ghost" data-addagg style="margin-top:6px">${PLUS_ICON} aggregate</button>
     </div>`
@@ -264,12 +276,12 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   wireStepReorder(c, syncFn)
 
   const { addField, updateFieldsEmpty } = wireFieldsList(c, syncFn)
-  const { addByKey, addAggregate } = wireDissolveLists(c, syncFn)
+  const { addByKey, addAggregate } = wireDissolveLists(c, kind, syncFn)
   const { addColumn, addDropCol } = wireAttributeLists(c, syncFn)
 
   // hydrate scalar fields
   for (const [k, v] of Object.entries(st)) {
-    if (['fields', 'by', 'aggregates', 'columns', 'drop', 'type'].includes(k)) continue
+    if (['fields', 'by', 'aggregates', 'columns', 'drop', 'type', 'preserve_direction'].includes(k)) continue
     const inp = c.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)
     if (inp && v != null) inp.value = String(v)
   }
@@ -278,10 +290,10 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay | LineOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
     updateFieldsEmpty()
   }
-  // hydrate dissolve keys and aggregates, attribute columns and drops
-  if (kind === 'dissolve') {
-    ;((st as Partial<Dissolve>).by || []).forEach(key => addByKey(key))
-    ;((st as Partial<Dissolve>).aggregates || []).forEach(agg => addAggregate(agg))
+  // hydrate dissolve/combine_lines keys and aggregates, attribute columns and drops
+  if (kind === 'dissolve' || kind === 'combine_lines') {
+    ;((st as Partial<Dissolve | CombineLines>).by || []).forEach(key => addByKey(key))
+    ;((st as Partial<Dissolve | CombineLines>).aggregates || []).forEach(agg => addAggregate(agg))
   }
   if (kind === 'attributes') {
     ;((st as Partial<Attributes>).columns || []).forEach(m => addColumn(m))
@@ -495,8 +507,8 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
   return { addField, updateFieldsEmpty }
 }
 
-// dissolve: group keys (a column, or an expression with a name) and aggregates
-function wireDissolveLists(c: HTMLElement, syncFn: () => void) {
+// dissolve, combine_lines: group keys (a column, or an expression with a name) and aggregates
+function wireDissolveLists(c: HTMLElement, kind: Step['type'], syncFn: () => void) {
   const byBox = c.querySelector<HTMLElement>('[data-by-cols]')
   const aggBox = c.querySelector<HTMLElement>('[data-aggs]')
   // Only what reaches this step: a later step's columns don't exist yet here.
@@ -554,10 +566,11 @@ function wireDissolveLists(c: HTMLElement, syncFn: () => void) {
       onChange: syncFn,
       drawer: () => ({
         columns: columns(),
-        // The steps before this one, then this dissolve with only the draft as its aggregate:
+        // The steps before this one, then this step with only the draft as its aggregate:
         // an aggregate is only valid over the group.
         buildPreviewConfig: draft => fieldPreviewConfig(c, [], {
-          type: 'dissolve', by: readByKeys(c), aggregates: [{ to: '_expr_preview', expr: draft }],
+          type: kind === 'combine_lines' ? 'combine_lines' : 'dissolve',
+          by: readByKeys(c), aggregates: [{ to: '_expr_preview', expr: draft }],
         }),
         snippets: [AGGREGATE_SNIPPETS],
       }),
@@ -574,7 +587,7 @@ function wireDissolveLists(c: HTMLElement, syncFn: () => void) {
   return { addByKey, addAggregate }
 }
 
-/** A dissolve card's group keys: a plain column name, or `{to, expr}` once it has a name. */
+/** A dissolve or combine_lines card's group keys: a plain column name, or `{to, expr}` once it has a name. */
 export function readByKeys(c: Element): (string | ExprColumn)[] {
   return [...c.querySelectorAll('[data-by-row]')].flatMap(r => {
     const expr = exprValue(r.querySelector<HTMLInputElement>('[data-by-col]')!).trim()
@@ -584,7 +597,7 @@ export function readByKeys(c: Element): (string | ExprColumn)[] {
   })
 }
 
-/** A dissolve card's aggregates (rows missing a name or an expression left out). */
+/** A dissolve or combine_lines card's aggregates (rows missing a name or an expression left out). */
 export function readAggregates(c: Element): ExprColumn[] {
   return [...c.querySelectorAll('[data-agg-row]')].flatMap(r => {
     const to = r.querySelector<HTMLInputElement>('[data-agg-to]')!.value.trim()
@@ -701,7 +714,7 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
     } else if (kind === 'attributes') {
       const { columns, drop } = readAttributes(c)
       text = [columns.length ? `+${columns.length}` : '', drop.length ? `−${drop.length}` : ''].filter(Boolean).join(' · ')
-    } else if (kind === 'dissolve') {
+    } else if (kind === 'dissolve' || kind === 'combine_lines') {
       const keys = readByKeys(c).map(k => typeof k === 'string' ? k : k.to)
       const aggs = readAggregates(c).length
       text = [keys.length ? `by ${keys.join(', ')}` : '', aggs ? `Σ ${aggs}` : ''].filter(Boolean).join(' · ')
@@ -723,7 +736,7 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   c.querySelector('[data-k="rejects"]')?.addEventListener('input', updateTitle)
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
   // List rows come and go, each with several fields: refresh on any edit or row change.
-  if (kind === 'attributes' || kind === 'dissolve') {
+  if (kind === 'attributes' || kind === 'dissolve' || kind === 'combine_lines') {
     c.addEventListener('input', updateTitle)
     c.addEventListener('change', updateTitle)
     new MutationObserver(updateTitle).observe(c.querySelector('.card-content')!, { childList: true, subtree: true })

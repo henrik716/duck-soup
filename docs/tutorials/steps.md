@@ -263,6 +263,30 @@ shape itself.
 - A key can also be a SQL expression with a name, such as
   `{to: initial, expr: "left(district_name, 1)"}`, to group by a computed value.
 
+### `combine_lines`
+
+**Joins lines that meet end to end** into longer lines, one per connected chain with the same
+values.
+
+```yaml
+--8<-- "docs/tutorials/generated/combine_lines.yaml"
+```
+
+--8<-- "docs/tutorials/generated/combine_lines.svg"
+
+--8<-- "docs/tutorials/generated/combine_lines.md"
+
+- The two [`line_overlay`](#line_overlay) steps cut the paths into 10 pieces, by lighting and
+  by boardwalk. Combining by `name` and `lamps` rejoins the pieces only the boardwalks
+  split, giving 7 lines. The lit stretch of Riverside Walk is one line again, made of 3
+  pieces.
+- Riverside Walk's two unlit stretches stay two features: they don't touch. `dissolve` would
+  have merged them into one multi-part line.
+- The `aggregates` are computed per chain, so `pieces` counts the pieces in each line, and
+  `materials` lists the boardwalks it crosses.
+- Lines are joined only where one ends and the next begins, the way they run. Set
+  `preserve_direction: false` to let a line be reversed to fit.
+
 ## Rows: keep some, add more, or set a copy aside
 
 ### `filter`

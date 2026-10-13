@@ -52,6 +52,7 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 | Clipper (*inside* output) | [`clip`](../reference/steps.md#clip); its `rejects` layer is the features entirely *outside* |
 | Clipper (*outside* output) | [`erase`](../reference/steps.md#erase) |
 | Dissolver, Aggregator | [`dissolve`](../reference/steps.md#dissolve), with `aggregates` for the attribute accumulation (sum, count, concatenate, …) |
+| LineCombiner | [`combine_lines`](../reference/steps.md#combine_lines): group by attributes, one line per connected chain, `aggregates` per chain |
 | GeometryValidator (repair) | `make_valid`, on by default for every source |
 | 2DForcer | [`force_2d: true`](../reference/sources.md#3d-geometry) on the source |
 | Reprojector | Automatic: sources are reprojected into the working CRS, and layers into their own `crs` |

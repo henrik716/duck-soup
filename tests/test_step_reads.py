@@ -24,6 +24,7 @@ _STEPS = {
         "type": "dissolve", "by": ["name", {"to": "k", "expr": "upper(name)"}],
         "aggregates": [{"to": "n", "expr": "count(*)"}],
     },
+    "combine_lines": {"by": ["name"], "aggregates": [{"to": "n", "expr": "count(*)"}]},
     "intersect_overlay": {"fields": {"f": "name"}},
     "line_overlay": {"fields": {"f": "name"}},
     "filter": {"where": "name IS NOT NULL"},
@@ -32,7 +33,7 @@ _STEPS = {
         "columns": [{"to": "u", "expr": "upper(name)"}, {"to": "lon", "func": "lon"}], "drop": ["u"],
     },
 }
-_SOURCELESS = {"buffer", "centroid", "dissolve", "filter", "attributes"}
+_SOURCELESS = {"buffer", "centroid", "dissolve", "combine_lines", "filter", "attributes"}
 
 
 @pytest.fixture

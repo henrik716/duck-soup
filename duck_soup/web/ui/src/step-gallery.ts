@@ -27,6 +27,7 @@ export const STEP_GALLERY: GalleryGroup[] = [
       { type: 'clip', icon: 'scissors', name: 'Clip', desc: 'Intersect base features with a clip mask to keep only overlapping areas.' },
       { type: 'erase', icon: 'eraser', name: 'Erase / Difference', desc: 'Remove geometries that overlap with a mask source.' },
       { type: 'dissolve', icon: 'layers', name: 'Dissolve', desc: 'Merge features that share the same group-by values, with per-group aggregates (sum, count, …).' },
+      { type: 'combine_lines', icon: 'spline', name: 'Combine Lines', desc: 'Join lines that meet end to end into longer lines, one per connected chain with the same group-by values.' },
     ],
   },
   {

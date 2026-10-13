@@ -1,0 +1,17 @@
+base: paths
+steps:
+- type: line_overlay
+  source: lit_paths
+  fields: {lamps: lamps}
+  tolerance: 0.1
+- type: line_overlay
+  source: boardwalks
+  fields: {material: material}
+  tolerance: 0.1
+- type: combine_lines
+  by:
+  - name
+  - lamps
+  aggregates:
+  - {to: pieces, expr: "count(*)"}
+  - {to: materials, expr: "string_agg(DISTINCT material, ', ' ORDER BY material)"}

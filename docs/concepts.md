@@ -65,7 +65,7 @@ optionally flattened to 2D (`force_2d`), and reprojected into the pipeline's wor
 
 `base` names the source whose features flow through the pipeline. **One base feature in = one
 output row out**, unless a step deliberately changes the row count (a `filter`, a `merge`, a
-`dissolve`, a `spatial_join` with `match: all`, an `intersect_overlay`, a `line_overlay`).
+`dissolve`, a `combine_lines`, a `spatial_join` with `match: all`, an `intersect_overlay`, a `line_overlay`).
 
 Every other source is reference data. Steps join it onto the base rows, but it never becomes
 output rows on its own.
@@ -75,7 +75,8 @@ output rows on its own.
 Steps run in order. Each step takes the rows produced so far and returns a new set of rows:
 
 - **Joins** add columns: `spatial_join`, `attribute_join`, `nearest_neighbor`, `intersect_overlay`, `line_overlay`.
-- **Geoprocessing** changes the geometry: `buffer`, `centroid`, `clip`, `erase`, `dissolve`.
+- **Geoprocessing** changes the geometry: `buffer`, `centroid`, `clip`, `erase`, `dissolve`,
+  `combine_lines`.
 - **Row operations** change which rows exist: `filter`, `merge`.
 - **`attributes`** adds, overwrites or drops columns, with the mapping's rules, for a later
   step to use.

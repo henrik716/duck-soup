@@ -22,6 +22,7 @@ layer of their own.
 | | [`clip`](#clip) | may shrink | ✓ | – |
 | | [`erase`](#erase) | may shrink | ✓ | – |
 | | [`dissolve`](#dissolve) | shrinks | ✓ | keeps only `by` and `aggregates` |
+| | [`combine_lines`](#combine_lines) | shrinks | ✓ | keeps only `by` and `aggregates` |
 | Rows | [`filter`](#filter) | may shrink | – | – |
 | | [`merge`](#merge) | grows | – | ✓ (union of columns) |
 | | [`snapshot`](#snapshot) | – | – | – |
@@ -217,6 +218,42 @@ aggregate can use any column of the rows going in, but only inside an aggregate 
 (`count`, `sum`, `avg`, `min`, `max`, `string_agg`, `list`, `any_value`, `arg_max`, …). A
 bare column that isn't a key is an error. Without `by`, the aggregates are computed over
 everything, in the one feature that's left.
+
+## `combine_lines`
+
+Joins lines that meet end to end into longer lines. Lines are only joined to lines with the
+same `by` values, and each connected chain becomes one feature.
+
+```yaml
+- type: combine_lines
+  by: [road_name, speed_limit]   # omit or [] to combine all lines
+  aggregates:
+    - {to: segments, expr: "count(*)"}
+    - {to: length_m, expr: "sum(ST_Length(geom))"}
+  preserve_direction: true        # default
+```
+
+`by` and `aggregates` work as in [`dissolve`](#dissolve), and **only they are kept**. The
+difference is what makes up a feature:
+
+- **One feature per connected chain, not per group.** Two stretches of the same road that
+  don't touch stay two features, each a single line.
+- **Aggregates are computed per chain**, over the features that make it up: `count(*)` is
+  the number of segments in that chain, not in the whole group.
+- **A chain stops where three or more lines meet**, so a street with side roads joining it
+  comes out as one line between each pair of junctions.
+- **Lines are joined only at their end points.** Lines that cross without sharing a vertex
+  (a bridge over a road) are not cut or joined there.
+- With **`preserve_direction: true`** (the default), lines are joined only where one ends
+  and the next begins, so every chain runs the way its segments did. Leave it on when
+  direction matters (one-way streets, measures along the line). Set it to `false` to let a
+  line be reversed so it joins one running the other way.
+
+Features that aren't lines (points, polygons, no geometry) are kept as they are, one feature
+each, with their aggregates computed over that one feature.
+
+Use `dissolve` instead when you want one feature per group whatever touches what, or for
+polygons.
 
 ## `filter`
 

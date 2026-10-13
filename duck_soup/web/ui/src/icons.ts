@@ -7,7 +7,7 @@ import {
   Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, GripVertical,
   HardDrive, Hash, History, House, Info, Layers, Link, Loader, Map, MapPin, MapPinned,
   Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Radar, RefreshCw, Save,
-  Scissors, Search, Server, Sliders, Sparkles, Split, Square, Star, Sun, Table, TableProperties, Terminal,
+  Scissors, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
   Trash2, UploadCloud, X,
 } from 'lucide'
 
@@ -29,7 +29,7 @@ export const ICONS: Record<string, IconNode> = {
   Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, GripVertical,
   HardDrive, Hash, History, House, Info, Layers, Link, Loader, Map, MapPin, MapPinned,
   Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Radar, RefreshCw, Save,
-  Scissors, Search, Server, Sliders, Sparkles, Split, Square, Star, Sun, Table, TableProperties, Terminal,
+  Scissors, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
   Trash2, UploadCloud, X,
 }
 

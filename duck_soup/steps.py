@@ -16,7 +16,7 @@ from typing import Callable
 
 from . import mapping
 from .config import (
-    AttributeJoin, Attributes, Buffer, Centroid, Clip, Dissolve, Erase, ExprColumn, Filter,
+    AttributeJoin, Attributes, Buffer, Centroid, Clip, CombineLines, Dissolve, Erase, ExprColumn, Filter,
     IntersectOverlay, LineOverlay, Merge, NearestNeighbor, SpatialJoin,
 )
 from .sql_util import quote_ident as _ident, quote_literal as _lit
@@ -309,6 +309,87 @@ def dissolve_sql(prev: str, step: Dissolve, log: Log, _ctx: StepContext) -> str:
     return sql
 
 
+def combine_lines_sql(prev: str, step: CombineLines, log: Log, ctx: StepContext) -> str:
+    """Lines joined end to end, one feature per connected chain of lines that share the
+    `by` values.
+
+    The lines of a group are collected (not unioned: a union would also cut them where
+    they cross without meeting, at a bridge) and merged at shared end points by
+    ST_LineMerge, which stops where three or more lines meet. Each line part is then
+    matched back to the chain that covers it, so the aggregates run over the features that
+    make up each chain, not over the whole group. A feature whose parts end up in several
+    chains counts once in each. Features that aren't lines are kept, one per feature.
+    """
+    if not ctx.has_geom:
+        raise ValueError(f"combine_lines needs geometry, and the base source '{ctx.base}' has none")
+    names = [k if isinstance(k, str) else k.to for k in step.by]
+    keys = ", ".join(
+        f"{_ident(k) if isinstance(k, str) else '(' + k.expr + ')'} AS __k{j}"
+        for j, k in enumerate(step.by)
+    )
+    key_cols = [f"__k{j}" for j in range(len(step.by))]
+    grp = f"dense_rank() OVER (ORDER BY {', '.join(key_cols)})" if key_cols else "1"
+    aggs = "".join(f", {_expr_column(a)}" for a in step.aggregates)
+    out_keys = "".join(f"c.__k{j} AS {_ident(n)}, " for j, n in enumerate(names))
+    kc = "".join(f", {k}" for k in key_cols)
+    carried = "".join(f", any_value({k}) AS {k}" for k in key_cols)
+    direction = "true" if step.preserve_direction else "false"
+    is_line = "ST_GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')"
+    sql = f"""
+    WITH p AS MATERIALIZED (
+        -- the running rows, read once, with their group keys and a row id
+        SELECT *, {grp} AS __grp, row_number() OVER () AS __seg
+        FROM (SELECT *{', ' + keys if keys else ''} FROM {_ident(prev)})
+    ),
+    part AS MATERIALIZED (
+        -- one row per line part
+        SELECT __seg, __grp{kc}, unnest(ST_Dump(geom)).geom AS geom FROM p WHERE {is_line}
+    ),
+    chain AS MATERIALIZED (
+        -- each group's lines merged where they meet, one row per resulting chain
+        SELECT * EXCLUDE (__part), __part.geom AS geom, row_number() OVER () AS __chain
+        FROM (
+            SELECT __grp{carried}, unnest(ST_Dump(ST_LineMerge(ST_Collect(list(geom)), {direction}))) AS __part
+            FROM part GROUP BY __grp
+        )
+    ),
+    member AS (
+        -- each line part to the chain it lies on (the lowest-numbered, should two overlap)
+        SELECT DISTINCT __seg, __chain FROM (
+            SELECT part.__seg, min(c.__chain) AS __chain
+            FROM (SELECT *, row_number() OVER () AS __part_row FROM part) part
+            -- The group is compared as a difference, not an equality: DuckDB would hash join
+            -- on an equality and compare every pair within a group, rather than plan its
+            -- R-tree SPATIAL_JOIN on the predicate.
+            JOIN chain c ON ST_Covers(c.geom, part.geom) AND c.__grp - part.__grp = 0
+            GROUP BY part.__part_row, part.__seg
+        )
+        UNION ALL
+        -- anything that isn't a line is a chain of its own
+        SELECT __seg, -__seg FROM p WHERE geom IS NULL OR NOT {is_line}
+    ),
+    shape AS (
+        SELECT __chain, geom{kc} FROM chain
+        UNION ALL
+        SELECT -__seg, geom{kc} FROM p WHERE geom IS NULL OR NOT {is_line}
+    ),
+    agg AS (
+        SELECT __chain{aggs}
+        FROM (SELECT p.*, m.__chain FROM p JOIN member m USING (__seg))
+        GROUP BY __chain
+    )
+    SELECT {out_keys}c.geom{''.join(', a.' + _ident(a.to) for a in step.aggregates)},
+           row_number() OVER (ORDER BY c.__chain < 0, abs(c.__chain)) AS __src_row
+    FROM shape c LEFT JOIN agg a USING (__chain)
+    ORDER BY __src_row
+    """
+    labels = [k if isinstance(k, str) else f"{k.to} = {k.expr}" for k in step.by]
+    suffix = f" with {', '.join(a.to for a in step.aggregates)}" if step.aggregates else ""
+    reversible = "" if step.preserve_direction else " (lines may be reversed)"
+    log(f"combine_lines by {labels or '(all)'}{suffix}{reversible}")
+    return sql
+
+
 def attributes_sql(prev: str, step: Attributes, log: Log, ctx: StepContext) -> str:
     """Every column of `prev`, with step.columns set in order (each one added, or replacing
     the column of that name) and step.drop removed.
@@ -513,6 +594,7 @@ STEP_SQL: dict[type, Callable[..., str]] = {
     Clip: clip_sql,
     Erase: erase_sql,
     Dissolve: dissolve_sql,
+    CombineLines: combine_lines_sql,
     IntersectOverlay: intersect_overlay_sql,
     LineOverlay: line_overlay_sql,
     Filter: filter_sql,

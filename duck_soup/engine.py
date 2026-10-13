@@ -36,8 +36,8 @@ import duckdb
 from . import sources as src_readers
 from . import mapping, steps
 from .config import (
-    Attributes, Buffer, Config, Dissolve, NearestNeighbor, OutputLayer, PipelineDef, Snapshot,
-    is_parquet_path, reject_layer_names,
+    Attributes, Buffer, CombineLines, Config, Dissolve, NearestNeighbor, OutputLayer, PipelineDef,
+    Snapshot, is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -50,13 +50,13 @@ from .output import (
 from .sql_util import quote_ident as _ident, quote_literal as _lit, st_transform
 
 class MappingError(ValueError):
-    """A mapping item, or a column an attributes/dissolve step sets, that doesn't parse or
+    """A mapping item, or a column an attributes/dissolve/combine_lines step sets, that doesn't parse or
     bind (see Engine._check_mapping and Engine._check_step).
 
     The message starts with a line naming the item, for the editor's status, followed by
     the item's config path and the error on the next line: the shape of a validation error,
     which the editor's Problems tab turns into a link to the mapping row or step card.
-    `item` is a MapItem or ExprColumn, or a bare column name (a dissolve key); `label` says
+    `item` is a MapItem or ExprColumn, or a bare column name (a dissolve or combine_lines key); `label` says
     what it is ("mapping", "step 3 column", ...)."""
 
     def __init__(self, path: str, item, error: Exception, label: str = "mapping"):
@@ -301,7 +301,7 @@ class Engine:
             if build is None:  # pragma: no cover
                 raise ValueError(f"unknown step type: {step}")
             sql = build(cur, step, lambda m, i=i: self.log(f"step {i}: {m}"), self._step_context())
-            if con is not None and isinstance(step, (Attributes, Dissolve)):
+            if con is not None and isinstance(step, (Attributes, Dissolve, CombineLines)):
                 self._check_step(con, i, step, cur)
             new_view = f"step_{i}"
             self._emit_step(con, step, i, sql, new_view)
@@ -320,7 +320,7 @@ class Engine:
         )
 
     def _check_step(self, con: duckdb.DuckDBPyConnection, i: int, step, prev: str) -> None:
-        """Plan (not run) step `i`, an attributes or dissolve step, over the view `prev`; if
+        """Plan (not run) step `i`, an attributes, dissolve or combine_lines step, over the view `prev`; if
         one of the columns it sets doesn't parse or bind, raise MappingError naming it, with
         its `pipelines.<p>.steps.<i-1>.<field>.<j>` path. Like _check_mapping, but the
         attribute columns are tried as growing prefixes, since each may use the ones before
