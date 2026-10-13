@@ -26,6 +26,8 @@
      which several non-map elements (step icons, lineage nodes, badges, syntax highlighting)
      also key off and shouldn't change color along with the map. */
   --map-feature: #c85fe0;
+  /* The selected feature: a hue far from --map-feature, so it stands out by colour too. */
+  --map-selected: #ffc53d;
   --warn: #ff6b6b;
   --warn-hover: #ff8585;
   --warn-soft: rgba(255, 107, 107, 0.12);
@@ -87,6 +89,7 @@
   --spatial: #00897b;
   --spatial-soft: rgba(0, 137, 123, 0.1);
   --map-feature: #b03ccc;
+  --map-selected: #e07b00;
   --warn: #d33a3a;
   --warn-hover: #b02424;
   --warn-soft: rgba(211, 58, 58, 0.08);
@@ -1274,6 +1277,54 @@ input.field-invalid, .combo input.field-invalid { border-color: var(--warn) !imp
   padding: 6px 14px;
   font-size: 12px;
 }
+/* Preview rows select their feature on the map (and the map selects them). The zebra
+   background is inline, hence !important. scroll-margin keeps a row scrolled to from the map
+   clear of the sticky header. */
+tr.preview-row {
+  cursor: pointer;
+  scroll-margin-top: 40px;
+}
+tr.preview-row:hover {
+  background: rgb(var(--accent-rgb) / 0.08) !important;
+}
+tr.preview-row.selected {
+  background: rgb(var(--accent-rgb) / 0.2) !important;
+}
+tr.preview-row.selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+tr.preview-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* "2 of 3 here" pager in a map popup, when the click hit overlapping features. */
+.preview-popup-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -2px 20px 8px 0; /* clear of the popup's close button */
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.preview-popup-nav button {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 8px;
+}
+.preview-popup-nav button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 
 /* ---- Sortable Table Headers ---- */
 th.sortable {

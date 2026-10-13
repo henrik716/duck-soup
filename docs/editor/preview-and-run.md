@@ -52,7 +52,11 @@ to go back.
   dataset.
 - **Light / Dark**: switch the basemap. It follows the editor's theme by default; this overrides it until the next theme toggle.
 
-Click a feature to see all its attributes in a popup:
+Hover a feature to highlight it. Click it to select it: it's drawn on top in a contrasting
+colour, its attributes open in a popup, and its row is highlighted in the **Data Table**. When
+features overlap where you click, the popup says so (*1 of 3 here*) and its arrows step through
+them. Click empty map, or close the popup, to clear the selection. The selection stays through a
+refresh as long as the selected row comes back unchanged.
 
 ![Feature popup on the map](../assets/screenshots/map-popup-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![Feature popup on the map](../assets/screenshots/map-popup-dark.png#only-dark){ .screenshot .narrow loading=lazy }
@@ -61,6 +65,10 @@ Click a feature to see all its attributes in a popup:
 
 The table shows the same rows as the map (geometry hidden). Click a column header to sort, and
 type in the filter box to search all columns. **export csv** downloads what's shown.
+
+Click a row to select its feature on the map, which pans there if it's out of view. Click it
+again to clear the selection. Hovering a row highlights its feature, and <kbd>Enter</kbd>
+selects the focused row.
 
 ## Problems
 

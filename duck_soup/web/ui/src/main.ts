@@ -4,7 +4,7 @@ import {
   fetchMeta, fetchVersion, fetchPipelineNames, fetchPipeline, savePipeline,
   validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
 } from './api'
-import { initMap, updateMap, getMapBounds, onViewChange } from './map'
+import { initMap, updateMap, getMapBounds, onViewChange, onFeatureSelect, selectFeature, hoverFeature } from './map'
 import { initLayout } from './layout'
 import { updateLineageDiagram, setLineageCounts, clearLineageCounts } from './lineage'
 import { closeFlowEditor, syncFlowEditor } from './flow-editor'
@@ -17,7 +17,7 @@ import { buildMetadataSection } from './metadata'
 import { collectConfig, hydrate } from './config-io'
 import { showToast } from './toast'
 import { closeFileExplorer, openFileExplorer } from './file-explorer'
-import { updateTable, showTableError } from './table'
+import { updateTable, showTableError, onRowSelect, onRowHover, selectTableRow } from './table'
 import { setPreviewBusy, resetPreviewBusy, setRunBusy } from './busy'
 import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from './history'
 import { openPasteYamlModal } from './paste-yaml'
@@ -938,6 +938,10 @@ async function init(): Promise<void> {
   Object.assign(META, meta)
 
   initMap()
+  // The map and the preview table share one selection, by row index.
+  onFeatureSelect(row => selectTableRow(row, { scroll: true }))
+  onRowSelect(row => selectFeature(row, { reveal: true }))
+  onRowHover(hoverFeature)
   initLayout()
   initHistory(sync)
   wireHistoryShortcuts()
