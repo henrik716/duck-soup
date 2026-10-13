@@ -136,6 +136,15 @@ project folder.
 
     Absolute paths work from anywhere: a source's `uri` can point at any file on disk.
 
+## After upgrading
+
+Your configs and data are left as they are. That includes the
+[tutorial](../tutorials/index.md): a copy you made with `duck-soup tutorial` keeps the data and
+examples of the version you made it with. To get the latest ones, run
+`duck-soup tutorial --force` in the same folder. It replaces the sample data and
+`pipelines/pondsworth.yaml`, so if you've changed that config, save it under another name in
+the editor first.
+
 ## Version notes
 
 duck soup pins DuckDB to `>=1.5.4,<1.6`. DuckDB always installs the `spatial` extension build

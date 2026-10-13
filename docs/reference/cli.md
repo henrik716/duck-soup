@@ -60,7 +60,9 @@ one): the sample data into `data/tutorial/`, and a config with every tutorial ex
 `pipelines/pondsworth.yaml`. Then, from that folder, `duck-soup run pipelines/pondsworth.yaml`
 runs them all.
 
-It refuses to overwrite existing files unless you pass `--force`. It ends by telling you how to
+If any of those files already exists it writes nothing, unless you pass `--force`: then it
+replaces them all, `pipelines/pondsworth.yaml` included, with the versions that come with the
+installed duck soup (how to update the tutorial after an upgrade). It ends by telling you how to
 open the config in the editor: directly if `folder` is the editor's project folder, otherwise by
 setting `DUCK_SOUP_ROOT`.
 

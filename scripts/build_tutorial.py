@@ -297,7 +297,23 @@ SOURCES = [
 # ---------------------------------------------------------------------------
 
 BG_DISTRICTS = ("SELECT geom FROM districts", "bg")
+
+# A line drawn a little short at both ends, so the place where one feature stops and the next
+# starts shows as a gap, and a line that comes through as one feature stays unbroken. (Dots
+# at the ends would also mark every line that merely ends on another, which isn't a cut.)
+PIECE_GAP_M = 9
+
+
+def _pieces(sql: str) -> str:
+    """`sql`'s lines (its first column), each drawn short by PIECE_GAP_M at both ends."""
+    f = f"least({PIECE_GAP_M} / ST_Length(g), 0.3)"
+    return (f"SELECT CASE WHEN ST_GeometryType(g) = 'LINESTRING' THEN ST_LineSubstring(g, {f}, 1 - {f}) "
+            f"ELSE g END FROM ({sql}) AS t(g)")
+
 DISTRICT_LABELS = "districts"
+
+CENTRAL_PICK = ("SELECT d.geom FROM districts d JOIN out o ON d.district_name = o.{col} "
+                "WHERE o.name = 'Central Puddle Park'")
 
 EXAMPLES: dict[str, dict] = {
     "spatial_join": {
@@ -310,6 +326,8 @@ EXAMPLES: dict[str, dict] = {
             "before": [("SELECT geom FROM districts", "ref"), ("SELECT geom FROM places", "base")],
             "after": [BG_DISTRICTS,
                       ("SELECT geom, CASE WHEN district IS NULL THEN 'miss' ELSE 'out' END FROM out", None)],
+            "labels": {"after": "SELECT district_name, ST_Translate(ST_Centroid(geom), 0, "
+                                "CASE WHEN ward = 'Upstream' THEN 150 ELSE -165 END) FROM districts"},
         },
     },
     "spatial_join_overlap": {
@@ -322,6 +340,16 @@ EXAMPLES: dict[str, dict] = {
         "table": [("name", "name"), ("district_first", "district_first"), ("district_largest", "district_largest")],
         "figure": {
             "before": [("SELECT geom FROM districts", "ref"), ("SELECT geom FROM parks", "base")],
+            # Central Puddle Park, and the district each option picks for it
+            "after": [BG_DISTRICTS,
+                      (CENTRAL_PICK.format(col="district_largest"), "ref"),
+                      (CENTRAL_PICK.format(col="district_first"), "refline"),
+                      ("SELECT geom FROM out", "out")],
+            "labels": {"after": "SELECT label, ST_Translate(ST_Centroid(d.geom), 0, "
+                                "CASE WHEN d.ward = 'Upstream' THEN 150 ELSE -165 END) FROM districts d JOIN ("
+                                "SELECT 'first' AS label, district_first AS dn FROM out WHERE name = 'Central Puddle Park' "
+                                "UNION ALL SELECT 'largest_overlap', district_largest FROM out "
+                                "WHERE name = 'Central Puddle Park') ON d.district_name = dn"},
         },
     },
     "spatial_join_all": {
@@ -418,11 +446,12 @@ EXAMPLES: dict[str, dict] = {
                   ("length_m", "round(ST_Length(geom), 1)")],
         "order": "name, ST_XMin(geom), ST_YMin(geom) DESC",
         "figure": {
-            "before": [BG_DISTRICTS, ("SELECT geom FROM lit_paths", "lit"),
-                       ("SELECT geom FROM paths", "path"), ("SELECT geom FROM boardwalks", "board")],
-            "after": [BG_DISTRICTS, ("SELECT geom FROM out WHERE lamps IS NOT NULL", "lit"),
-                      ("SELECT geom FROM out", "path"),
-                      ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
+            # the pieces the two line_overlay steps hand it (see main: overlay_pieces)
+            "before": [BG_DISTRICTS, (_pieces("SELECT geom FROM overlay_pieces WHERE lamps IS NOT NULL"), "lit"),
+                       (_pieces("SELECT geom FROM overlay_pieces"), "path"),
+                       (_pieces("SELECT geom FROM overlay_pieces WHERE material IS NOT NULL"), "board")],
+            "after": [BG_DISTRICTS, (_pieces("SELECT geom FROM out WHERE lamps IS NOT NULL"), "lit"),
+                      (_pieces("SELECT geom FROM out"), "path")],
         },
     },
     "split_lines": {
@@ -431,8 +460,7 @@ EXAMPLES: dict[str, dict] = {
         "order": "rowid",
         "figure": {
             "before": [BG_DISTRICTS, ("SELECT geom FROM paths", "path")],
-            "after": [BG_DISTRICTS, ("SELECT geom FROM out", "path"),
-                      ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
+            "after": [BG_DISTRICTS, (_pieces("SELECT geom FROM out"), "path")],
         },
     },
     "snap_to_grid": {
@@ -457,8 +485,9 @@ EXAMPLES: dict[str, dict] = {
         ]},
         "table": [("name", "name"), ("vertices", "ST_NPoints(geom)"), ("area_m2", "round(ST_Area(geom))")],
         "figure": {
-            "before": [("SELECT geom FROM reedbeds", "base")],
-            "after": [("SELECT geom FROM reedbeds", "ghost"), ("SELECT geom FROM out", "out")],
+            # the vertices are what it removes
+            "before": [("SELECT geom FROM reedbeds", "base"), ("SELECT ST_Points(geom) FROM reedbeds", "vtx")],
+            "after": [("SELECT geom FROM out", "out"), ("SELECT ST_Points(geom) FROM out", "vtx")],
             "frame": (0, 560, 360, 820),
         },
     },
@@ -519,10 +548,9 @@ EXAMPLES: dict[str, dict] = {
         "figure": {
             "before": [BG_DISTRICTS, ("SELECT geom FROM lit_paths", "lit"),
                        ("SELECT geom FROM paths", "path"), ("SELECT geom FROM boardwalks", "board")],
-            "after": [BG_DISTRICTS, ("SELECT geom FROM out WHERE lamps IS NOT NULL", "lit"),
-                      ("SELECT geom FROM out", "path"),
-                      ("SELECT geom FROM out WHERE material IS NOT NULL", "board"),
-                      ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
+            "after": [BG_DISTRICTS, (_pieces("SELECT geom FROM out WHERE lamps IS NOT NULL"), "lit"),
+                      (_pieces("SELECT geom FROM out"), "path"),
+                      (_pieces("SELECT geom FROM out WHERE material IS NOT NULL"), "board")],
         },
     },
     "filter": {
@@ -834,7 +862,7 @@ def _svg_from_geojson(gj, cls, ox) -> list[str]:
     t = gj["type"]
     if t == "Point":
         x, y = _xy(*gj["coordinates"], ox)
-        r = 2.2 if cls == "cut" else 3.2 if cls in ("ghostpt",) else 4.2
+        r = 1.6 if cls == "vtx" else 3.2 if cls in ("ghostpt",) else 4.2
         return [f'<circle class="{cls}" cx="{x:.1f}" cy="{y:.1f}" r="{r}"/>']
     if t in ("LineString",):
         pts = " ".join(f"{a:.1f},{b:.1f}" for a, b in (_xy(*c, ox) for c in gj["coordinates"]))
@@ -905,9 +933,9 @@ def _load_sources(con, project: Path) -> None:
         )
 
 
-def _load_out(con, gpkg: Path, layer: str) -> None:
+def _load_out(con, gpkg: Path, layer: str, table: str = "out") -> None:
     con.execute(
-        f"CREATE OR REPLACE TABLE out AS SELECT * EXCLUDE (geom), ST_Translate(geom, {-X0}, {-Y0}) AS geom "
+        f"CREATE OR REPLACE TABLE {table} AS SELECT * EXCLUDE (geom), ST_Translate(geom, {-X0}, {-Y0}) AS geom "
         f"FROM ST_Read('{gpkg.as_posix()}', layer='{layer}')"
     )
 
@@ -938,6 +966,7 @@ def main() -> None:
 
         con = _con()
         _load_sources(con, project)
+        _load_out(con, gpkg, "line_overlay", "overlay_pieces")  # combine_lines' input
 
         for name, ex in EXAMPLES.items():
             (GEN / f"{name}.yaml").write_text(_yaml(ex["pipeline"]), encoding="utf-8")

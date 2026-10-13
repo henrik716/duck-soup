@@ -87,7 +87,19 @@ next to the editor's name show the version you're running.
 - [Steps by example](tutorials/steps.md) has an example for each new step but
   `http_lookup`, which needs a web API. Two new sample datasets come with them: `reedbeds`,
   three marsh zones that don't quite fit together, and `sightings`, a CSV with text
-  coordinates. Run `duck-soup tutorial --force` to get them. (1.7.0)
+  coordinates. Run `duck-soup tutorial --force` to get them; it replaces
+  `pipelines/pondsworth.yaml` too, so save any changes you made to it under another name
+  first. (1.7.0)
+- The diagrams in [Steps by example](tutorials/steps.md) show more of what each step does,
+  and each has a caption saying what to look at. The line steps draw every output row as its
+  own stretch, so you can see where `line_overlay` and `split_lines` cut and where
+  `combine_lines` joins (`combine_lines` now starts from the pieces it actually gets).
+  `simplify` shows its vertices, `on_multiple` the district each option picks, and
+  `spatial_join` the district names. (1.7.5)
+- How to update the tutorial after upgrading: run `duck-soup tutorial --force`, which
+  replaces the sample data and `pipelines/pondsworth.yaml`. See
+  [After upgrading](getting-started/install.md#after-upgrading). `duck-soup tutorial`'s
+  `--force` help and its message when the files already exist say so too. (1.7.5)
 
 ## 1.6 — 2026-10-13
 

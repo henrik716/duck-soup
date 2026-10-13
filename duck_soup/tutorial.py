@@ -47,7 +47,9 @@ def install(dest: str | Path = ".", force: bool = False) -> list[Path]:
     existing = [target for _, target in files if target.exists()]
     if existing and not force:
         names = ", ".join(str(p) for p in existing)
-        raise FileExistsError(f"already exists: {names} (use --force to overwrite)")
+        raise FileExistsError(
+            f"already exists: {names}. --force replaces them all, changes to {CONFIG_NAME} included"
+        )
     written = []
     for item, target in files:
         target.parent.mkdir(parents=True, exist_ok=True)

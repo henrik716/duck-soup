@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         "tutorial", help="Copy the Pondsworth tutorial data and config into a folder"
     )
     tutorial.add_argument("folder", nargs="?", default=".", help="Project folder (default: current)")
-    tutorial.add_argument("--force", action="store_true", help="Overwrite existing tutorial files")
+    tutorial.add_argument("--force", action="store_true", help="Replace existing tutorial files, pipelines/pondsworth.yaml included")
 
     args = parser.parse_args(argv)
 

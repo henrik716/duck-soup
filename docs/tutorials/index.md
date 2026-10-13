@@ -46,8 +46,11 @@ editor's project folder (by default `~/duck-soup`), so the editor finds the conf
     Run `duck-soup tutorial` in a separate folder rather than the repository root, to keep the
     copies out of your working tree.
 
-`duck-soup tutorial` never overwrites existing files, so a config you've been editing is safe.
-Add `--force` to start over. To use another folder, pass it as an argument
+If any of the tutorial files already exists, `duck-soup tutorial` stops without writing
+anything. To update the tutorial after upgrading duck soup, run `duck-soup tutorial --force`:
+it replaces the sample data and `pipelines/pondsworth.yaml` with the versions that come with
+your duck soup, so changes you made to that config are lost. To keep them, save the config
+under another name in the editor first. To use another folder, pass it as an argument
 (`duck-soup tutorial path/to/folder`); to open it in the editor, see
 [Where the editor keeps your files](../getting-started/install.md#where-the-editor-keeps-your-files).
 
