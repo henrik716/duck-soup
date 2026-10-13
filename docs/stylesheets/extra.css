@@ -184,6 +184,11 @@ svg.ds-diagram circle.ghostpt { fill: var(--md-default-fg-color--lighter); }
 svg.ds-diagram circle.miss { fill: var(--md-default-bg-color); stroke: var(--ds-miss); stroke-width: 2; }
 
 /* Colour key under a diagram */
+/* Material lets inline code break between any two letters, so in a table squeezed for room a
+   column shrank below one name (clean_coverag|e). In tables, code wraps at spaces only, and
+   a table that gets too wide scrolls sideways. */
+.md-typeset table:not([class]) code { word-break: normal; overflow-wrap: normal; }
+
 /* The line under a diagram that says what to look at. */
 .md-typeset .ds-caption { font-size: .7rem; color: var(--md-default-fg-color--light); text-align: center; max-width: 780px; margin: -.6rem auto 1.2rem; }
 .md-typeset .ds-key + .ds-caption { margin-top: .4rem; }
