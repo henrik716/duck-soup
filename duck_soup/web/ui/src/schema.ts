@@ -147,7 +147,7 @@ export function resolveSchemaScoped(scope: Element, id: string, seen = new Set<s
 }
 
 /** The columns a step card adds to the rows: a join's pulled fields (and nearest_neighbor's
- *  distance field), the columns an attributes step sets, a dissolve's (or combine_lines')
+ *  distance field), explode's part number, the columns an attributes step sets, a dissolve's (or combine_lines')
  *  named keys and its aggregates. */
 export function stepOutputColumns(stepCard: Element): string[] {
   const values = (sel: string) => [...stepCard.querySelectorAll<HTMLInputElement>(sel)]
@@ -156,6 +156,8 @@ export function stepOutputColumns(stepCard: Element): string[] {
   return [
     ...values('[data-fields] .kv [data-fo]'),
     ...values('[data-k="distance_field"]'),
+    // explode's part number
+    ...values('[data-k="part_field"]'),
     ...values('.st-columns > .map-item [data-to]'),
     ...values('[data-by-as]'),
     ...values('[data-agg-to]'),

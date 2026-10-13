@@ -2,7 +2,7 @@
 
 Steps run in order, each one transforming the rows produced by the step before it (or by the
 base source, for the first step). Every step type accepts an optional [`branch`](#branch) key,
-and `spatial_join`, `attribute_join`, `nearest_neighbor`, `clip` and `filter` an optional
+and `spatial_join`, `attribute_join`, `nearest_neighbor`, `clip`, `filter` and `remove_duplicates` an optional
 [`rejects`](#rejects) key that sends the rows they'd otherwise drop, or leave unmatched, to a
 layer of their own.
 
@@ -23,7 +23,12 @@ layer of their own.
 | | [`erase`](#erase) | may shrink | ✓ | – |
 | | [`dissolve`](#dissolve) | shrinks | ✓ | keeps only `by` and `aggregates` |
 | | [`combine_lines`](#combine_lines) | shrinks | ✓ | keeps only `by` and `aggregates` |
+| | [`simplify`](#simplify) | same | ✓ | – |
+| | [`snap_to_grid`](#snap_to_grid) | same | ✓ | – |
+| | [`clean_coverage`](#clean_coverage) | same | ✓ | – |
+| | [`explode`](#explode) | grows | ✓ | optional part number |
 | Rows | [`filter`](#filter) | may shrink | – | – |
+| | [`remove_duplicates`](#remove_duplicates) | may shrink | – | – |
 | | [`merge`](#merge) | grows | – | ✓ (union of columns) |
 | | [`snapshot`](#snapshot) | – | – | – |
 | Attributes | [`attributes`](#attributes) | same | – | ✓ (set, overwrite, drop) |
@@ -335,6 +340,83 @@ An expression can use any column of the rows going in, but only inside an aggreg
 other special characters: `mode("NET.TYPEVEG")`. In a GeoPackage, prefer `string_agg` to
 `list`: GeoPackage has no list type.
 
+## `simplify`
+
+Removes vertices, keeping every line and polygon edge within `tolerance` of the original:
+FME's Generalizer, QGIS's Simplify.
+
+```yaml
+- type: simplify
+  tolerance: 2                # working-CRS units
+  shared_boundaries: true     # optional: polygons that fit together edge to edge
+  keep_outer_boundary: true   # optional, with shared_boundaries: leave the outer edge as it is
+```
+
+- **One feature at a time** (the default): Douglas-Peucker, keeping each shape valid
+  (`ST_SimplifyPreserveTopology`). Points pass through.
+- **`shared_boundaries: true`** is for polygons that fit together without gaps or overlaps:
+  municipalities, land cover, parcels. Simplified one at a time, two neighbours simplify the
+  edge they share differently, and gaps and slivers open up between them. With
+  `shared_boundaries`, all the polygons are simplified together, so a shared edge is
+  simplified once and stays shared (`ST_CoverageSimplify`, Visvalingam-Whyatt). Polygons
+  that overlap or nearly fit should go through [`clean_coverage`](#clean_coverage) first.
+  Lines and points in the same layer are still simplified one at a time.
+- **`keep_outer_boundary: true`** leaves the coverage's outer edge (a national border, a
+  coastline) exactly as it is and simplifies only the edges between the polygons.
+
+The two methods measure `tolerance` differently, so the same value removes about as much
+detail but not exactly the same vertices. Requires a projected working CRS.
+
+## `snap_to_grid`
+
+Rounds every vertex to a grid: FME's CoordinateRounder, QGIS's Snap points to grid.
+
+```yaml
+- type: snap_to_grid
+  grid_size: 0.01     # working-CRS units: centimetres in a metric CRS
+```
+
+The geometry stays valid: rounding can make a polygon's edges cross, and they are fixed up
+(`ST_ReducePrecision`). A polygon narrower than a grid cell collapses to an empty geometry.
+Its row is kept; add a [`filter`](#filter) with `NOT ST_IsEmpty(geom)` to drop such rows.
+Requires a projected working CRS.
+
+## `clean_coverage`
+
+Makes polygons that should fit together edge to edge (a coverage) fit: digitised separately,
+or reprojected, neighbours overlap a little or leave thin gaps.
+
+```yaml
+- type: clean_coverage
+  snap_distance: 0.05     # optional: snap edges this close together (working-CRS units)
+  max_gap_width: 0.5      # optional: fill gaps narrower than this
+```
+
+- **Overlaps** are removed: the overlapping area goes to one of the polygons.
+- **Edges within `snap_distance`** of each other are snapped together. Without it, a tiny
+  distance derived from the data's extent is used, which only catches rounding differences.
+- **Gaps narrower than `max_gap_width`** are filled, by giving the area to a neighbour. A gap
+  is a hole enclosed by the polygons; an inlet open to the outside isn't one. Without it,
+  gaps stay open.
+
+A polygon that lay wholly under another comes out empty, with its row kept. Points and lines
+pass through unchanged. Requires a projected working CRS when `snap_distance` or
+`max_gap_width` is set.
+
+## `explode`
+
+Multipart to singleparts: splits multipolygons, multilines and geometry collections into one
+row per part, each with the feature's attributes. FME's Deaggregator, QGIS's Multipart to
+singleparts.
+
+```yaml
+- type: explode
+  part_field: part    # optional: number the parts 1, 2, … per feature
+```
+
+Collections inside collections are split all the way down. A feature that is already a
+single part, or has no geometry, stays one row.
+
 ## `filter`
 
 ```yaml
@@ -344,6 +426,27 @@ other special characters: `mode("NET.TYPEVEG")`. In a GeoPackage, prefer `string
 
 Drops rows where the SQL condition is false (or NULL). With `rejects: <layer>`, those rows are
 written to that layer instead of being thrown away. See [`rejects`](#rejects).
+
+## `remove_duplicates`
+
+Keeps the first row of each set of duplicates: FME's DuplicateFilter, QGIS's Delete
+duplicate geometries and Delete duplicates by attribute.
+
+```yaml
+- type: remove_duplicates
+  by: [pond, species]   # columns whose values together make a duplicate
+  geometry: true        # optional: compare the geometry too
+  rejects: doubles      # optional: write the duplicates to a layer
+```
+
+- Give `by`, `geometry: true`, or both: with both, a duplicate has the same values **and**
+  the same geometry.
+- Geometry is compared as a shape: a polygon whose ring starts at another vertex, or a line
+  drawn the other way, is the same geometry. Nearly equal shapes aren't: put a
+  [`snap_to_grid`](#snap_to_grid) before it to round off small differences.
+- NULLs count as equal: two rows with no value in a `by` column (or no geometry) are
+  duplicates there.
+- "First" is in row order, as the rows arrive at the step.
 
 ## `merge`
 
@@ -445,6 +548,7 @@ own. It's available on these steps:
 | `nearest_neighbor` | features with no neighbour (within `max_distance`, if set) |
 | `clip` | features clip would drop (outside the mask, or only touching it), unclipped |
 | `filter` | rows where `where` isn't true (false or NULL) |
+| `remove_duplicates` | every duplicate but the first of each set |
 
 ```yaml
 - type: spatial_join
@@ -458,7 +562,8 @@ own. It's available on these steps:
 
 - **On a join, `rejects` changes what continues.** Without it, an unmatched row stays in the
   chain with NULL fields. With it, the row leaves the chain and only goes to the rejects layer.
-  For `filter` and `clip`, the rows were dropped anyway, so the other layers don't change.
+  For `filter`, `clip` and `remove_duplicates`, the rows were dropped anyway, so the other
+  layers don't change.
 - **The rejects layer is written as the rows are at that step:** every column, without the
   [mapping](mapping.md), and without the join's own fields, which would only be NULL. It goes
   into the config's output file, in the CRS of the pipeline's first output layer.

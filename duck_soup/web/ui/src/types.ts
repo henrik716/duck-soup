@@ -140,6 +140,39 @@ export interface CombineLines {
   branch?: string
 }
 
+/** Fewer vertices, within `tolerance` of the original (config.Simplify). */
+export interface Simplify {
+  type: 'simplify'
+  tolerance: number
+  /** Simplify the polygons together, so the edges neighbours share stay shared. */
+  shared_boundaries?: boolean
+  /** With shared_boundaries: leave the coverage's outer edge as it is. */
+  keep_outer_boundary?: boolean
+  branch?: string
+}
+
+export interface SnapToGrid {
+  type: 'snap_to_grid'
+  grid_size: number
+  branch?: string
+}
+
+/** Polygons made to fit edge to edge: snapped, overlaps removed, gaps filled (config.CleanCoverage). */
+export interface CleanCoverage {
+  type: 'clean_coverage'
+  snap_distance?: number
+  max_gap_width?: number
+  branch?: string
+}
+
+/** Multipart to singleparts: a row per part. */
+export interface Explode {
+  type: 'explode'
+  /** Column to number the parts in (1, 2, …). */
+  part_field?: string
+  branch?: string
+}
+
 export interface IntersectOverlay {
   type: 'intersect_overlay'
   source: string
@@ -153,6 +186,15 @@ export interface LineOverlay {
   fields: Record<string, string>
   tolerance?: number
   branch?: string
+}
+
+/** The first row of each set with the same `by` values and/or geometry (config.RemoveDuplicates). */
+export interface RemoveDuplicates {
+  type: 'remove_duplicates'
+  by?: string[]
+  geometry?: boolean
+  branch?: string
+  rejects?: string
 }
 
 export interface Filter {
@@ -181,7 +223,7 @@ export interface Attributes {
   branch?: string
 }
 
-export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | IntersectOverlay | LineOverlay | Filter | Merge | Snapshot | Attributes
+export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | Simplify | SnapToGrid | CleanCoverage | Explode | IntersectOverlay | LineOverlay | Filter | RemoveDuplicates | Merge | Snapshot | Attributes
 
 export interface CodeCase {
   value: string

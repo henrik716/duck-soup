@@ -8,7 +8,7 @@ import { resolveSchemaScoped, collectColumnsBeforeStep } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
 import { exprField, exprValue } from '../expr-field'
 import { fieldPreviewConfig } from '../field-preview'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Attributes, ExprColumn, MapItem, Aggregate } from '../types'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Simplify, RemoveDuplicates, Attributes, ExprColumn, MapItem, Aggregate } from '../types'
 import { renderIcons } from '../icons'
 import { attachConditionBuilder } from '../condition-builder'
 import { howOptionsHtml } from './aggregate-row'
@@ -28,9 +28,14 @@ const STEP_ICONS: Record<string, string> = {
   erase: 'eraser',
   dissolve: 'layers',
   combine_lines: 'spline',
+  simplify: 'waypoints',
+  snap_to_grid: 'grid-3x3',
+  clean_coverage: 'puzzle',
+  explode: 'ungroup',
   intersect_overlay: 'git-merge',
   line_overlay: 'split',
   filter: 'filter',
+  remove_duplicates: 'copy-minus',
   merge: 'combine',
   snapshot: 'camera',
   attributes: 'table-properties',
@@ -46,9 +51,14 @@ const STEP_LABELS: Record<string, string> = {
   erase: 'erase',
   dissolve: 'dissolve',
   combine_lines: 'combine lines',
+  simplify: 'simplify',
+  snap_to_grid: 'snap to grid',
+  clean_coverage: 'clean coverage',
+  explode: 'multipart to singleparts',
   intersect_overlay: 'intersect overlay',
   line_overlay: 'line overlay',
   filter: 'filter',
+  remove_duplicates: 'remove duplicates',
   merge: 'merge',
   snapshot: 'snapshot',
   attributes: 'update attributes',
@@ -64,9 +74,14 @@ const STEP_HINTS: Record<string, string> = {
   erase: 'Removes the overlap with a mask source from base feature geometry. Non-overlapping features are kept unchanged. Both sources must be spatial.',
   dissolve: 'Merges features that share the same group-by values, combining their geometries via union. Group by columns or SQL expressions. Every other column is dropped unless you keep it, with one value per group (most common, sum, all of them, …).',
   combine_lines: 'Joins lines that meet end to end into longer lines: one feature per connected chain of lines that share the group-by values. A chain stops where three or more lines meet. Every other column is dropped unless you keep it, with one value per line (most common, sum, all of them, …). Features that are not lines are kept one per feature.',
+  simplify: 'Removes vertices, keeping every line and polygon edge within the tolerance of the original (working CRS units). With shared boundaries, the polygons are simplified together so neighbours still fit: no gaps or overlaps open up between them.',
+  snap_to_grid: 'Rounds every vertex to a grid of the given size (working CRS units), keeping the geometry valid. A polygon narrower than a grid cell comes out empty.',
+  clean_coverage: 'Makes polygons that should fit edge to edge fit: edges within the snap distance are snapped together, overlaps go to one of the polygons, and gaps narrower than the maximum gap width are filled. A polygon lying wholly under another comes out empty. Points and lines pass through.',
+  explode: 'Splits multipart features (multipolygons, multilines, collections) into one row per part, each keeping the feature\'s attributes.',
   intersect_overlay: 'Produces one output row per intersecting (base × source) pair with the intersection as geometry. Row count may increase significantly. Both sources must be spatial.',
   line_overlay: 'Cuts the lines where they lie on top of the source lines. Shared stretches get the source fields; every other piece is kept with empty fields, so the complete network flows on to the next step. Chain one per overlay dataset.',
   filter: 'Drops rows where this SQL condition is false — e.g. reject rows a prior join left unmatched.',
+  remove_duplicates: 'Keeps the first row of each set of rows with the same values in the chosen columns, and/or the same geometry (whatever vertex it starts at or way it runs).',
   merge: 'Appends rows from another source (matched by column name; non-overlapping columns become NULL). Row count adds rather than multiplies.',
   snapshot: 'Names this step\'s current state so a later step can join back against it — fork mid-pipeline (after some processing), not just from a raw source.',
   attributes: 'Adds, changes or removes columns mid-pipeline, with the same rules as the mapping.',
@@ -85,7 +100,7 @@ const MATCH_OPTIONS = [
 const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge']
 const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
 const KINDS_WITH_FIELDS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay']
-export const KINDS_WITH_REJECTS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'filter']
+export const KINDS_WITH_REJECTS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'filter', 'remove_duplicates']
 
 // What `rejects` catches for each step type (RejectsMixin in config.py).
 const REJECTS_HINTS: Record<string, string> = {
@@ -94,6 +109,7 @@ const REJECTS_HINTS: Record<string, string> = {
   nearest_neighbor: 'Features with no neighbour (within max distance) go to this layer instead of on down the chain with empty fields.',
   clip: 'Features clip would drop (outside the mask, or only touching it) go to this layer, unclipped, instead of being discarded.',
   filter: 'Rows the filter drops (where the condition is false or NULL) go to this layer instead of being discarded.',
+  remove_duplicates: 'The duplicates (every row but the first of each set) go to this layer instead of being discarded.',
 }
 
 function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: string[]): string {
@@ -165,6 +181,46 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
   }
   if (kind === 'centroid') {
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['centroid']}</p>`
+  }
+  if (kind === 'simplify') {
+    const sm = st as Partial<Simplify>
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="How far the simplified shape may stray from the original">tolerance (CRS units)<input data-k="tolerance" type="number" step="any" min="0" placeholder="1"></label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="field-check" title="For polygons that fit together edge to edge (municipalities, land cover, parcels): an edge two neighbours share is simplified once, so no gaps or slivers open up between them. Needs polygons that don't overlap (clean coverage first if they do). Lines and points are still simplified one by one.">
+        <input type="checkbox" data-k="shared_boundaries" ${sm.shared_boundaries ? 'checked' : ''}> keep shared boundaries shared</label>
+      <label class="field-check" data-outer-field title="Leave the outer edge of the polygons (a border, a coastline) as it is and simplify only the edges between them">
+        <input type="checkbox" data-k="keep_outer_boundary" ${sm.keep_outer_boundary ? 'checked' : ''}> leave the outer boundary as it is</label>
+    </div>`
+  }
+  if (kind === 'snap_to_grid') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow">grid size (CRS units)<input data-k="grid_size" type="number" step="any" min="0" placeholder="0.01"></label>
+    </div>`
+  }
+  if (kind === 'clean_coverage') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="Edges this close to each other are snapped together">snap distance (optional, CRS units)<input data-k="snap_distance" type="number" step="any" min="0" placeholder="tiny, from the data's extent"></label>
+      <label class="field grow" title="Gaps between the polygons narrower than this are filled (given to a neighbour)">max gap width (optional, CRS units)<input data-k="max_gap_width" type="number" step="any" min="0" placeholder="none: gaps stay open"></label>
+    </div>`
+  }
+  if (kind === 'explode') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="A column numbering each feature's parts 1, 2, …">part number column (optional)<input data-k="part_field" placeholder="part"></label>
+    </div>`
+  }
+  if (kind === 'remove_duplicates') {
+    const geometry = (st as Partial<RemoveDuplicates>).geometry === true
+    bodyHtml += `<div style="margin-top:10px">
+      <span class="head" style="${HEAD_STYLE}">compare columns&nbsp;<span style="font-weight:normal">(rows with the same values in all of them are duplicates)</span></span>
+      <div data-dup-cols></div>
+      <button class="mini ghost" data-adddup style="margin-top:6px">${PLUS_ICON} column</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="field-check" title="Equal shapes count as the same, whatever vertex they start at or way they run. With columns too, a duplicate needs both.">
+        <input type="checkbox" data-k="geometry" ${geometry ? 'checked' : ''}> compare the geometry</label>
+    </div>`
   }
   if (kind === 'dissolve' || kind === 'combine_lines') {
     const per = kind === 'dissolve' ? 'group' : 'line'
@@ -301,10 +357,11 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   const { addField, updateFieldsEmpty } = wireFieldsList(c, syncFn)
   const { addByKey, addAggregate } = wireDissolveLists(c, kind, syncFn)
   const { addColumn, addDropCol } = wireAttributeLists(c, syncFn)
+  const addDupCol = wireDuplicateColumns(c, syncFn)
 
   // hydrate scalar fields
   for (const [k, v] of Object.entries(st)) {
-    if (['fields', 'by', 'aggregates', 'columns', 'drop', 'type', 'preserve_direction'].includes(k)) continue
+    if (['fields', 'by', 'aggregates', 'columns', 'drop', 'type', 'preserve_direction', 'shared_boundaries', 'keep_outer_boundary', 'geometry'].includes(k)) continue
     const inp = c.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)
     if (inp && v != null) inp.value = String(v)
   }
@@ -318,6 +375,15 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   if (kind === 'dissolve' || kind === 'combine_lines') {
     ;((st as Partial<Dissolve | CombineLines>).by || []).forEach(key => addByKey(key))
     ;((st as Partial<Dissolve | CombineLines>).aggregates || []).forEach(agg => addAggregate(agg))
+  }
+  if (kind === 'remove_duplicates') ((st as Partial<RemoveDuplicates>).by || []).forEach(col => addDupCol(col))
+  // keep_outer_boundary only means anything with shared boundaries.
+  if (kind === 'simplify') {
+    const shared = c.querySelector<HTMLInputElement>('[data-k="shared_boundaries"]')!
+    const outer = c.querySelector<HTMLElement>('[data-outer-field]')!
+    const syncOuter = () => { outer.style.display = shared.checked ? '' : 'none' }
+    shared.addEventListener('change', syncOuter)
+    syncOuter()
   }
   if (kind === 'attributes') {
     ;((st as Partial<Attributes>).columns || []).forEach(m => addColumn(m))
@@ -672,6 +738,36 @@ export function readByKeys(c: Element): (string | ExprColumn)[] {
 /** A dissolve or combine_lines card's aggregates (rows still being filled in left out). */
 export const readAggregates = readAggregateRows
 
+/** A remove_duplicates card's compared columns. */
+export function readDuplicateColumns(c: Element): string[] {
+  return [...c.querySelectorAll<HTMLInputElement>('[data-dup-col]')].map(i => i.value.trim()).filter(Boolean)
+}
+
+// remove_duplicates: the columns compared, each one a column reaching this step
+function wireDuplicateColumns(c: HTMLElement, syncFn: () => void) {
+  const box = c.querySelector<HTMLElement>('[data-dup-cols]')
+  const addDupCol = (col = '') => {
+    if (!box) return
+    const r = mkEl('div', { className: 'kv' })
+    r.style.marginTop = '6px'
+    r.innerHTML = `${comboField('data-dup-col data-from-list="1"', col, [], 'column_name')}
+      <button class="mini danger ghost" data-dupdel aria-label="Stop comparing this column"><i data-lucide="x" style="width:12px;height:12px"></i></button>`
+    r.querySelector('[data-dupdel]')!.addEventListener('click', () => { r.remove(); syncFn() })
+    const inp = r.querySelector<HTMLInputElement>('[data-dup-col]')!
+    inp.addEventListener('input', syncFn)
+    inp.addEventListener('change', syncFn)
+    wireCombos(r)
+    attachMembershipCheck(inp, () => {
+      const card = c.closest('.pipeline-card')
+      return card ? collectColumnsBeforeStep(card, c).map(col => col.name) : []
+    })
+    box.appendChild(r)
+    renderIcons(r)
+  }
+  c.querySelector('[data-adddup]')?.addEventListener('click', e => { e.stopPropagation(); addDupCol(); syncFn() })
+  return addDupCol
+}
+
 /** An attributes card's set columns and drops. */
 export function readAttributes(c: Element): { columns: MapItem[]; drop: string[] } {
   const columns = [...c.querySelectorAll('.st-columns > .map-item')]
@@ -771,6 +867,18 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
     } else if (kind === 'buffer') {
       const dist = c.querySelector<HTMLInputElement>('[data-k="distance"]')?.value ?? ''
       text = dist ? `(${dist}m)` : ''
+    } else if (kind === 'simplify' || kind === 'snap_to_grid' || kind === 'clean_coverage') {
+      const k = { simplify: 'tolerance', snap_to_grid: 'grid_size', clean_coverage: 'snap_distance' }[kind]
+      const v = c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)?.value.trim() ?? ''
+      const shared = kind === 'simplify' && c.querySelector<HTMLInputElement>('[data-k="shared_boundaries"]')?.checked
+      text = [v ? `(${v})` : '', shared ? 'shared' : ''].filter(Boolean).join(' ')
+    } else if (kind === 'explode') {
+      const pf = c.querySelector<HTMLInputElement>('[data-k="part_field"]')?.value.trim() ?? ''
+      text = pf ? `# ${pf}` : ''
+    } else if (kind === 'remove_duplicates') {
+      const geom = c.querySelector<HTMLInputElement>('[data-k="geometry"]')?.checked ? ['geometry'] : []
+      const keys = [...readDuplicateColumns(c), ...geom]
+      text = keys.length ? `by ${keys.join(', ')}` : ''
     } else if (kind === 'filter') {
       const w = c.querySelector<HTMLInputElement>('[data-k="where"]')?.value ?? ''
       text = w ? `(${w.length > 30 ? w.slice(0, 30) + '…' : w})` : ''
@@ -802,7 +910,7 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   c.querySelector('[data-k="rejects"]')?.addEventListener('input', updateTitle)
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
   // List rows come and go, each with several fields: refresh on any edit or row change.
-  if (kind === 'attributes' || kind === 'dissolve' || kind === 'combine_lines') {
+  if (['attributes', 'dissolve', 'combine_lines', 'simplify', 'snap_to_grid', 'clean_coverage', 'explode', 'remove_duplicates'].includes(kind)) {
     c.addEventListener('input', updateTitle)
     c.addEventListener('change', updateTitle)
     new MutationObserver(updateTitle).observe(c.querySelector('.card-content')!, { childList: true, subtree: true })

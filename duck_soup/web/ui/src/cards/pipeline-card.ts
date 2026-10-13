@@ -12,7 +12,7 @@ import { openStepGalleryModal } from '../step-gallery'
 import { sourceCard } from './source-card'
 import { wireSourceUpload } from './source-upload'
 import { derivedSourceCard } from './derived-source-card'
-import { stepCard, KINDS_WITH_REJECTS, readAggregates, readAttributes, readByKeys } from './step-card'
+import { stepCard, KINDS_WITH_REJECTS, readAggregates, readAttributes, readByKeys, readDuplicateColumns } from './step-card'
 import { mapRow, type MapRowElement } from './map-row'
 import { outputLayerCard, readLayerMapping } from './output-layer-card'
 import type { Aggregate, AggregateHow, DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
@@ -702,6 +702,32 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     }
     if (t === 'combine_lines' && !c.querySelector<HTMLInputElement>('[data-k="preserve_direction"]')?.checked) {
       st['preserve_direction'] = false
+    }
+    // Ticked boxes only, so existing YAML round-trips unchanged.
+    const ticked = (k: string) => !!c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)?.checked
+    if (t === 'simplify') {
+      st['tolerance'] = parseFloat(val(c, 'tolerance')) || 0
+      if (ticked('shared_boundaries')) {
+        st['shared_boundaries'] = true
+        if (ticked('keep_outer_boundary')) st['keep_outer_boundary'] = true
+      }
+    }
+    if (t === 'snap_to_grid') {
+      st['grid_size'] = parseFloat(val(c, 'grid_size')) || 0
+    }
+    if (t === 'clean_coverage') {
+      for (const k of ['snap_distance', 'max_gap_width']) {
+        const v = parseFloat(val(c, k))
+        if (v > 0) st[k] = v
+      }
+    }
+    if (t === 'explode') {
+      const partField = val(c, 'part_field').trim()
+      if (partField) st['part_field'] = partField
+    }
+    if (t === 'remove_duplicates') {
+      st['by'] = readDuplicateColumns(c)
+      if (ticked('geometry')) st['geometry'] = true
     }
     if (t === 'attributes') {
       const { columns, drop } = readAttributes(c)

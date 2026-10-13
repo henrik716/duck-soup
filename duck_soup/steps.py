@@ -16,8 +16,9 @@ from typing import Callable
 
 from . import mapping
 from .config import (
-    Aggregate, AttributeJoin, Attributes, Buffer, Centroid, Clip, CombineLines, Dissolve, Erase,
-    ExprColumn, Filter, IntersectOverlay, LineOverlay, Merge, NearestNeighbor, SpatialJoin,
+    Aggregate, AttributeJoin, Attributes, Buffer, Centroid, CleanCoverage, Clip, CombineLines,
+    Dissolve, Erase, Explode, ExprColumn, Filter, IntersectOverlay, LineOverlay, Merge,
+    NearestNeighbor, RemoveDuplicates, Simplify, SnapToGrid, SpatialJoin,
 )
 from .sql_util import quote_ident as _ident, quote_literal as _lit
 
@@ -271,6 +272,118 @@ def centroid_sql(prev: str, _step: Centroid, log: Log, _ctx: StepContext) -> str
     """
     log("centroid")
     return sql
+
+def _needs_geom(ctx: StepContext, what: str) -> None:
+    if not ctx.has_geom:
+        raise ValueError(f"{what} needs geometry, and the base source '{ctx.base}' has none")
+
+
+_IS_POLYGON = "ST_GeometryType({g}) IN ('POLYGON', 'MULTIPOLYGON')"
+
+
+def _coverage_select(prev: str, coverage: str, other: str) -> str:
+    """Every `prev` row, its polygon replaced by its part of `coverage`: a coverage function
+    over `__gs`, the list of all the polygons (in row order), that returns a collection of
+    them, in the same order. Rows that aren't polygons get `other` (over `p.geom`).
+
+    The collection comes back as one value, so it's taken apart with ST_Dump, whose path
+    starts with the polygon's position in the list; a multipolygon's parts are collected
+    again. A polygon the function leaves empty, which ST_Dump skips, comes out empty.
+    """
+    is_poly = _IS_POLYGON.format(g="geom")
+    return f"""
+    WITH p AS MATERIALIZED (
+        SELECT *, row_number() OVER () AS __row FROM {_ident(prev)}
+    ),
+    cov AS (
+        SELECT list(geom ORDER BY __row) AS __gs, list(__row ORDER BY __row) AS __rows
+        FROM p WHERE {is_poly}
+    ),
+    part AS (
+        SELECT __rows[d.path[1]] AS __row, d.geom
+        FROM (SELECT __rows, unnest(ST_Dump({coverage})) AS d FROM cov)
+        WHERE NOT ST_IsEmpty(d.geom)
+    ),
+    shape AS (SELECT __row, list(geom) AS __parts FROM part GROUP BY __row)
+    SELECT p.* EXCLUDE (geom, __row),
+           CASE WHEN p.geom IS NULL OR NOT {_IS_POLYGON.format(g="p.geom")} THEN {other}
+                WHEN ST_GeometryType(p.geom) = 'POLYGON'
+                    THEN coalesce(s.__parts[1], ST_GeomFromText('POLYGON EMPTY'))
+                ELSE coalesce(ST_Collect(s.__parts), ST_GeomFromText('MULTIPOLYGON EMPTY'))
+           END AS geom
+    FROM p LEFT JOIN shape s ON s.__row = p.__row
+    ORDER BY p.__row
+    """
+
+
+def simplify_sql(prev: str, step: Simplify, log: Log, ctx: StepContext) -> str:
+    """Douglas-Peucker one feature at a time (ST_SimplifyPreserveTopology, which keeps
+    each shape valid); with shared_boundaries, the polygons as one coverage
+    (ST_CoverageSimplify, Visvalingam-Whyatt with the tolerance as a distance)."""
+    _needs_geom(ctx, "simplify")
+    one_by_one = f"ST_SimplifyPreserveTopology(p.geom, {step.tolerance})"
+    if step.shared_boundaries:
+        simplify_boundary = "false" if step.keep_outer_boundary else "true"
+        sql = _coverage_select(
+            prev, f"ST_CoverageSimplify(__gs, {step.tolerance}, {simplify_boundary})", one_by_one,
+        )
+        outer = ", keeping the outer boundary" if step.keep_outer_boundary else ""
+        log(f"simplify {step.tolerance} (shared boundaries{outer})")
+        return sql
+    sql = f"""
+    SELECT p.* EXCLUDE (geom), {one_by_one} AS geom
+    FROM {_ident(prev)} p
+    """
+    log(f"simplify {step.tolerance}")
+    return sql
+
+
+def snap_to_grid_sql(prev: str, step: SnapToGrid, log: Log, ctx: StepContext) -> str:
+    _needs_geom(ctx, "snap_to_grid")
+    sql = f"""
+    SELECT * EXCLUDE (geom), ST_ReducePrecision(geom, {step.grid_size}) AS geom
+    FROM {_ident(prev)}
+    """
+    log(f"snap_to_grid {step.grid_size}")
+    return sql
+
+
+def clean_coverage_sql(prev: str, step: CleanCoverage, log: Log, ctx: StepContext) -> str:
+    _needs_geom(ctx, "clean_coverage")
+    # A negative snapping distance has GEOS derive one from the extent (its default).
+    snap = step.snap_distance if step.snap_distance is not None else -1
+    gap = step.max_gap_width if step.max_gap_width is not None else 0
+    sql = _coverage_select(prev, f"ST_CoverageClean(__gs, {snap}, {gap})", "p.geom")
+    opts = [f"snap {step.snap_distance}"] if step.snap_distance is not None else []
+    opts += [f"fill gaps under {step.max_gap_width}"] if step.max_gap_width is not None else []
+    log(f"clean_coverage{' (' + ', '.join(opts) + ')' if opts else ''}")
+    return sql
+
+
+def explode_sql(prev: str, step: Explode, log: Log, ctx: StepContext) -> str:
+    """One row per part (ST_Dump flattens collections all the way down). A feature with
+    no geometry, or an empty one, stays one row. The rows get a fresh __src_row in feature
+    then part order, since a later join ranks matches by it."""
+    _needs_geom(ctx, "explode")
+    parts = (
+        "CASE WHEN geom IS NULL OR ST_IsEmpty(geom) THEN [{g: geom, n: 1}] "
+        "ELSE list_transform(ST_Dump(geom), lambda d, i: {g: d.geom, n: i}) END"
+    )
+    hidden = ["geom", "__src_row", "__part"]
+    numbered = ""
+    if step.part_field:
+        hidden.append(step.part_field.lower())
+        numbered = f", __part.n AS {_ident(step.part_field)}"
+    listed = ", ".join(_lit(c) for c in hidden)
+    sql = f"""
+    SELECT COLUMNS(lambda c: lower(c) NOT IN ({listed})), __part.g AS geom{numbered},
+           row_number() OVER (ORDER BY __src_row, __part.n) AS __src_row
+    FROM (SELECT *, unnest({parts}) AS __part FROM {_ident(prev)})
+    ORDER BY __src_row
+    """
+    log(f"explode{' (part number in ' + step.part_field + ')' if step.part_field else ''}")
+    return sql
+
 
 def clip_sql(prev: str, step: Clip, log: Log, _ctx: StepContext) -> str:
     pred = _PREDICATE_SQL[step.predicate]
@@ -636,6 +749,27 @@ def filter_sql(prev: str, step: Filter, log: Log, _ctx: StepContext) -> str:
     log(f"filter {step.where}")
     return sql
 
+def remove_duplicates_sql(prev: str, step: RemoveDuplicates, log: Log, ctx: StepContext) -> str:
+    """The first row (by __src_row) of each set of rows with the same `by` values and/or
+    geometry. The geometry is compared normalized, so a ring starting at another vertex,
+    or a line running the other way, is still the same shape."""
+    keys = [_ident(c) for c in step.by]
+    if step.geometry:
+        _needs_geom(ctx, "remove_duplicates with geometry: true")
+        keys.append("ST_AsWKB(ST_Normalize(geom))")
+    ranked = f"""
+    SELECT *, row_number() OVER (PARTITION BY {', '.join(keys)} ORDER BY __src_row) AS __dup
+    FROM {_ident(prev)}
+    """
+    # Ordered again: the window sorts the rows by their keys.
+    if step.rejects:
+        sql = f"SELECT * EXCLUDE (__dup), __dup = 1 AS __matched FROM ({ranked}) ORDER BY __src_row"
+    else:
+        sql = f"SELECT * EXCLUDE (__dup) FROM ({ranked}) WHERE __dup = 1 ORDER BY __src_row"
+    compared = [*step.by, *(["geometry"] if step.geometry else [])]
+    log(f"remove_duplicates by {', '.join(compared)}")
+    return sql
+
 def merge_sql(prev: str, step: Merge, log: Log, _ctx: StepContext) -> str:
     src_view = _src(step.source)
     sql = f"""
@@ -667,9 +801,14 @@ STEP_SQL: dict[type, Callable[..., str]] = {
     Erase: erase_sql,
     Dissolve: dissolve_sql,
     CombineLines: combine_lines_sql,
+    Simplify: simplify_sql,
+    SnapToGrid: snap_to_grid_sql,
+    CleanCoverage: clean_coverage_sql,
+    Explode: explode_sql,
     IntersectOverlay: intersect_overlay_sql,
     LineOverlay: line_overlay_sql,
     Filter: filter_sql,
+    RemoveDuplicates: remove_duplicates_sql,
     Merge: merge_sql,
     Attributes: attributes_sql,
 }

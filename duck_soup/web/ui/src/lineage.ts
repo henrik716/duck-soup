@@ -154,8 +154,9 @@ const SPATIAL_STEPS = new Set(['spatial_join', 'clip', 'erase', 'intersect_overl
 
 const STEP_ICON: Record<string, string> = {
   spatial_join: 'map-pin', attribute_join: 'git-merge', nearest_neighbor: 'crosshair', buffer: 'maximize-2',
-  centroid: 'crosshair', clip: 'scissors', erase: 'eraser', dissolve: 'layers', combine_lines: 'spline', intersect_overlay: 'crosshair',
-  line_overlay: 'split', filter: 'filter', snapshot: 'camera', merge: 'git-merge',
+  centroid: 'crosshair', clip: 'scissors', erase: 'eraser', dissolve: 'layers', combine_lines: 'spline', simplify: 'waypoints',
+  snap_to_grid: 'grid-3x3', clean_coverage: 'puzzle', explode: 'ungroup', intersect_overlay: 'crosshair',
+  line_overlay: 'split', filter: 'filter', remove_duplicates: 'copy-minus', snapshot: 'camera', merge: 'git-merge',
   attributes: 'table-properties',
 }
 

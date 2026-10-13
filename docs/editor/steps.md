@@ -30,7 +30,12 @@ each group with a duck name:
 | | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
 | | Dissolve | `dissolve` | Merge features that share the same group-by values, with per-group aggregates. |
 | | Combine Lines | `combine_lines` | Join lines that meet end to end into longer lines, one per connected chain with the same group-by values. |
+| | Simplify / Generalize | `simplify` | Remove vertices within a tolerance, one feature at a time or keeping the boundaries neighbouring polygons share. |
+| | Snap to Grid | `snap_to_grid` | Round every vertex to a grid, keeping the geometry valid. |
+| | Clean Coverage | `clean_coverage` | Make polygons fit edge to edge: snap nearly matching edges, remove overlaps, fill small gaps. |
+| | Multipart to Singleparts | `explode` | Split multipolygons, multilines and collections into a row per part. |
 | **Pecking order** (rows: keep some, add more, or set a copy aside) | Filter | `filter` | Drop rows where a SQL condition is false. |
+| | Remove Duplicates | `remove_duplicates` | Keep the first row of each set with the same column values and/or geometry. |
 | | Merge / Union | `merge` | Append another source's rows, matched by column name. |
 | | Snapshot | `snapshot` | Name the current state so later steps can join back against it. |
 | **Ruffling feathers** (attributes: calculate, overwrite or drop columns) | Update Attributes | `attributes` | Add, overwrite or remove columns partway through the pipeline. |
@@ -96,6 +101,15 @@ The body depends on the step type:
   outside an aggregate. See [Keeping other columns](../reference/steps.md#keeping-other-columns).
 - **only join lines running the same way**: for combine lines, on by default. Untick it to let
   a line be reversed so it joins one running the other way.
+- **tolerance**, **grid size**, **snap distance**, **max gap width**: for simplify, snap to
+  grid and clean coverage, in working-CRS units.
+- **keep shared boundaries shared**: for simplify, simplifies polygons that fit together edge
+  to edge as one coverage, so no gaps open up between neighbours. Ticked, it shows **leave the
+  outer boundary as it is**. See [`simplify`](../reference/steps.md#simplify).
+- **part number column**: for multipart to singleparts, an optional column numbering each
+  feature's parts.
+- **compare columns**, **compare the geometry**: for remove duplicates, what makes two rows
+  duplicates. Give columns, tick the geometry, or both.
 - **Update Attributes** (an attributes step) changes only what you list. Every other column is
   kept as it is and goes on to the next step, as the card says at the top. Its parts:
     - **available here**: the columns that reach this step, grouped by where they come from
@@ -111,8 +125,9 @@ The body depends on the step type:
 - **expressions**: any SQL field with a pencil icon (a mapping or attribute `expr`, a dissolve
   key or aggregate) opens the [expression builder](mapping.md#expression-builder), which checks
   the expression against the rows that reach this step.
-- **rejects → output layer**: on a spatial, attribute or nearest-neighbour join, `clip` or `filter`, a
-  layer for the rows the step rejects (no match, outside the mask, condition not true). Those
+- **rejects → output layer**: on a spatial, attribute or nearest-neighbour join, `clip`, `filter`
+  or remove duplicates, a layer for the rows the step rejects (no match, outside the mask,
+  condition not true, a duplicate). Those
   rows then go there instead of continuing down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).
 - **apply to branch**: run this step on a named [snapshot branch](../concepts.md#branches-and-derived-sources)
   instead of the main chain. For a snapshot step this reads **snapshot from branch**.

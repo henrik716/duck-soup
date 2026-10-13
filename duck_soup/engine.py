@@ -36,8 +36,9 @@ import duckdb
 from . import sources as src_readers
 from . import mapping, steps
 from .config import (
-    Attributes, Buffer, CombineLines, Config, Dissolve, NearestNeighbor, OutputLayer, PipelineDef,
-    Snapshot, NUMERIC_AGGREGATE_HOWS, is_parquet_path, reject_layer_names,
+    Attributes, Buffer, CleanCoverage, CombineLines, Config, Dissolve, NearestNeighbor, OutputLayer,
+    PipelineDef, Simplify, Snapshot, SnapToGrid, NUMERIC_AGGREGATE_HOWS, is_parquet_path,
+    reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -471,8 +472,9 @@ class Engine:
     def _check_working_crs_units(self) -> None:
         """Refuse to run distance/area operations in a geographic working CRS.
 
-        Buffer distances, nearest_neighbor's max_distance/distance_field and the area/length
-        mapping funcs are all in working_crs units. In a degrees CRS a `buffer: 500` meant as
+        Buffer distances, simplify/snap_to_grid/clean_coverage tolerances, nearest_neighbor's
+        max_distance/distance_field and the area/length mapping funcs are all in working_crs
+        units. In a degrees CRS a `buffer: 500` meant as
         metres becomes 500 degrees and Oslo–Bergen measures 5.45 — silently wrong rather
         than an error, which is why this is checked up front.
         """
@@ -480,8 +482,12 @@ class Engine:
             return
         uses: list[str] = []
         for i, step in enumerate(self.p.steps, start=1):
-            if isinstance(step, Buffer):
-                uses.append(f"step {i} (buffer)")
+            if isinstance(step, (Buffer, Simplify, SnapToGrid)):
+                uses.append(f"step {i} ({step.type})")
+            elif isinstance(step, CleanCoverage) and (
+                step.snap_distance is not None or step.max_gap_width is not None
+            ):
+                uses.append(f"step {i} (clean_coverage distances)")
             elif isinstance(step, NearestNeighbor) and (
                 step.max_distance is not None or step.distance_field
             ):

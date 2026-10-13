@@ -53,6 +53,10 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 | Clipper (*outside* output) | [`erase`](../reference/steps.md#erase) |
 | Dissolver, Aggregator | [`dissolve`](../reference/steps.md#dissolve), with `aggregates` for the attribute accumulation (sum, count, concatenate, …) |
 | LineCombiner | [`combine_lines`](../reference/steps.md#combine_lines): group by attributes, one line per connected chain, `aggregates` per chain |
+| Generalizer (Douglas, Visvalingam) | [`simplify`](../reference/steps.md#simplify); `shared_boundaries: true` for polygons that must keep fitting together |
+| CoordinateRounder | [`snap_to_grid`](../reference/steps.md#snap_to_grid) |
+| Snapper (polygons onto each other), AreaGapAndOverlapCleaner | [`clean_coverage`](../reference/steps.md#clean_coverage) |
+| Deaggregator | [`explode`](../reference/steps.md#explode), with `part_field` for the part number |
 | GeometryValidator (repair) | `make_valid`, on by default for every source |
 | 2DForcer | [`force_2d: true`](../reference/sources.md#3d-geometry) on the source |
 | Reprojector | Automatic: sources are reprojected into the working CRS, and layers into their own `crs` |
@@ -63,6 +67,7 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 |---|---|
 | Tester, TestFilter | [`filter`](../reference/steps.md#filter) step (drops rows, or with `rejects` writes them to a *Failed* layer), or a layer `filter` (splits rows across layers) |
 | Several readers into one stream | [`merge`](../reference/steps.md#merge) |
+| DuplicateFilter, Matcher (identical geometry) | [`remove_duplicates`](../reference/steps.md#remove_duplicates): `by` columns, `geometry: true`, and `rejects` for the *Duplicate* port |
 
 ### Attributes
 

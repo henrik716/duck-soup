@@ -33,6 +33,12 @@ _STEPS = {
         "aggregates": [{"to": "n", "expr": "count(*)"}],
     },
     "combine_lines": {"by": ["name"], "aggregates": [{"to": "n", "expr": "count(*)"}]},
+    "simplify": {"tolerance": 1},
+    "simplify_shared": {"type": "simplify", "tolerance": 1, "shared_boundaries": True},
+    "snap_to_grid": {"grid_size": 0.01},
+    "clean_coverage": {"max_gap_width": 1},
+    "explode": {"part_field": "part"},
+    "remove_duplicates": {"by": ["name"], "geometry": True, "rejects": "r"},
     "intersect_overlay": {"fields": {"f": "name"}},
     "line_overlay": {"fields": {"f": "name"}},
     "filter": {"where": "name IS NOT NULL"},
@@ -41,7 +47,10 @@ _STEPS = {
         "columns": [{"to": "u", "expr": "upper(name)"}, {"to": "lon", "func": "lon"}], "drop": ["u"],
     },
 }
-_SOURCELESS = {"buffer", "centroid", "dissolve", "combine_lines", "filter", "attributes"}
+_SOURCELESS = {
+    "buffer", "centroid", "dissolve", "combine_lines", "simplify", "snap_to_grid", "clean_coverage",
+    "explode", "filter", "remove_duplicates", "attributes",
+}
 
 
 @pytest.fixture

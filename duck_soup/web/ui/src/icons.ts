@@ -2,13 +2,13 @@ import {
   createElement, type IconNode,
   AlertCircle, AlertTriangle, AlignLeft, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen,
   Camera, CheckCircle, CheckSquare, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
-  ChevronsUp, CircleHelp, Code, Columns2, Combine, Copy, CornerDownRight, Crosshair, Database,
+  ChevronsUp, CircleHelp, Code, Columns2, Combine, Copy, CopyMinus, CornerDownRight, Crosshair, Database,
   DatabaseZap, Download, Edit3, Eraser, Eye, File, FileCode, FileSpreadsheet, FileText,
-  Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, GripVertical,
+  Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, Grid3x3, GripVertical,
   HardDrive, Hash, History, House, Info, Layers, Link, Loader, Map, MapPin, MapPinned,
-  Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Radar, RefreshCw, Save,
+  Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Puzzle, Radar, RefreshCw, Save,
   Scissors, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
-  Trash2, UploadCloud, X,
+  Trash2, Ungroup, UploadCloud, Waypoints, X,
 } from 'lucide'
 
 // ---- icons ----
@@ -24,13 +24,13 @@ import {
 export const ICONS: Record<string, IconNode> = {
   AlertCircle, AlertTriangle, AlignLeft, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen,
   Camera, CheckCircle, CheckSquare, ChevronDown, ChevronRight, ChevronUp, ChevronsDown,
-  ChevronsUp, CircleHelp, Code, Columns2, Combine, Copy, CornerDownRight, Crosshair, Database,
+  ChevronsUp, CircleHelp, Code, Columns2, Combine, Copy, CopyMinus, CornerDownRight, Crosshair, Database,
   DatabaseZap, Download, Edit3, Eraser, Eye, File, FileCode, FileSpreadsheet, FileText,
-  Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, GripVertical,
+  Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, Grid3x3, GripVertical,
   HardDrive, Hash, History, House, Info, Layers, Link, Loader, Map, MapPin, MapPinned,
-  Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Radar, RefreshCw, Save,
+  Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Puzzle, Radar, RefreshCw, Save,
   Scissors, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
-  Trash2, UploadCloud, X,
+  Trash2, Ungroup, UploadCloud, Waypoints, X,
 }
 
 /** lucide's name → export mapping (its toPascalCase): `alert-circle` → `AlertCircle`. */

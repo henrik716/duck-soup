@@ -388,6 +388,80 @@ class Centroid(StepBase):
     type: Literal["centroid"] = "centroid"
 
 
+class Simplify(StepBase):
+    """Fewer vertices: every line and polygon edge within `tolerance` of the original.
+    With `shared_boundaries`, the polygons are simplified together as one coverage, so an
+    edge two neighbours share is simplified once and stays shared: no gaps or overlaps open
+    up between them."""
+
+    type: Literal["simplify"] = "simplify"
+    tolerance: float = Field(
+        ..., gt=0, description="How far (working CRS units) the simplified shape may stray from the original"
+    )
+    shared_boundaries: bool = Field(
+        False,
+        description="Simplify the polygons together, keeping the edges neighbours share "
+        "shared (needs polygons that don't overlap); lines and points are still simplified "
+        "one by one",
+    )
+    keep_outer_boundary: bool = Field(
+        False,
+        description="With shared_boundaries: leave the outer edge of the coverage as it is "
+        "(a border or a coastline) and simplify only the edges inside it",
+    )
+
+    @model_validator(mode="after")
+    def _outer_needs_shared(self):
+        if self.keep_outer_boundary and not self.shared_boundaries:
+            raise ValueError("simplify: keep_outer_boundary needs shared_boundaries: true")
+        return self
+
+
+class SnapToGrid(StepBase):
+    """Every vertex rounded to a grid of `grid_size` (working CRS units), keeping the
+    geometry valid: polygons narrower than a grid cell collapse to an empty geometry."""
+
+    type: Literal["snap_to_grid"] = "snap_to_grid"
+    grid_size: float = Field(..., gt=0, description="Grid cell size in working CRS units, e.g. 0.01 for centimetres")
+
+
+class CleanCoverage(StepBase):
+    """Polygons that should fit together edge to edge (a coverage) made to: edges within
+    `snap_distance` of each other snapped together, overlaps given to one of the
+    polygons, and enclosed gaps narrower than `max_gap_width` filled. A polygon left
+    with nothing (it lay wholly under another) comes out empty."""
+
+    type: Literal["clean_coverage"] = "clean_coverage"
+    snap_distance: Optional[float] = Field(
+        None, gt=0,
+        description="How close (working CRS units) edges must be to snap together; "
+        "default: a tiny distance derived from the data's extent",
+    )
+    max_gap_width: Optional[float] = Field(
+        None, gt=0,
+        description="Fill gaps between the polygons narrower than this (working CRS units); "
+        "default: gaps are left open",
+    )
+
+
+class Explode(StepBase):
+    """Multipart → singleparts: one row per part of each multi-geometry (or geometry
+    collection), each with the feature's attributes."""
+
+    type: Literal["explode"] = "explode"
+    part_field: Optional[str] = Field(
+        None, description="Output column to number the parts in (1, 2, …, per feature)"
+    )
+
+    @model_validator(mode="after")
+    def _part_field_not_reserved(self):
+        # The editor writes a blank field as "": no part column.
+        self.part_field = (self.part_field or "").strip() or None
+        if self.part_field and self.part_field.lower() in ("geom", "__src_row"):
+            raise ValueError(f"explode: '{self.part_field}' is reserved; give the part column another name")
+        return self
+
+
 class Clip(StepBase, RejectsMixin):
     type: Literal["clip"] = "clip"
     source: str = Field(..., description="id of the mask source")
@@ -507,6 +581,30 @@ class Filter(StepBase, RejectsMixin):
         ..., description="SQL boolean expression; rows where this is false are dropped"
     )
     rejects: Optional[str] = _rejects_field("the rows where `where` isn't true")
+
+
+class RemoveDuplicates(StepBase, RejectsMixin):
+    """One row per distinct value of the `by` columns (and/or the geometry): the first, in
+    row order. Rows without a geometry count as having the same one, as NULLs in a `by`
+    column count as the same value."""
+
+    type: Literal["remove_duplicates"] = "remove_duplicates"
+    by: list[str] = Field(
+        default_factory=list, description="Columns whose values together make a row a duplicate"
+    )
+    geometry: bool = Field(
+        False,
+        description="Also compare the geometry: equal shapes count as duplicates, whatever "
+        "vertex they start at or way they run",
+    )
+    rejects: Optional[str] = _rejects_field("the duplicates")
+
+    @model_validator(mode="after")
+    def _something_to_compare(self):
+        self.by = [c.strip() for c in self.by if c.strip()]
+        if not self.by and not self.geometry:
+            raise ValueError("remove_duplicates: list the columns to compare ('by'), or set geometry: true")
+        return self
 
 
 class Merge(StepBase):
@@ -663,7 +761,8 @@ class Attributes(StepBase):
 Step = Annotated[
     Union[
         SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
-        Dissolve, CombineLines, IntersectOverlay, LineOverlay, Filter, Merge, Snapshot,
+        Dissolve, CombineLines, Simplify, SnapToGrid, CleanCoverage, Explode,
+        IntersectOverlay, LineOverlay, Filter, RemoveDuplicates, Merge, Snapshot,
         Attributes,
     ],
     Field(discriminator='type'),

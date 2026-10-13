@@ -28,12 +28,17 @@ export const STEP_GALLERY: GalleryGroup[] = [
       { type: 'erase', icon: 'eraser', name: 'Erase / Difference', desc: 'Remove geometries that overlap with a mask source.' },
       { type: 'dissolve', icon: 'layers', name: 'Dissolve', desc: 'Merge features that share the same group-by values, with per-group aggregates (sum, count, …).' },
       { type: 'combine_lines', icon: 'spline', name: 'Combine Lines', desc: 'Join lines that meet end to end into longer lines, one per connected chain with the same group-by values.' },
+      { type: 'simplify', icon: 'waypoints', name: 'Simplify / Generalize', desc: 'Remove vertices within a tolerance, one feature at a time or keeping the boundaries neighbouring polygons share.' },
+      { type: 'snap_to_grid', icon: 'grid-3x3', name: 'Snap to Grid', desc: 'Round every vertex to a grid, e.g. to centimetres, keeping the geometry valid.' },
+      { type: 'clean_coverage', icon: 'puzzle', name: 'Clean Coverage', desc: 'Make polygons fit edge to edge: snap nearly matching edges, remove overlaps, fill small gaps.' },
+      { type: 'explode', icon: 'ungroup', name: 'Multipart to Singleparts', desc: 'Split multipolygons, multilines and collections into a row per part.' },
     ],
   },
   {
     name: 'Pecking order', what: 'rows: keep some, add more, or set a copy aside',
     items: [
       { type: 'filter', icon: 'filter', name: 'Filter', desc: 'Drop rows where a SQL condition is false — e.g. reject unmatched joins.' },
+      { type: 'remove_duplicates', icon: 'copy-minus', name: 'Remove Duplicates', desc: 'Keep the first row of each set with the same column values and/or the same geometry.' },
       { type: 'merge', icon: 'combine', name: 'Merge / Union', desc: 'Append rows from another source, matched by column name.' },
       { type: 'snapshot', icon: 'camera', name: 'Snapshot', desc: 'Name this step\'s current state so a later step can join back against it — fork mid-pipeline, after some processing.' },
     ],
