@@ -26,8 +26,9 @@
      which several non-map elements (step icons, lineage nodes, badges, syntax highlighting)
      also key off and shouldn't change color along with the map. */
   --map-feature: #c85fe0;
-  /* The selected feature: a hue far from --map-feature, so it stands out by colour too. */
-  --map-selected: #ffc53d;
+  /* The selected feature: the --spatial teal, opposite --map-feature's magenta so it stands
+     out by colour too. Its own token for the same reason as --map-feature. */
+  --map-selected: #00ebd7;
   --warn: #ff6b6b;
   --warn-hover: #ff8585;
   --warn-soft: rgba(255, 107, 107, 0.12);
@@ -89,7 +90,7 @@
   --spatial: #00897b;
   --spatial-soft: rgba(0, 137, 123, 0.1);
   --map-feature: #b03ccc;
-  --map-selected: #e07b00;
+  --map-selected: #00897b;
   --warn: #d33a3a;
   --warn-hover: #b02424;
   --warn-soft: rgba(211, 58, 58, 0.08);

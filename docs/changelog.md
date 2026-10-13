@@ -43,6 +43,8 @@ next to the editor's name show the version you're running.
   is drawn on top, its attributes open in a popup, and its row is highlighted in the Data
   Table. Where features overlap, the popup steps through them (*1 of 3 here*). Clicking a
   table row selects its feature on the map. (1.6.0)
+- The selected map feature is drawn in teal, the editor's colour for spatial things, instead
+  of amber, which didn't fit the rest of the palette. (1.6.1)
 - The live checks (expression builder, field checks, the join warning) run on the first
   1000 base features, so a check after a dissolve no longer computes over all the data and
   holds up the preview. (1.6.0)

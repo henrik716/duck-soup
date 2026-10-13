@@ -107,7 +107,7 @@ function colors(): { feature: string; selected: string; accent: string; ink: str
     // elements (step icons, lineage nodes, badges, syntax highlighting) that shouldn't recolor
     // along with the map's drawn features.
     feature: read('--map-feature', '#ff5ec4'),
-    selected: read('--map-selected', '#ffc53d'),
+    selected: read('--map-selected', '#00ebd7'),
     accent: read('--accent', '#9d85ff'),
     ink: read('--ink', '#f0edff'),
   }
