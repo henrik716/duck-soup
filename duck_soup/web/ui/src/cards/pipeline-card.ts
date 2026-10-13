@@ -69,6 +69,7 @@ function buildPipelineCardMarkup(pdef: Partial<PipelineDef>, plId: string): stri
               ${comboField('class="pl-working-crs"', pdef.working_crs ?? '', CRS_COMBO_OPTIONS, 'auto (base CRS)')}
             </label>
             <span class="spacer"></span>
+            <button class="mini ghost pl-refresh-sources" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Read every source again: download the remote files again, and re-read the columns of the rest (a file may have been replaced). Then preview again." aria-label="Refresh all sources"><i data-lucide="refresh-cw" style="width:11px;height:11px"></i> refresh all</button>
             <button class="mini ghost pl-preview-base" style="width:auto;padding:3px 9px;margin:0;font-size:11px" title="Preview base source" aria-label="Preview the base source before any steps"><i data-lucide="eye" style="width:11px;height:11px"></i></button>
             <button class="addbtn pl-add-source" style="width:auto;padding:3px 9px;margin:0;font-size:11px"><i data-lucide="plus" style="width:11px;height:11px"></i> add</button>
             ${helpLink('editor/sources/', '', 'sources')}
@@ -206,6 +207,11 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
       bubbles: true,
       detail: { stepIdx: 0, pipelineIdx }
     }))
+  })
+
+  card.querySelector('.pl-refresh-sources')!.addEventListener('click', e => {
+    e.stopPropagation()
+    sourcesEl.querySelectorAll<HTMLElement>(':scope > *').forEach(s => (s as any)._refresh?.())
   })
 
   // A source card can't reach the pipeline-level `.pl-base` field directly (it's rendered

@@ -56,6 +56,10 @@ next to the editor's name show the version you're running.
   it as a field. (1.7.0)
 - The selected map feature is drawn in indigo instead of teal: Persian indigo in the light
   theme, a lighter shade in the dark one. (1.7.2)
+- **Refresh all** in the Sources tab reads every source of the pipeline again: downloaded
+  files are downloaded again, and the rest have their columns and layers read again, for a
+  local file that has been replaced. Then the preview re-runs. See
+  [Refreshing all sources](editor/sources.md#refreshing-all-sources). (1.7.4)
 
 **Fixes**
 

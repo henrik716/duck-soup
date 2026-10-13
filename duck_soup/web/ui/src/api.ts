@@ -221,11 +221,17 @@ export async function inspectSource(source: Source): Promise<InspectResponse> {
   })
 }
 
+/** Forget the shared inspect answers, so the next inspects read the sources again: a file
+ *  may have been replaced on disk. */
+export function forgetInspects(): void {
+  sharedInspects.clear()
+  sharedFileInspects.clear()
+}
+
 /** Download a remote file source again; answers pending while it runs (like inspect). */
 export async function refreshSource(source: Source): Promise<InspectResponse> {
   // The file is downloaded again: what was inspected before is out of date.
-  sharedInspects.clear()
-  sharedFileInspects.clear()
+  forgetInspects()
   const r = await fetch('/api/refresh_source', {
     method: 'POST',
     headers: JSON_HEADERS,

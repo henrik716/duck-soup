@@ -1,4 +1,4 @@
-import { inspectSource, inspectFile, refreshSource } from '../api'
+import { inspectSource, inspectFile, refreshSource, forgetInspects } from '../api'
 import { mkEl, val, wireCollapse, helpLink, docsUrl } from '../dom'
 import { mutate } from '../history'
 import { META, SOURCE_SCHEMAS, EXT_FORMAT } from '../state'
@@ -204,7 +204,8 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   const { autoDetectFormat, autoDetectOapifCollection, autoDetectArcgisLayer } =
     createAutoDetectors(c, fmt, toggles)
 
-  const { doInspect, doInspectFile } = createInspectors(c, syncFn, geomModeSel, toggleTabularGeomSub)
+  const { doInspect, doInspectFile, refresh } = createInspectors(c, syncFn, geomModeSel, toggleTabularGeomSub)
+  ;(c as any)._refresh = refresh
 
   c.querySelectorAll('[data-k="uri"],[data-k="format"],[data-k="layer"],[data-k="crs"],[data-k="header_row"],[data-k="records"],[data-k="x_field"],[data-k="y_field"],[data-k="geom_field"]').forEach(i => {
     i.addEventListener('input', doInspect)
@@ -549,7 +550,21 @@ function createInspectors(
     }, 400)
   }
 
-  return { doInspect, doInspectFile }
+  // The pipeline's "refresh all": a downloaded file is downloaded again (as its own
+  // "refresh"); any other source is inspected again, since a local file may have been
+  // replaced and its columns changed. Either way the preview re-runs once it answers.
+  const refresh = () => {
+    const note = c.querySelector<HTMLElement>('[data-download-note]')
+    if (note && !note.hidden && lastSource && !refreshBtn.disabled) {
+      refreshBtn.click()
+      return
+    }
+    forgetInspects()
+    doInspectFile()
+    doInspect()
+  }
+
+  return { doInspect, doInspectFile, refresh }
 }
 
 // A value the editor filled in on your behalf should say so — these used to overwrite a

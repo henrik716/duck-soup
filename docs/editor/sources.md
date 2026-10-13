@@ -128,6 +128,15 @@ editor, until you click **refresh** next to it, which downloads the file again i
 background and then re-runs the preview. **Run** always downloads fresh data. See
 [Remote files](../reference/sources.md#remote-files).
 
+## Refreshing all sources
+
+**Refresh all**, in the tab's toolbar, reads every source of the pipeline again and then
+re-runs the preview. A downloaded file is downloaded again, as its own **refresh** does. Any
+other source has its columns and layers read again: previews always read a local file as it
+is on disk, but a source card only lists the columns it found when the card was loaded or
+last changed, so after a file is replaced with one that has other columns, the column
+pickers would still offer the old ones.
+
 ## Choosing the base
 
 Click **★ base** on the source the pipeline should start from. Its features are the rows that
