@@ -46,6 +46,8 @@ next to the editor's name show the version you're running.
 - The step gallery has a search box. It finds a step by its name, its description, or the
   FME transformer or QGIS tool it replaces (`Deaggregator`, `DonutHoleExtractor`,
   `Split with lines`, …); <kbd>Enter</kbd> adds the first match. (1.7.0)
+- The search box's hint names QGIS first, and its examples are tool names only the search
+  knows: `Delete holes` (QGIS) and `Deaggregator` (FME). (1.7.1)
 - Replacing the geometry is easier to find: Update Attributes lists **geom** among the
   columns reaching it, and clicking it opens the expression builder, whose new
   **Geometry (new shape)** group has the conversions: outline, hulls, bounding box, point on

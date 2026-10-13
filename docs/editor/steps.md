@@ -15,8 +15,8 @@ step somewhere in the middle, click the **+** on that connection in the
 ![The step gallery](../assets/screenshots/step-gallery-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 Type in the search box at the top to find a step: by its name, by a word from its
-description, or by the FME transformer or QGIS tool it replaces (`Deaggregator`, `Dissolve`,
-`DonutHoleExtractor`, `Split with lines`, …). Words can come in any order. <kbd>Enter</kbd>
+description, or by the QGIS tool or FME transformer it replaces (`Delete holes`,
+`Split with lines`, `Deaggregator`, `DonutHoleExtractor`, …). Words can come in any order. <kbd>Enter</kbd>
 adds the first card that matches, and <kbd>↓</kbd> moves to the cards.
 
 The gallery groups the steps the way the [Step types reference](../reference/steps.md) does,

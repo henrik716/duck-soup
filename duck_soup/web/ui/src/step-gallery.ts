@@ -88,7 +88,7 @@ function galleryHtml(): string {
   return `
     <div class="step-gallery-search">
       <i data-lucide="search" style="width:14px;height:14px"></i>
-      <input type="search" id="stepGallerySearch" placeholder="Search steps: name, or an FME / QGIS tool (Deaggregator, Dissolve, …)" aria-label="Search steps" autocomplete="off" spellcheck="false">
+      <input type="search" id="stepGallerySearch" placeholder="Search steps, or a QGIS / FME tool (Delete holes, Deaggregator, …)" aria-label="Search steps" autocomplete="off" spellcheck="false">
     </div>
     <p class="step-gallery-empty" hidden>No step matches. The <a href="#" data-gallery-clear>whole list</a> is also grouped below by what it does.</p>` +
     STEP_GALLERY.map(g => `
