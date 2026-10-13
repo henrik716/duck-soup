@@ -2,7 +2,7 @@ import './styles.css'
 
 import {
   fetchMeta, fetchVersion, fetchPipelineNames, fetchPipeline, savePipeline,
-  validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
+  abortInspects, validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange, onFeatureSelect, selectFeature, hoverFeature } from './map'
 import { initLayout } from './layout'
@@ -828,6 +828,10 @@ async function loadList(): Promise<void> {
 
 async function loadPipelineConfig(name: string): Promise<void> {
   if (!name) return
+  // Before fetching it, not only in hydrate: the open config's inspects, waiting on the
+  // server behind its preview, can hold every connection the browser allows to the server,
+  // and this request would wait for a free one.
+  abortInspects()
   let d
   try {
     d = await fetchPipeline(name)

@@ -68,6 +68,10 @@ next to the editor's name show the version you're running.
 - Loading another config made the preview wait until the previous config's sources had all
   been inspected. Loading a config now cancels the previous one's inspects, and previews go
   ahead of any inspects still waiting. (1.7.2)
+- Switching away from a config whose preview takes a while, such as one with several remote
+  CSV sources, still waited for that preview: its sources' inspects held every connection
+  the browser allows to the server, so the next config couldn't even be fetched. Loading a
+  config now cancels the open one's inspects before fetching it. (1.7.3)
 - On narrow screens the top bar jumped about while a config loaded, as the status pill's
   text changed width. Its width now comes from the room in the bar, not from its text: a
   long message is cut short, and hovering the pill shows all of it. (1.7.2)
