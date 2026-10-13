@@ -54,6 +54,8 @@ next to the editor's name show the version you're running.
   surface, line midpoint, and more. See [`attributes`](reference/steps.md#attributes). (1.7.0)
 - HTTP Lookup's **Test request** shows the first row's response; click a value in it to add
   it as a field. (1.7.0)
+- The selected map feature is drawn in indigo instead of teal: Persian indigo in the light
+  theme, a lighter shade in the dark one. (1.7.2)
 
 **Fixes**
 
@@ -63,6 +65,12 @@ next to the editor's name show the version you're running.
   to load in the editor, with previews waiting until it was done. Source cards with the
   same source now share one inspect, and a burst of edits syncs the editor once. The
   tutorial config loads in seconds. (1.7.0)
+- Loading another config made the preview wait until the previous config's sources had all
+  been inspected. Loading a config now cancels the previous one's inspects, and previews go
+  ahead of any inspects still waiting. (1.7.2)
+- On narrow screens the top bar jumped about while a config loaded, as the status pill's
+  text changed width. Its width now comes from the room in the bar, not from its text: a
+  long message is cut short, and hovering the pill shows all of it. (1.7.2)
 
 **Docs**
 

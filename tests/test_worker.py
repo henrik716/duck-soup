@@ -231,3 +231,28 @@ def test_a_newer_preview_from_the_same_tab_drops_the_older_ones(tmp_path):
     assert a["stale"] is True and b["stale"] is True
     assert body["ok"] is True and [r["v"] for r in body["rows"]] == ["A"]
     assert time.monotonic() - started < 15
+
+
+def test_an_urgent_call_goes_before_the_waiting_ones():
+    # A preview mustn't queue behind a just-loaded config's inspects (EngineWorker._turn).
+    import threading
+    import time
+
+    worker = EngineWorker()
+    order: list[str] = []
+
+    def wait_turn(name: str, urgent: bool) -> threading.Thread:
+        def go() -> None:
+            with worker._turn(urgent):
+                order.append(name)
+        t = threading.Thread(target=go)
+        t.start()
+        time.sleep(0.1)  # waiting by now
+        return t
+
+    with worker._turn():  # a call running
+        waiting = [wait_turn("inspect 1", False), wait_turn("inspect 2", False), wait_turn("preview", True)]
+    for t in waiting:
+        t.join(5)
+    assert order[0] == "preview"
+    assert sorted(order[1:]) == ["inspect 1", "inspect 2"]

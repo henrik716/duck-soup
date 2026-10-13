@@ -1,4 +1,5 @@
 import { qs } from './dom'
+import { abortInspects } from './api'
 import { pipelineCard, collectPipelineDef } from './cards/pipeline-card'
 import { METADATA_FIELDS } from './metadata'
 import type { Config, DatasetMetadata } from './types'
@@ -47,6 +48,8 @@ export function hydrate(cfg: Partial<Config>, syncFn: () => void): void {
   }
 
   const container = document.querySelector<HTMLElement>('#pipelines')!
+  // The cards about to be replaced don't need their inspects any more.
+  abortInspects()
   container.innerHTML = ''
   const pipelines = cfg.pipelines || []
   pipelines.forEach(p => container.appendChild(pipelineCard(p, syncFn)))

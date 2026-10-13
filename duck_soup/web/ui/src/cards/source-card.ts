@@ -366,6 +366,7 @@ function createInspectors(
   const doInspect = () => {
     clearTimeout(inspectTimer)
     inspectTimer = window.setTimeout(async () => {
+      if (!c.isConnected) return  // removed meanwhile (another config was loaded)
       const id = val(c, 'id')
       const format = val(c, 'format')
       const uri = val(c, 'uri')
@@ -415,11 +416,12 @@ function createInspectors(
       try {
         const d = await inspectSource(srcObj)
         if (seq !== inspectSeq) return  // a newer inspect owns the badge now
+        if (!c.isConnected) return  // another config was loaded
         if (d.pending && d.progress) {
           // Downloading / converting in the background: show what, and ask again.
           pendingText = formatSourceProgress(d.progress)
           updateSourceBadge(c, { loading: true, loadingText: pendingText })
-          window.setTimeout(() => { if (seq === inspectSeq) doInspect() }, PENDING_RETRY_MS)
+          window.setTimeout(() => { if (seq === inspectSeq && c.isConnected) doInspect() }, PENDING_RETRY_MS)
           return
         }
         pendingText = null
@@ -477,6 +479,7 @@ function createInspectors(
           updateCrsWarning(c, null)
         }
       } catch {
+        if (!c.isConnected) return  // aborted: another config was loaded (abortInspects)
         delete SOURCE_SCHEMAS[id]
         updateSourceBadge(c, { ok: false, error: 'connection failed' })
         updateCrsWarning(c, null)
@@ -488,6 +491,7 @@ function createInspectors(
   const doInspectFile = () => {
     clearTimeout(fileTimer)
     fileTimer = window.setTimeout(async () => {
+      if (!c.isConnected) return
       const uri = val(c, 'uri')
       const format = val(c, 'format')
       const layerSel = c.querySelector<HTMLInputElement>('[data-k="layer"]')
@@ -507,12 +511,13 @@ function createInspectors(
       }
       try {
         const d = await inspectFile(inspectUri, format)
+        if (!c.isConnected) return  // another config was loaded
         if (d.pending && d.progress) {
           // A remote file still downloading in the background: show it, and ask again.
           pendingText = formatSourceProgress(d.progress)
           updateSourceBadge(c, { loading: true, loadingText: pendingText })
           window.setTimeout(() => {
-            if (val(c, 'uri') === uri && val(c, 'format') === format) doInspectFile()
+            if (c.isConnected && val(c, 'uri') === uri && val(c, 'format') === format) doInspectFile()
           }, PENDING_RETRY_MS)
           return
         }
@@ -537,6 +542,7 @@ function createInspectors(
           updateSourceBadge(c, { ok: false, error: d.error || 'could not read this file' })
         }
       } catch (e) {
+        if (!c.isConnected) return  // aborted: another config was loaded (abortInspects)
         console.error('Failed to inspect file:', e)
         updateSourceBadge(c, { ok: false, error: `could not read this file: ${e instanceof Error ? e.message : String(e)}` })
       }

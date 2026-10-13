@@ -289,7 +289,7 @@ function setStatus(kind: 'idle' | 'ok' | 'bad' | 'busy', msg: string, detail?: s
   lastErrorDetail = kind === 'bad' ? (detail ?? msg) : ''
   s.title = lastErrorDetail
     ? `${lastErrorDetail}\n\n(click to open the problems panel)`
-    : 'Validation status'
+    : msg  // the pill has a fixed width: a long progress text is cut short
 
   renderProblems()
 

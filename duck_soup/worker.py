@@ -25,9 +25,9 @@ import multiprocessing as mp
 import os
 import threading
 import traceback
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 # How many of the last log lines an EngineCrashed message quotes.
 _CRASH_LOG_LINES = 3
@@ -310,7 +310,11 @@ def _context() -> dict:
 class EngineWorker:
     def __init__(self, name: str = "duck-soup-engine") -> None:
         self.name = name
-        self._lock = threading.Lock()
+        # One call at a time (see _turn): `_held` while one runs, `_urgent` counts the urgent
+        # calls waiting for it.
+        self._turns = threading.Condition()
+        self._held = False
+        self._urgent = 0
         # Guards which call is running (_call_id, _tag, _busy) against interrupt().
         self._state = threading.Lock()
         self._proc = None
@@ -369,16 +373,39 @@ class EngineWorker:
             proc.join()
         return proc.exitcode
 
+    @contextmanager
+    def _turn(self, urgent: bool = False) -> Iterator[None]:
+        """Wait for the worker to be free. An urgent call goes before every waiting call that
+        isn't: an editor's preview shouldn't queue behind the source inspects of a config it
+        just loaded (each a round trip to the worker, and a config can have dozens)."""
+        with self._turns:
+            if urgent:
+                self._urgent += 1
+            try:
+                while self._held or (not urgent and self._urgent):
+                    self._turns.wait()
+            finally:
+                if urgent:
+                    self._urgent -= 1
+            self._held = True
+        try:
+            yield
+        finally:
+            with self._turns:
+                self._held = False
+                self._turns.notify_all()
+
     def call(
         self, task: str, payload: Any, log: Callable[[str], None] | None = None, *,
-        tag: Any = None, stale: Callable[[], bool] | None = None, **kwargs,
+        tag: Any = None, stale: Callable[[], bool] | None = None, urgent: bool = False,
+        **kwargs,
     ) -> Any:
         """Run `task` on `payload` (a config dict, a source dict, ...) in the worker and
         return its result. Raises EngineTaskError when the task fails, EngineCrashed when the
         worker dies, EngineCancelled when cancel() stopped it, EngineSuperseded when `stale()`
         was already true once the worker was free (the call is skipped) or interrupt(`tag`)
-        stopped it."""
-        with self._lock:
+        stopped it. An `urgent` call goes before the waiting calls that aren't (see _turn)."""
+        with self._turn(urgent):
             if stale is not None and stale():
                 raise EngineSuperseded()
             self._cancelled = self._interrupted = False
@@ -437,7 +464,7 @@ class EngineWorker:
         return True
 
     def close(self) -> None:
-        with self._lock:
+        with self._turn():
             self._discard()
 
 

@@ -26,9 +26,10 @@
      which several non-map elements (step icons, lineage nodes, badges, syntax highlighting)
      also key off and shouldn't change color along with the map. */
   --map-feature: #c85fe0;
-  /* The selected feature: the --spatial teal, opposite --map-feature's magenta so it stands
-     out by colour too. Its own token for the same reason as --map-feature. */
-  --map-selected: #00ebd7;
+  /* The selected feature: indigo, bluer than --map-feature's magenta so it stands out by
+     colour too. Here a lighter shade, so it reads on the dark basemap; the light theme uses
+     Persian indigo itself. Its own token for the same reason as --map-feature. */
+  --map-selected: #6a3fd6;
   --warn: #ff6b6b;
   --warn-hover: #ff8585;
   --warn-soft: rgba(255, 107, 107, 0.12);
@@ -90,7 +91,7 @@
   --spatial: #00897b;
   --spatial-soft: rgba(0, 137, 123, 0.1);
   --map-feature: #b03ccc;
-  --map-selected: #00c4b4;
+  --map-selected: #32127a;
   --warn: #d33a3a;
   --warn-hover: #b02424;
   --warn-soft: rgba(211, 58, 58, 0.08);
@@ -1558,7 +1559,17 @@ th.sortable.sorted-desc .sort-indicator {
 }
 
 /* The status pill is now a button that opens the problems panel. */
-button.status { cursor: pointer; font-family: var(--mono); margin-left: 0; }
+/* Its width comes from the room on its line, never from its text: the text changes all
+   through a load ("loading…", "validating…", "previewing… 3s", a download's progress), and
+   when the action bar wraps, a pill that grew and shrank with it moved the line breaks and
+   every button. It takes the line's spare room up to max-width, and long text is cut short
+   (the full text is its title). */
+button.status {
+  cursor: pointer; font-family: var(--mono); margin-left: 0;
+  display: inline-block; width: 68px; flex: 1 0 auto; max-width: 190px; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+button.status::before { display: inline-block; vertical-align: middle; margin: -2px 6px 0 0; }
 button.status:hover { filter: brightness(1.25); }
 .status.busy { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft-border); }
 .status.busy::before { animation: statusPulse 1.1s ease-in-out infinite; }

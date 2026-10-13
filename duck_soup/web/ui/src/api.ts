@@ -201,10 +201,22 @@ const INSPECT_SHARE_MS = 10_000
 const sharedInspects = sharedRequests<InspectResponse>(d => d.ok && !d.pending, INSPECT_SHARE_MS)
 const sharedFileInspects = sharedRequests<InspectFileResponse>(d => d.ok && !d.pending, INSPECT_SHARE_MS)
 
+// The inspects of the config on screen. Loading another config aborts the rest
+// (abortInspects): left running, they held the browser's few connections to the server, and
+// the server's engine worker, while the new config's preview waited behind them.
+let inspects = new AbortController()
+
+/** Abort every inspect in flight; the server skips the ones it hasn't started. Answers
+ *  already in hand stay shared (an aborted request isn't kept, see request-share.ts). */
+export function abortInspects(): void {
+  inspects.abort()
+  inspects = new AbortController()
+}
+
 export async function inspectSource(source: Source): Promise<InspectResponse> {
   const body = JSON.stringify({ source })
   return sharedInspects.get(body, async () => {
-    const r = await fetch('/api/inspect', { method: 'POST', headers: JSON_HEADERS, body })
+    const r = await fetch('/api/inspect', { method: 'POST', headers: JSON_HEADERS, body, signal: inspects.signal })
     return r.json()
   })
 }
@@ -225,7 +237,7 @@ export async function refreshSource(source: Source): Promise<InspectResponse> {
 export async function inspectFile(uri: string, format: string): Promise<InspectFileResponse> {
   const body = JSON.stringify({ uri, format })
   return sharedFileInspects.get(body, async () => {
-    const r = await fetch('/api/inspect_file', { method: 'POST', headers: JSON_HEADERS, body })
+    const r = await fetch('/api/inspect_file', { method: 'POST', headers: JSON_HEADERS, body, signal: inspects.signal })
     return r.json()
   })
 }

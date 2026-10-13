@@ -18,7 +18,8 @@ from typing import Callable
 import shutil
 
 import yaml
-from fastapi import FastAPI, Form, HTTPException, UploadFile, File
+import anyio.from_thread
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -209,8 +210,20 @@ def _http_pending(result, client: str, signature: str) -> dict | None:
     return {"ok": False, "pending": True, "progress": prog, "pending_sources": [prog]}
 
 
+def _client_gone(request: Request) -> Callable[[], bool]:
+    """An ENGINE.call `stale` check for a sync endpoint: true once the client stopped waiting
+    for the answer. Loading another config aborts the last one's inspects (abortInspects in
+    api.ts), so the ones still queued for the worker are skipped instead of run."""
+    def gone() -> bool:
+        try:
+            return anyio.from_thread.run(request.is_disconnected)
+        except Exception:
+            return False
+    return gone
+
+
 @app.post("/api/inspect")
-def inspect_source(req: InspectRequest) -> dict:
+def inspect_source(req: InspectRequest, request: Request) -> dict:
     try:
         src = Source.model_validate(req.source)
     except Exception as e:
@@ -220,7 +233,9 @@ def inspect_source(req: InspectRequest) -> dict:
     if pending:
         return pending
     try:
-        found = ENGINE.call("inspect", req.source)
+        found = ENGINE.call("inspect", req.source, stale=_client_gone(request))
+    except EngineSuperseded:
+        return {"ok": False, "stale": True, "error": "no longer needed"}
     except Exception as e:
         return {"ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed)}
     return {
@@ -499,7 +514,7 @@ def preview(req: PreviewRequest) -> dict:
             "preview", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit,
             preview_until_step=req.preview_until_step, bbox=req.bbox, rejects=req.rejects,
             sample=req.sample, http="cached" if req.cached_http else "pending",
-            tag=("preview", req.client) if req.client else None, stale=stale,
+            tag=("preview", req.client) if req.client else None, stale=stale, urgent=True,
         )
         pending = _http_pending(rows, http_client, signature)
         if pending:
@@ -782,11 +797,12 @@ class InspectFileRequest(BaseModel):
 
 
 @app.post("/api/inspect_file")
-def inspect_file(req: InspectFileRequest) -> dict:
+def inspect_file(req: InspectFileRequest, request: Request) -> dict:
     uri = req.uri.strip()
     fmt = req.format.strip()
     if not uri:
         return {"ok": True, "layers": [], "default_crs": None}
+    gone = _client_gone(request)
 
     # Resolve local paths (postgres sources carry a libpq DSN, not a filesystem path)
     resolved_path = Path(uri) if fmt != "postgres" else None
@@ -797,7 +813,7 @@ def inspect_file(req: InspectFileRequest) -> dict:
 
     try:
         if fmt == "postgres":
-            layers, default_crs = ENGINE.call("layers", {"kind": "postgres", "path": uri})
+            layers, default_crs = ENGINE.call("layers", {"kind": "postgres", "path": uri}, stale=gone)
             return {"ok": True, "layers": layers, "default_crs": default_crs}
 
         fwd_path = str(resolved_path).replace("\\", "/")
@@ -814,7 +830,7 @@ def inspect_file(req: InspectFileRequest) -> dict:
             # Native read_parquet(), not GDAL's ST_Read_Meta (no Parquet driver in the
             # bundled GDAL build — see the sources package docstring). No layer concept
             # for a single flat Parquet file, so just report the CRS if one is embedded.
-            _, crs = ENGINE.call("layers", {"kind": "parquet", "path": fwd_path})
+            _, crs = ENGINE.call("layers", {"kind": "parquet", "path": fwd_path}, stale=gone)
             return {"ok": True, "layers": [], "default_crs": crs}
         elif fmt == "wfs" or uri.upper().startswith("WFS:"):
             layers, default_crs = list_wfs_layers(uri)
@@ -835,8 +851,10 @@ def inspect_file(req: InspectFileRequest) -> dict:
             target = uri
         else:
             target = fwd_path
-        layers, default_crs = ENGINE.call("layers", {"kind": "gdal", "path": target})
+        layers, default_crs = ENGINE.call("layers", {"kind": "gdal", "path": target}, stale=gone)
         return {"ok": True, "layers": layers, "default_crs": default_crs}
+    except EngineSuperseded:
+        return {"ok": False, "stale": True, "error": "no longer needed", "layers": [], "default_crs": None}
     except Exception as e:
         return {
             "ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed),

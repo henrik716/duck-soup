@@ -52,7 +52,7 @@ to go back.
   dataset.
 - **Light / Dark**: switch the basemap. It follows the editor's theme by default; this overrides it until the next theme toggle.
 
-Hover a feature to highlight it. Click it to select it: it's drawn on top in teal, its
+Hover a feature to highlight it. Click it to select it: it's drawn on top in indigo, its
 attributes open in a popup, and its row is highlighted in the **Data Table**. When features
 overlap where you click, the popup says so (*1 of 3 here*) and its arrows step through them.
 Click empty map, or close the popup, to clear the selection. The selection stays through a
