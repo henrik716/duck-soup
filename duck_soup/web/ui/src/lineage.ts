@@ -157,7 +157,7 @@ const STEP_ICON: Record<string, string> = {
   centroid: 'crosshair', clip: 'scissors', erase: 'eraser', dissolve: 'layers', combine_lines: 'spline', simplify: 'waypoints',
   snap_to_grid: 'grid-3x3', clean_coverage: 'puzzle', explode: 'ungroup', intersect_overlay: 'crosshair',
   line_overlay: 'split', filter: 'filter', remove_duplicates: 'copy-minus', snapshot: 'camera', merge: 'git-merge',
-  attributes: 'table-properties',
+  attributes: 'table-properties', http_lookup: 'globe', make_points: 'map-pinned',
 }
 
 // ---- row counts --------------------------------------------------------------

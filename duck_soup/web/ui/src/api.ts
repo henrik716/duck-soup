@@ -5,6 +5,7 @@ import type {
   FilePlace,
   FileSearchResponse,
   FilesResponse,
+  HttpSampleResponse,
   InspectFileResponse,
   InspectResponse,
   MetaResponse,
@@ -115,9 +116,21 @@ export async function previewConfig(
   const r = await fetch('/api/preview', {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects, client, sample }),
+    // A live check (the one kind of preview with a `sample`) never sends an http_lookup
+    // step's requests: it goes without responses that aren't cached yet.
+    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects, client, sample, cached_http: sample !== undefined }),
   })
   return r.json()
+}
+
+/** An http_lookup step's request for the first row reaching it, and its response. */
+export async function httpSample(config: Config, pipeline_idx: number, step: number): Promise<HttpSampleResponse> {
+  const r = await fetch('/api/http_sample', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ config, pipeline_idx, step }),
+  })
+  return okJson<HttpSampleResponse>(r, 'test request')
 }
 
 export async function fetchPlan(config: Config, pipeline_idx = 0): Promise<PlanResponse> {

@@ -17,11 +17,13 @@ export const STEP_GALLERY: GalleryGroup[] = [
       { type: 'nearest_neighbor', icon: 'radar', name: 'Nearest Neighbour', desc: 'Find the closest feature in another source and optionally record the distance.' },
       { type: 'intersect_overlay', icon: 'git-merge', name: 'Intersect Overlay', desc: 'One row per overlapping pair, with the overlap as its geometry.' },
       { type: 'line_overlay', icon: 'split', name: 'Line Overlay', desc: 'Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network.' },
+      { type: 'http_lookup', icon: 'globe', name: 'HTTP Lookup', desc: 'Call a web API for each row (e.g. an address search) and add values from its JSON response.' },
     ],
   },
   {
     name: 'Shaping up', what: 'geometry: change the shapes',
     items: [
+      { type: 'make_points', icon: 'map-pinned', name: 'Make Points', desc: 'Make point geometry from two coordinate columns, such as the longitude and latitude a geocoding lookup returned.' },
       { type: 'buffer', icon: 'maximize-2', name: 'Buffer Geometry', desc: 'Expand or shrink features by a specified buffer distance.' },
       { type: 'centroid', icon: 'crosshair', name: 'Centroid', desc: 'Replace polygon or line features with their center point.' },
       { type: 'clip', icon: 'scissors', name: 'Clip', desc: 'Intersect base features with a clip mask to keep only overlapping areas.' },

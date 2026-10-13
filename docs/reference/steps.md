@@ -2,7 +2,7 @@
 
 Steps run in order, each one transforming the rows produced by the step before it (or by the
 base source, for the first step). Every step type accepts an optional [`branch`](#branch) key,
-and `spatial_join`, `attribute_join`, `nearest_neighbor`, `clip`, `filter` and `remove_duplicates` an optional
+and `spatial_join`, `attribute_join`, `nearest_neighbor`, `http_lookup`, `make_points`, `clip`, `filter` and `remove_duplicates` an optional
 [`rejects`](#rejects) key that sends the rows they'd otherwise drop, or leave unmatched, to a
 layer of their own.
 
@@ -17,7 +17,9 @@ layer of their own.
 | | [`nearest_neighbor`](#nearest_neighbor) | same | – | ✓ |
 | | [`intersect_overlay`](#intersect_overlay) | may grow or shrink | ✓ | ✓ |
 | | [`line_overlay`](#line_overlay) | grows | ✓ | ✓ |
-| Geometry | [`buffer`](#buffer) | same | ✓ | – |
+| | [`http_lookup`](#http_lookup) | same | – | ✓ |
+| Geometry | [`make_points`](#make_points) | same | ✓ (points) | – |
+| | [`buffer`](#buffer) | same | ✓ | – |
 | | [`centroid`](#centroid) | same | ✓ | – |
 | | [`clip`](#clip) | may shrink | ✓ | – |
 | | [`erase`](#erase) | may shrink | ✓ | – |
@@ -182,6 +184,74 @@ they must match to within 0.000001 units, so those lines get no source fields, e
 few centimetres where they cross each other. Set it just above the expected difference, e.g.
 `0.05` for data in metres. A cut can land up to the tolerance away from where the source line
 ends.
+
+## `http_lookup`
+
+Sends an HTTP GET request per row and adds values from the JSON response as columns:
+geocoding addresses with an address-search API, say.
+
+```yaml
+- type: http_lookup
+  url: "https://api.example.com/geocode?q={address}&limit=1"
+  records: results            # dot path to the list of hits; the first hit is used
+  fields:                     # output_name: dot path inside the hit
+    found_address: formatted_address
+    lat: location.lat
+    lon: location.lon
+  status_field: http_status   # optional: the HTTP status code (0: no response)
+  rejects: not_found          # optional: rows with no hit
+```
+
+- **The URL.** `{column}` in `url` is replaced by that column's value, URL-encoded (`{{` and
+  `}}` for literal braces). A row with a NULL there makes no request. To build the URL with
+  any SQL instead, make it in an [`attributes`](#attributes) step and give
+  `url_column: <column>`: that column is sent as it is. `params` adds query parameters as
+  `{name: SQL expression}`, URL-encoded, which reads better than a long template. For a
+  reverse geocode, add `lat` and `lon` columns in an [`attributes`](#attributes) step first
+  (`func: lat` / `func: lon`) and use `{lat}` and `{lon}` in the URL.
+- **The response.** Without `records`, the whole response is the hit. Paths take numbers
+  for list items (`categories.0`). Values come out as text: cast them in a later
+  [`attributes`](#attributes) step or the mapping (`CAST(lat AS DOUBLE)`). A row whose
+  request failed, or whose response has no hit, gets NULL fields, or goes to the `rejects`
+  layer when one is set.
+- **One request per distinct URL**, and responses are cached on disk, so a URL is not
+  requested again while its cached response is younger than `max_age_hours` (default 24;
+  set it to null to never ask again). Failed requests (no response, 429, 5xx) are tried 3
+  times and asked again by the next run.
+- **Be polite to the API.** `max_rate` (requests per second, default 10), `concurrency`
+  (requests at once, default 4) and `timeout` (seconds, default 30). `headers` sets request
+  headers; `${ENV_VAR}` in a value is read from the environment when the request is sent, so
+  an API key stays out of the YAML (and out of the cache).
+
+In the editor, a preview only looks up the first `preview_limit` rows reaching the step
+(default 100); the rest continue without a response. It never waits on the network while
+computing: URLs it hasn't seen yet are fetched in the background while the status shows
+"looking up… 12 / 100 requests", and the preview shows when they're in. After that, editing
+anything (the fields, later steps, the mapping) previews as fast as without the step. The
+editor's live checks never send requests. A run looks up every row.
+
+## `make_points`
+
+Makes a point from two coordinate columns, so the rows have geometry from this step on, even
+when the base source has none: a table of addresses geocoded with an
+[`http_lookup`](#http_lookup), say.
+
+```yaml
+- type: make_points
+  x: lon                  # column or SQL expression; text is cast to a number
+  y: lat
+  crs: EPSG:4326          # the coordinates' CRS (default EPSG:4326); reprojected to the working CRS
+  rejects: no_coordinates # optional: rows without both coordinates
+```
+
+A row where either value is missing or not a number gets no geometry, or goes to the
+`rejects` layer when one is set. On rows that already have geometry, it's replaced. Geometry
+steps and mapping funcs (`buffer`, a spatial join, `lon`/`lat`, `area`, …) work from this
+step on; before it, a step that needs geometry stops with an error saying to add one. A
+[snapshot](#snapshot) taken before it keeps the rows without geometry.
+
+A CSV or Excel file that already has coordinate columns doesn't need this step: set
+`x_field`/`y_field` on the [source](sources.md) instead.
 
 ## `buffer`
 
@@ -546,6 +616,8 @@ own. It's available on these steps:
 | `spatial_join` | base features with no match |
 | `attribute_join` | rows with no match |
 | `nearest_neighbor` | features with no neighbour (within `max_distance`, if set) |
+| `http_lookup` | rows with no hit: a failed request, or no hit in the response |
+| `make_points` | rows without both coordinates (as numbers) |
 | `clip` | features clip would drop (outside the mask, or only touching it), unclipped |
 | `filter` | rows where `where` isn't true (false or NULL) |
 | `remove_duplicates` | every duplicate but the first of each set |

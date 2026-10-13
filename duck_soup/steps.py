@@ -17,10 +17,11 @@ from typing import Callable
 from . import mapping
 from .config import (
     Aggregate, AttributeJoin, Attributes, Buffer, Centroid, CleanCoverage, Clip, CombineLines,
-    Dissolve, Erase, Explode, ExprColumn, Filter, IntersectOverlay, LineOverlay, Merge,
-    NearestNeighbor, RemoveDuplicates, Simplify, SnapToGrid, SpatialJoin,
+    Dissolve, Erase, Explode, ExprColumn, Filter, HttpLookup, IntersectOverlay, LineOverlay,
+    MakePoints, Merge, NearestNeighbor, RemoveDuplicates, Simplify, SnapToGrid, SpatialJoin,
 )
-from .sql_util import quote_ident as _ident, quote_literal as _lit
+from . import http_lookup
+from .sql_util import quote_ident as _ident, quote_literal as _lit, st_transform
 
 Log = Callable[[str], None]
 
@@ -30,8 +31,9 @@ class StepContext:
     """What a builder may need to know about the pipeline besides its own step."""
 
     working_crs: str
-    has_geom: bool  # whether the base source has geometry
+    has_geom: bool  # whether the rows reaching this step have geometry (config.geometry_before_steps)
     base: str  # the base source's id, for error messages
+    step: int = 0  # this step's number (1-based), for the tables a step reads besides `prev`
 
 _PREDICATE_SQL = {
     "intersects": "ST_Intersects",
@@ -275,7 +277,15 @@ def centroid_sql(prev: str, _step: Centroid, log: Log, _ctx: StepContext) -> str
 
 def _needs_geom(ctx: StepContext, what: str) -> None:
     if not ctx.has_geom:
-        raise ValueError(f"{what} needs geometry, and the base source '{ctx.base}' has none")
+        raise ValueError(_no_geom_message(what, ctx))
+
+
+def _no_geom_message(what: str, ctx: StepContext) -> str:
+    return (
+        f"{what} needs geometry, and the rows have none at this step (the base source "
+        f"'{ctx.base}' has none): put a make_points step before it to make points from "
+        "coordinate columns"
+    )
 
 
 _IS_POLYGON = "ST_GeometryType({g}) IN ('POLYGON', 'MULTIPOLYGON')"
@@ -506,7 +516,7 @@ def combine_lines_sql(prev: str, step: CombineLines, log: Log, ctx: StepContext)
     chains counts once in each. Features that aren't lines are kept, one per feature.
     """
     if not ctx.has_geom:
-        raise ValueError(f"combine_lines needs geometry, and the base source '{ctx.base}' has none")
+        raise ValueError(_no_geom_message("combine_lines", ctx))
     names = [k if isinstance(k, str) else k.to for k in step.by]
     keys = ", ".join(
         f"{_ident(k) if isinstance(k, str) else '(' + k.expr + ')'} AS __k{j}"
@@ -781,6 +791,45 @@ def merge_sql(prev: str, step: Merge, log: Log, _ctx: StepContext) -> str:
     return sql
 
 
+def make_points_sql(prev: str, step: MakePoints, log: Log, ctx: StepContext) -> str:
+    """Point geometry from the x/y expressions, in the working CRS. NULL when either isn't a
+    number (TRY_CAST: an API's coordinates usually arrive as text)."""
+    x = f"TRY_CAST(({step.x}) AS DOUBLE)"
+    y = f"TRY_CAST(({step.y}) AS DOUBLE)"
+    point = st_transform(f"ST_Point({x}, {y})", step.crs, ctx.working_crs)
+    geom = f"CASE WHEN {x} IS NOT NULL AND {y} IS NOT NULL THEN {point} END"
+    keep = "* EXCLUDE (geom)" if ctx.has_geom else "*"
+    matched = ", geom IS NOT NULL AS __matched" if step.rejects else ""
+    log(f"make_points x={step.x} y={step.y} ({step.crs})")
+    # The geometry is computed in an inner SELECT, so __matched can test it without
+    # repeating the expression.
+    return f"""
+    SELECT *{matched} FROM (
+        SELECT {keep}, {geom} AS geom
+        FROM {_ident(prev)}
+    )
+    """
+
+
+def http_lookup_sql(prev: str, step: HttpLookup, log: Log, ctx: StepContext) -> str:
+    """The running rows left-joined to their responses, which Engine._http_responses put in
+    the table `http_<step>` (url, status, doc: the body when it's JSON) beforehand."""
+    pulled = [
+        f"{http_lookup.field_sql(step, path)} AS {_ident(out)}" for out, path in step.fields.items()
+    ]
+    if step.status_field:
+        pulled.append(f"coalesce(r.status, 0) AS {_ident(step.status_field)}")
+    if step.rejects:
+        pulled.append(f"{http_lookup.hit_sql(step)} AS __matched")
+    sql = f"""
+    SELECT a.* EXCLUDE (__http_url){''.join(', ' + p for p in pulled)}
+    FROM (SELECT *, {http_lookup.request_sql(step)} AS __http_url FROM {_ident(prev)}) a
+    LEFT JOIN {_ident(f"http_{ctx.step}")} r ON r.url = a.__http_url
+    """
+    log(f"http_lookup {step.url or step.url_column}")
+    return sql
+
+
 def pulled_columns(step) -> list[str]:
     """Columns a join step adds, which are always NULL on its rejects."""
     cols = list(getattr(step, "fields", {}) or {})
@@ -811,4 +860,6 @@ STEP_SQL: dict[type, Callable[..., str]] = {
     RemoveDuplicates: remove_duplicates_sql,
     Merge: merge_sql,
     Attributes: attributes_sql,
+    HttpLookup: http_lookup_sql,
+    MakePoints: make_points_sql,
 }

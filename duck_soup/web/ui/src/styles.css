@@ -90,7 +90,7 @@
   --spatial: #00897b;
   --spatial-soft: rgba(0, 137, 123, 0.1);
   --map-feature: #b03ccc;
-  --map-selected: #00897b;
+  --map-selected: #00c4b4;
   --warn: #d33a3a;
   --warn-hover: #b02424;
   --warn-soft: rgba(211, 58, 58, 0.08);
@@ -711,6 +711,9 @@ body.resizing-y { cursor: row-resize; }
 .st-pool-chip.is-key { border-color: var(--accent); background: var(--accent-soft); }
 .st-pool-chip.is-key .st-pool-set { color: var(--accent); cursor: default; font-weight: 600; }
 .st-pool-chip.is-set .st-pool-set { cursor: default; }
+
+/* http_lookup step: the test request's response (cards/http-lookup.ts) */
+.http-sample-body { font-family: var(--mono); font-size: 11px; max-height: 260px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; margin: 4px 0 0; white-space: pre; }
 
 .side-actions { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
 

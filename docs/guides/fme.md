@@ -38,6 +38,8 @@ with A as the base.
 | NeighborFinder | [`nearest_neighbor`](../reference/steps.md#nearest_neighbor) |
 | AreaOnAreaOverlayer, LineOnAreaOverlayer | [`intersect_overlay`](../reference/steps.md#intersect_overlay) |
 | LineOnLineOverlayer | [`line_overlay`](../reference/steps.md#line_overlay), one step per overlay dataset |
+| HTTPCaller (one request per feature) | [`http_lookup`](../reference/steps.md#http_lookup): `{column}` in the URL in place of `@Value()`, and the JSON response's values picked as fields, so no JSONFlattener afterwards |
+| HTTPCaller (one file for all features) | A [source](../reference/sources.md) with an `http(s)` uri, joined with [`attribute_join`](../reference/steps.md#attribute_join) |
 
 A spatial join keeps base features that match nothing, like a FeatureMerger's *Unmerged*
 output joined back in. To route them to their own layer instead, like the *Unmerged* port,

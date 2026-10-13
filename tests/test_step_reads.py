@@ -4,6 +4,7 @@ a row four times: five chained line_overlays read the base source 32 times."""
 import pytest
 
 import duck_soup.engine as engine_mod
+import duck_soup.http_lookup as http_lookup
 import duck_soup.sources as sources_mod
 from duck_soup.config import Config
 from duck_soup.derive import init_duckdb
@@ -46,10 +47,12 @@ _STEPS = {
     "attributes": {
         "columns": [{"to": "u", "expr": "upper(name)"}, {"to": "lon", "func": "lon"}], "drop": ["u"],
     },
+    "http_lookup": {"url": "http://example.invalid/?q={name}", "fields": {"f": "a"}, "rejects": "r"},
+    "make_points": {"x": "1", "y": "2", "rejects": "r"},
 }
 _SOURCELESS = {
     "buffer", "centroid", "dissolve", "combine_lines", "simplify", "snap_to_grid", "clean_coverage",
-    "explode", "filter", "remove_duplicates", "attributes",
+    "explode", "filter", "remove_duplicates", "attributes", "http_lookup", "make_points",
 }
 
 
@@ -67,6 +70,8 @@ def reads(monkeypatch):
         con.create_function("tick", tick, ["VARCHAR", "VARCHAR"], "VARCHAR", side_effects=True)
 
     monkeypatch.setattr(engine_mod, "init_duckdb", init)
+    # Every http_lookup URL answered from the "cache": no requests.
+    monkeypatch.setattr(http_lookup, "lookup", lambda urls, *a, **k: ({u: (200, '{"a": 1}') for u in urls}, []))
     monkeypatch.setattr(sources_mod, "read_expr", lambda src, *a, **k: (
         f"(SELECT tick('{src.id}', 'x') AS name, "
         f"ST_GeomFromText('LINESTRING (0 0, 10 0)') AS geom)"

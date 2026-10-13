@@ -614,6 +614,91 @@ class Merge(StepBase):
     )
 
 
+_URL_PLACEHOLDER = re.compile(r"\{\{|\}\}|\{([^{}]*)\}")
+
+
+def url_template_columns(url: str) -> list[str]:
+    """The `{column}` placeholders of an http_lookup URL template, in order (`{{`/`}}` are
+    literal braces)."""
+    return [m.group(1).strip() for m in _URL_PLACEHOLDER.finditer(url) if m.group(1) is not None]
+
+
+class HttpLookup(StepBase, RejectsMixin):
+    """One HTTP GET per distinct URL, with values from the JSON response
+    added as columns. Responses are cached on disk (see http_lookup.py), so editing the
+    pipeline never requests the same URL twice."""
+
+    type: Literal["http_lookup"] = "http_lookup"
+    url: Optional[str] = Field(
+        None,
+        description="URL template; {column} is replaced by that column's value, URL-encoded "
+        "({{ and }} for literal braces). A row with a NULL in a placeholder makes no request",
+    )
+    url_column: Optional[str] = Field(
+        None, description="Column holding each row's full URL, sent as-is (instead of url)",
+    )
+    params: dict[str, str] = Field(
+        default_factory=dict,
+        description="{name: SQL expression}: query parameters added to the URL, URL-encoded",
+    )
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Request headers; ${ENV_VAR} in a value is read from the environment "
+        "when the request is sent, so API keys stay out of the YAML",
+    )
+    records: Optional[str] = Field(
+        None,
+        description="Dot path to the list of hits in the JSON response (e.g. adresser); the "
+        "first hit is used. Empty: the whole response is the hit",
+    )
+    fields: dict[str, str] = Field(
+        default_factory=dict,
+        description="{output_name: dot path inside the hit}, e.g. "
+        "{lat: representasjonspunkt.lat}; values are text",
+    )
+    status_field: Optional[str] = Field(
+        None, description="Output column for the HTTP status code (0: no response)",
+    )
+    max_rate: float = Field(10, gt=0, description="Most requests per second")
+    concurrency: int = Field(4, ge=1, le=32, description="Requests in flight at once")
+    timeout: float = Field(30, gt=0, description="Seconds to wait for each response")
+    max_age_hours: Optional[float] = Field(
+        24, ge=0,
+        description="A run requests a URL again when its cached response is older than this "
+        "(empty: never). Previews use any cached response, however old",
+    )
+    preview_limit: int = Field(
+        100, ge=1,
+        description="Previews look up only the first N rows reaching this step (the rest "
+        "continue without a response), so the editor stays quick",
+    )
+    rejects: Optional[str] = _rejects_field("the rows with no hit (or a failed request)")
+
+    @model_validator(mode="after")
+    def _one_url(self):
+        url = (self.url or "").strip()
+        column = (self.url_column or "").strip()
+        if bool(url) == bool(column):
+            raise ValueError("http_lookup: set either 'url' or 'url_column'")
+        if column and self.params:
+            raise ValueError("http_lookup: 'params' needs 'url' (url_column is sent as-is)")
+        if url and any(not c for c in url_template_columns(url)):
+            raise ValueError("http_lookup: '{}' in the url needs a column name, e.g. {address}")
+        return self
+
+
+class MakePoints(StepBase, RejectsMixin):
+    """Point geometry from two coordinate columns (or SQL expressions), e.g. the lon/lat an
+    http_lookup got from a geocoding API. The rows have geometry from this step on, even
+    when the base source has none; on rows that already have some, it's replaced."""
+
+    type: Literal["make_points"] = "make_points"
+    x: str = Field(..., description="Column or SQL expression for x (longitude, easting); text is cast to a number")
+    y: str = Field(..., description="Column or SQL expression for y (latitude, northing)")
+    crs: CRSStr = Field("EPSG:4326", description="CRS of the coordinates; reprojected to the working CRS")
+    rejects: Optional[str] = _rejects_field("the rows without both coordinates (as numbers)")
+
+
 class Snapshot(StepBase):
     """Names the running chain's current state (mid-pipeline, after whatever
     steps ran before it) so a later step's `source:` can join back against it
@@ -763,7 +848,7 @@ Step = Annotated[
         SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
         Dissolve, CombineLines, Simplify, SnapToGrid, CleanCoverage, Explode,
         IntersectOverlay, LineOverlay, Filter, RemoveDuplicates, Merge, Snapshot,
-        Attributes,
+        Attributes, HttpLookup, MakePoints,
     ],
     Field(discriminator='type'),
 ]
@@ -898,11 +983,33 @@ def _validate_refs(
             raise ValueError(f"step references unknown source '{st.source}'")
 
 
+def geometry_before_steps(base_has_geometry: bool, steps: list) -> tuple[list[bool], bool]:
+    """Whether the rows have geometry where each step runs (on the chain it runs on), and
+    whether the main chain has it at the end. Rows have geometry when the base source does,
+    or after a make_points step on their chain (a snapshot branch keeps what its chain had
+    when it was taken)."""
+    main = "__main__"
+    chains = {main: base_has_geometry}
+    before: list[bool] = []
+    for st in steps:
+        if isinstance(st, Snapshot):
+            has = chains.get(st.branch or main, base_has_geometry)
+            before.append(has)
+            chains[st.id] = has
+            continue
+        target = st.branch or main
+        has = chains.get(target, base_has_geometry)
+        before.append(has)
+        if isinstance(st, MakePoints):
+            chains[target] = True
+    return before, chains[main]
+
+
 def _validate_no_geom_mapping(
-    sources: list[Source], base: str, mappings: list[list[MapItem]]
+    sources: list[Source], base: str, mappings: list[list[MapItem]], steps: list,
 ) -> None:
     base_src = next((s for s in sources if s.id == base), None)
-    if base_src is None or not base_src.has_geometry:
+    if base_src is None or not geometry_before_steps(base_src.has_geometry, steps)[1]:
         return
     if any(m.to == "geom" for mapping in mappings for m in mapping):
         raise ValueError(
@@ -951,7 +1058,7 @@ class PipelineDef(BaseModel):
     @model_validator(mode="after")
     def _check_no_geom_mapping(self):
         mappings = [self.mapping] + [layer.mapping for layer in self.layers if layer.mapping]
-        _validate_no_geom_mapping(self.sources, self.base, mappings)
+        _validate_no_geom_mapping(self.sources, self.base, mappings, self.steps)
         return self
 
     def source(self, sid: str) -> Source:
@@ -966,6 +1073,11 @@ class PipelineDef(BaseModel):
     @property
     def base_source(self) -> Source:
         return self.source(self.base)
+
+    @property
+    def has_geometry(self) -> bool:
+        """Whether the rows reaching the mapping have geometry (see geometry_before_steps)."""
+        return geometry_before_steps(self.base_source.has_geometry, self.steps)[1]
 
     @property
     def effective_working_crs(self) -> str:

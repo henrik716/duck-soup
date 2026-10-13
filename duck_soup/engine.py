@@ -25,6 +25,7 @@ the editor's SQL tab) and counts() (tables, so each step is computed once and co
 """
 from __future__ import annotations
 
+import json
 import tempfile
 import textwrap
 from contextlib import contextmanager
@@ -34,11 +35,10 @@ from typing import Callable, Iterator
 import duckdb
 
 from . import sources as src_readers
-from . import mapping, steps
+from . import http_lookup, mapping, steps
 from .config import (
-    Attributes, Buffer, CleanCoverage, CombineLines, Config, Dissolve, NearestNeighbor, OutputLayer,
-    PipelineDef, Simplify, Snapshot, SnapToGrid, NUMERIC_AGGREGATE_HOWS, is_parquet_path,
-    reject_layer_names,
+    Attributes, Buffer, CleanCoverage, CombineLines, Config, Dissolve, HttpLookup, MakePoints,
+    NearestNeighbor, OutputLayer, geometry_before_steps, PipelineDef, Simplify, Snapshot, SnapToGrid, NUMERIC_AGGREGATE_HOWS, is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -123,17 +123,24 @@ class Engine:
         log: Callable[[str], None] | None = None,
         parquet_multi: bool | None = None,
         pipeline_index: int = 0,
+        http: str = "fetch",
     ):
         """`parquet_multi` says whether a GeoParquet output gets one file per layer
         (see parquet_layer_path). run_config sets it from the layer count across *all*
         its pipelines, since they share one output; left None, it's derived from this
-        pipeline's own layers."""
+        pipeline's own layers.
+
+        `http` says what an http_lookup step does about responses that aren't cached:
+        "fetch" them (runs), raise http_lookup.HttpPending ("pending": the editor fetches
+        them in the background) or go without ("cached": the editor's live checks)."""
         self.p = pipeline
         # Its position in the config, for the `pipelines.<i>.mapping.<j>` paths of MappingError.
         self.pipeline_index = pipeline_index
         self.working_crs = pipeline.effective_working_crs
         self.log = log or (lambda m: None)
         self.parquet_multi = parquet_multi
+        self.http = http
+        self._workdir: Path | None = None
         # Filled by _prepare: every view it created, in order (see _emit), and the view
         # holding each step's output and rejects, keyed by 1-based step number.
         self.plan: list[dict] = []
@@ -330,7 +337,9 @@ class Engine:
             build = steps.STEP_SQL.get(type(step))
             if build is None:  # pragma: no cover
                 raise ValueError(f"unknown step type: {step}")
-            sql = build(cur, step, lambda m, i=i: self.log(f"step {i}: {m}"), self._step_context())
+            if isinstance(step, HttpLookup):
+                cur = self._http_responses(con, i, step, cur)
+            sql = build(cur, step, lambda m, i=i: self.log(f"step {i}: {m}"), self._step_context(i))
             if con is not None and getattr(step, "match", None) == "summarize":
                 self._check_aggregate_columns(
                     con, i, [(f"fields.{out}", agg) for out, agg in step.fields.items()],
@@ -347,12 +356,75 @@ class Engine:
 
         return chains[last_branch if limit_steps is not None else self._MAIN_BRANCH]
 
-    def _step_context(self) -> steps.StepContext:
+    def _step_context(self, i: int) -> steps.StepContext:
         return steps.StepContext(
             working_crs=self.working_crs,
-            has_geom=self.p.base_source.has_geometry,
+            has_geom=self._geom_before(i),
             base=self.p.base,
+            step=i,
         )
+
+    def _geom_before(self, i: int) -> bool:
+        """Whether the rows reaching step `i` (1-based) have geometry: the base source's,
+        or a make_points step's earlier on their chain (config.geometry_before_steps)."""
+        return geometry_before_steps(self.p.base_source.has_geometry, self.p.steps)[0][i - 1]
+
+    def _rejects_have_geom(self, i: int) -> bool:
+        """Whether step `i`'s rejects have geometry: what reached the step, or the (empty)
+        geometry make_points gave the rows it couldn't make a point for."""
+        return self._geom_before(i) or isinstance(self.p.steps[i - 1], MakePoints)
+
+    def _http_responses(self, con: duckdb.DuckDBPyConnection | None, i: int, step: HttpLookup, prev: str) -> str:
+        """Put the responses http_lookup step `i` needs in the TEMP TABLE `http_<i>` its SQL
+        joins (see steps.http_lookup_sql): from the cache, fetching what's missing as
+        `self.http` says. Returns the view the step reads, which in a preview is only the
+        first `preview_limit` rows of `prev`, stored once so the URLs looked up here and the
+        rows joined later are the same ones. Without a connection (plan()), nothing."""
+        if con is None:
+            return prev
+        if not self._materialize:
+            # Steps are views in a preview, so `prev` would be computed again by the step.
+            view = f"step_{i}__input"
+            self._emit(
+                con, view, f"SELECT * FROM {_ident(prev)} LIMIT {int(step.preview_limit)}", "step",
+                table=True, step=i, title=f"step {i}: the first {step.preview_limit} rows to look up",
+            )
+            prev = view
+        try:
+            urls = [r[0] for r in con.execute(
+                f"SELECT DISTINCT u FROM (SELECT {http_lookup.request_sql(step)} AS u "
+                f"FROM {_ident(prev)}) WHERE u IS NOT NULL"
+            ).fetchall()]
+        except (duckdb.ParserException, duckdb.BinderException) as e:
+            field = "url_column" if step.url_column else ("params" if step.params else "url")
+            detail = str(e).splitlines()[0].strip()
+            raise ValueError("\n".join([
+                f"step {i} http_lookup {field}: {detail}",
+                f"pipelines.{self.pipeline_index}.steps.{i - 1}.{field}", f"  {detail}",
+            ])) from None
+        preview = self.http != "fetch"
+        found, missing = http_lookup.lookup(urls, step.headers, step.max_age_hours, preview=preview)
+        if missing and self.http == "pending":
+            raise http_lookup.HttpPending(i, http_lookup.job_spec(step, missing))
+        if missing and self.http == "fetch":
+            http_lookup.fetch_responses(http_lookup.job_spec(step, missing), self.log, f"step {i}")
+            # Failed requests included: their status is what a run reports.
+            found, _ = http_lookup.lookup(urls, step.headers, None, preview=True)
+        self.log(f"step {i}: {len(urls)} distinct URLs, {len(found)} with a response")
+        table = _ident(f"http_{i}")
+        con.execute(f"CREATE OR REPLACE TEMP TABLE {table} (url VARCHAR, status INTEGER, doc JSON)")
+        if found:
+            path = (self._workdir or Path(tempfile.gettempdir())) / f"http_{i}.ndjson"
+            with open(path, "w", encoding="utf-8") as f:
+                for url, (status, body) in found.items():
+                    f.write(json.dumps({"url": url, "status": status, "body": body}) + "\n")
+            con.execute(
+                f"INSERT INTO {table} SELECT url, status, "
+                f"CASE WHEN json_valid(body) THEN body::JSON END FROM read_json({_lit(str(path))}, "
+                "format = 'newline_delimited', "
+                "columns = {url: 'VARCHAR', status: 'INTEGER', body: 'VARCHAR'})"
+            )
+        return prev
 
     def _check_step(self, con: duckdb.DuckDBPyConnection, i: int, step, prev: str) -> None:
         """Plan (not run) step `i`, an attributes, dissolve or combine_lines step, over the view `prev`; if
@@ -361,7 +433,7 @@ class Engine:
         attribute columns are tried as growing prefixes, since each may use the ones before
         it."""
         build = steps.STEP_SQL[type(step)]
-        ctx = self._step_context()
+        ctx = self._step_context(i)
 
         def plan_error(variant) -> Exception | None:
             try:
@@ -459,13 +531,15 @@ class Engine:
             raise MappingError(f"pipelines.{self.pipeline_index}.{where}", item, error)
         raise failure
 
-    def _final_select(self, prev: str, layer: OutputLayer, raw: bool = False) -> str:
+    def _final_select(self, prev: str, layer: OutputLayer, raw: bool = False, has_geom: bool | None = None) -> str:
         """The SELECT written for `layer` (see mapping.final_select). `raw` skips the mapping
         (every column as-is), for a rejects layer: its rows leave the chain mid-way, before
-        columns the mapping may use exist."""
+        columns the mapping may use exist (and before a make_points step: `has_geom` then
+        says whether they have geometry; default: the end of the main chain's)."""
         return mapping.final_select(
             prev, layer, [] if raw else (layer.mapping or self.p.mapping),
-            working_crs=self.working_crs, has_geom=self.p.base_source.has_geometry,
+            working_crs=self.working_crs,
+            has_geom=self.p.has_geometry if has_geom is None else has_geom,
             base=self.p.base,
         )
 
@@ -548,6 +622,7 @@ class Engine:
         """
         self.plan, self.step_views, self.reject_views = [], {}, {}
         self._materialize = materialize
+        self._workdir = workdir
         if con is not None:
             self._check_working_crs_units()
         self._create_source_views(con, workdir, bbox=bbox, max_features=max_features)
@@ -560,14 +635,16 @@ class Engine:
         )
         return self._build_step_views(con, "step_0", limit_steps=limit_steps)
 
-    def _layer_writes(self, prev: str) -> list[tuple[OutputLayer, str, str]]:
-        """(layer, SELECT, kind) for each layer written: the pipeline's layers, then the
-        steps' rejects layers, in the first layer's CRS."""
-        writes = [(layer, self._final_select(prev, layer), "layer") for layer in self.p.layers]
+    def _layer_writes(self, prev: str) -> list[tuple[OutputLayer, str, str, bool]]:
+        """(layer, SELECT, kind, has geometry) for each layer written: the pipeline's layers,
+        then the steps' rejects layers, in the first layer's CRS."""
+        geom = self.p.has_geometry
+        writes = [(layer, self._final_select(prev, layer), "layer", geom) for layer in self.p.layers]
         crs = self.p.layers[0].crs
         for i, view in sorted(self.reject_views.items()):
             layer = OutputLayer(layer=self.p.steps[i - 1].rejects, crs=crs)
-            writes.append((layer, self._final_select(view, layer, raw=True), "rejects"))
+            has = self._rejects_have_geom(i)
+            writes.append((layer, self._final_select(view, layer, raw=True, has_geom=has), "rejects", has))
         return writes
 
     def run(self, out_path: str) -> str:
@@ -591,15 +668,13 @@ class Engine:
             self.written = []
             if is_parquet_path(out_path):
                 multi = self._parquet_multi()
-                for layer, final_sql, kind in writes:
+                for layer, final_sql, kind, has_geom in writes:
                     target = parquet_layer_path(out_path, layer.layer, multi)
-                    rows = write_parquet_layer(
-                        con, final_sql, layer, target, self.p.base_source.has_geometry, self.log,
-                    )
+                    rows = write_parquet_layer(con, final_sql, layer, target, has_geom, self.log)
                     self.written.append({"layer": layer.layer, "rows": rows, "kind": kind, "path": str(target)})
                 return str(parquet_output_root(out_path, multi))
 
-            for i, (layer, final_sql, kind) in enumerate(writes):
+            for i, (layer, final_sql, kind, _) in enumerate(writes):
                 rows = write_gpkg_layer(
                     con, final_sql, layer, out_path, workdir / f"__layer_{i}.gpkg", self.log,
                 )
@@ -685,14 +760,29 @@ class Engine:
                 self._check_mapping(con, prev, layer)
                 final_sql = self._final_select(prev, layer)
                 preview_sql = self._preview_rows_sql(
-                    f"({final_sql})", layer.crs,
-                    self.p.base_source.has_geometry, bbox, limit,
+                    f"({final_sql})", layer.crs, self.p.has_geometry, bbox, limit,
                 )
 
             res = con.execute(preview_sql)
             cols = [desc[0] for desc in res.description]
             rows = res.fetchall()
             return [dict(zip(cols, r)) for r in rows]
+
+    def http_sample_url(self, step_idx: int) -> str | None:
+        """The URL http_lookup step `step_idx` (1-based) requests for the first row reaching it
+        that makes a request, for the editor's "test request". Fetches nothing."""
+        step = self.p.steps[step_idx - 1]
+        if not isinstance(step, HttpLookup):
+            raise ValueError(f"step {step_idx} is not an http_lookup step")
+        self.http = "cached"
+        with self._session() as (con, workdir):
+            # A preview's chain stores the rows the step looks up as step_<i>__input.
+            self._prepare(con, workdir, max_features=step.preview_limit, limit_steps=step_idx)
+            row = con.execute(
+                f"SELECT u FROM (SELECT {http_lookup.request_sql(step)} AS u "
+                f"FROM {_ident(f'step_{step_idx}__input')}) WHERE u IS NOT NULL LIMIT 1"
+            ).fetchone()
+            return row[0] if row else None
 
     def sql_plan(self) -> list[dict]:
         """Every view the pipeline builds, in order, with its SQL, plus the SELECT written
@@ -799,9 +889,10 @@ def preview_config_pipeline(
     rejects: bool = False,
     log: Callable[[str], None] | None = None,
     sample: int | None = None,
+    http: str = "fetch",
 ) -> list[dict]:
     """Preview one pipeline from a Config (defaults to the first)."""
-    engine = Engine(_config_pipeline(config, pipeline_idx), log=log, pipeline_index=pipeline_idx)
+    engine = Engine(_config_pipeline(config, pipeline_idx), log=log, pipeline_index=pipeline_idx, http=http)
     return engine.preview(
         limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
         sample=sample,
@@ -819,7 +910,9 @@ def count_config_pipeline(
     limit: int | None = None,
     bbox: tuple[float, float, float, float] | None = None,
     log: Callable[[str], None] | None = None,
+    http: str = "fetch",
 ) -> dict:
     """Row counts after each step of one pipeline (see Engine.counts)."""
-    return Engine(_config_pipeline(config, pipeline_idx), log=log).counts(limit=limit, bbox=bbox)
+    engine = Engine(_config_pipeline(config, pipeline_idx), log=log, pipeline_index=pipeline_idx, http=http)
+    return engine.counts(limit=limit, bbox=bbox)
 

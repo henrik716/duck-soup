@@ -176,7 +176,9 @@ def final_select(
     source = f"(SELECT * FROM {_ident(prev)} WHERE {layer.filter})" if layer.filter else _ident(prev)
 
     if not has_geom:
-        cols = ",\n            ".join(exprs) or "*"
+        # With no mapping every column is written, minus the engine's row number and GDAL's
+        # OGC_FID, which the GeoPackage writer rejects (see below).
+        cols = ",\n            ".join(exprs) or "COLUMNS(lambda c: lower(c) NOT IN ('ogc_fid', '__src_row'))"
         return f"SELECT\n            {cols}\n        FROM {source}"
 
     geom_out = st_transform("geom", working_crs, layer.crs)

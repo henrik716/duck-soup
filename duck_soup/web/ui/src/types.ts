@@ -223,7 +223,37 @@ export interface Attributes {
   branch?: string
 }
 
-export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | Simplify | SnapToGrid | CleanCoverage | Explode | IntersectOverlay | LineOverlay | Filter | RemoveDuplicates | Merge | Snapshot | Attributes
+// One GET per distinct URL (config.HttpLookup): `url` is a template ({column} → its value,
+// URL-encoded), or `url_column` names a column holding the whole URL.
+export interface HttpLookup {
+  type: 'http_lookup'
+  url?: string
+  url_column?: string
+  params?: Record<string, string>
+  headers?: Record<string, string>
+  records?: string
+  fields?: Record<string, string>
+  status_field?: string
+  max_rate?: number
+  concurrency?: number
+  timeout?: number
+  max_age_hours?: number | null
+  preview_limit?: number
+  branch?: string
+  rejects?: string
+}
+
+// Point geometry from two coordinate columns or expressions (config.MakePoints).
+export interface MakePoints {
+  type: 'make_points'
+  x: string
+  y: string
+  crs?: string
+  branch?: string
+  rejects?: string
+}
+
+export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | Simplify | SnapToGrid | CleanCoverage | Explode | IntersectOverlay | LineOverlay | Filter | RemoveDuplicates | Merge | Snapshot | Attributes | HttpLookup | MakePoints
 
 export interface CodeCase {
   value: string
@@ -326,11 +356,26 @@ export interface InspectColumn {
 // What a slow source is busy with (sources/prepare.py's prepare_source, sources/remote.py's
 // source_progress).
 export interface SourceProgress {
-  stage: 'queued' | 'download' | 'convert'
+  // 'http': an http_lookup step's requests (http_lookup.start_job), `source` naming the step.
+  stage: 'queued' | 'download' | 'convert' | 'http'
   source?: string
   bytes?: number
   total?: number | null
+  done?: number
   elapsed: number
+}
+
+// /api/http_sample: an http_lookup step's request for the first row reaching it.
+export interface HttpSampleResponse {
+  ok: boolean
+  pending?: boolean
+  progress?: SourceProgress
+  pending_sources?: SourceProgress[]
+  url?: string
+  status?: number
+  body?: string
+  truncated?: boolean
+  error?: string
 }
 
 export interface InspectResponse {

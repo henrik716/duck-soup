@@ -24,7 +24,9 @@ each group with a duck name:
 | | Nearest Neighbour | `nearest_neighbor` | Copy attributes from the closest feature, optionally recording the distance. |
 | | Intersect Overlay | `intersect_overlay` | One row per overlapping pair, with the intersection as geometry. |
 | | Line Overlay | `line_overlay` | Cut lines where another line layer lies on them and copy its attributes, keeping the rest of the network. |
-| **Shaping up** (geometry: change the shapes) | Buffer Geometry | `buffer` | Grow (or shrink, with a negative distance) each geometry. |
+| | HTTP Lookup | `http_lookup` | Call a web API per row (an address search, say) and add values from its JSON response. **Test request** shows the first row's response; click a value to add it as a field. |
+| **Shaping up** (geometry: change the shapes) | Make Points | `make_points` | Make point geometry from two coordinate columns, e.g. a geocoding lookup's longitude and latitude. |
+| | Buffer Geometry | `buffer` | Grow (or shrink, with a negative distance) each geometry. |
 | | Centroid | `centroid` | Replace each geometry with its centre point. |
 | | Clip | `clip` | Keep only the part of each feature that overlaps a mask source. |
 | | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |

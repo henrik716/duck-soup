@@ -13,6 +13,7 @@ const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`
 
 export function formatSourceProgress(p: SourceProgress): string {
   if (p.stage === 'queued') return 'preparing…'
+  if (p.stage === 'http') return `looking up… ${p.done ?? 0} / ${p.total ?? '?'} requests`
   if (p.stage === 'convert') {
     return `converting to Parquet for fast previews… ${Math.round(p.elapsed)} s`
   }
@@ -27,6 +28,7 @@ export function formatSourceProgress(p: SourceProgress): string {
 function shortSourceProgress(p: SourceProgress): string {
   if (p.stage === 'queued') return 'queued'
   if (p.stage === 'convert') return 'converting'
+  if (p.stage === 'http') return `${p.done ?? 0}/${p.total ?? '?'} requests`
   if (p.total) return `${Math.round((100 * (p.bytes ?? 0)) / p.total)}%`
   return mb(p.bytes ?? 0)
 }
@@ -158,6 +160,10 @@ export function stepOutputColumns(stepCard: Element): string[] {
     ...values('[data-k="distance_field"]'),
     // explode's part number
     ...values('[data-k="part_field"]'),
+    ...values('[data-hfields] .kv [data-fo]'),
+    ...values('[data-k="status_field"]'),
+    // make_points gives the rows geometry (from a base source without any).
+    ...((stepCard as HTMLElement).dataset?.['type'] === 'make_points' ? ['geom'] : []),
     ...values('.st-columns > .map-item [data-to]'),
     ...values('[data-by-as]'),
     ...values('[data-agg-to]'),

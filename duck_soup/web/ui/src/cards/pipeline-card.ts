@@ -13,6 +13,7 @@ import { sourceCard } from './source-card'
 import { wireSourceUpload } from './source-upload'
 import { derivedSourceCard } from './derived-source-card'
 import { stepCard, KINDS_WITH_REJECTS, readAggregates, readAttributes, readByKeys, readDuplicateColumns } from './step-card'
+import { readHttpLookup } from './http-lookup'
 import { mapRow, type MapRowElement } from './map-row'
 import { outputLayerCard, readLayerMapping } from './output-layer-card'
 import type { Aggregate, AggregateHow, DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
@@ -668,6 +669,14 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     }
     if (t === 'filter') {
       st['where'] = val(c, 'where')
+    }
+    if (t === 'make_points') {
+      st['x'] = val(c, 'x')
+      st['y'] = val(c, 'y')
+      st['crs'] = val(c, 'crs') || 'EPSG:4326'
+    }
+    if (t === 'http_lookup') {
+      Object.assign(st, readHttpLookup(c))
     }
     if (KINDS_WITH_REJECTS.includes(t) && val(c, 'rejects')) {
       st['rejects'] = val(c, 'rejects')

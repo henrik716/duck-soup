@@ -1,6 +1,7 @@
 import { mkEl, esc, wireCollapse, helpLink } from '../dom'
 import { META } from '../state'
 import { comboField, wireCombos } from '../combo'
+import { CRS_COMBO_OPTIONS } from '../crs-list'
 import { mutate } from '../history'
 import { wireDragReorder } from './pipeline-card'
 import { mapRow, type MapRowElement } from './map-row'
@@ -16,6 +17,8 @@ import { wireMatchWarning } from './match-check'
 import { addAggregateRow, droppedColumns, readAggregateRows, type AggregateListContext } from './aggregate-row'
 import { showToast } from '../toast'
 import { quoteIdent } from '../aggregates'
+import { HTTP_LOOKUP_HINT, httpLookupBodyHtml, wireHttpLookup } from './http-lookup'
+import type { HttpLookup } from '../types'
 
 // ---- step card ----
 const STEP_ICONS: Record<string, string> = {
@@ -39,6 +42,8 @@ const STEP_ICONS: Record<string, string> = {
   merge: 'combine',
   snapshot: 'camera',
   attributes: 'table-properties',
+  http_lookup: 'globe',
+  make_points: 'map-pinned',
 }
 
 const STEP_LABELS: Record<string, string> = {
@@ -62,6 +67,8 @@ const STEP_LABELS: Record<string, string> = {
   merge: 'merge',
   snapshot: 'snapshot',
   attributes: 'update attributes',
+  http_lookup: 'http lookup',
+  make_points: 'make points',
 }
 
 const STEP_HINTS: Record<string, string> = {
@@ -85,6 +92,8 @@ const STEP_HINTS: Record<string, string> = {
   merge: 'Appends rows from another source (matched by column name; non-overlapping columns become NULL). Row count adds rather than multiplies.',
   snapshot: 'Names this step\'s current state so a later step can join back against it — fork mid-pipeline (after some processing), not just from a raw source.',
   attributes: 'Adds, changes or removes columns mid-pipeline, with the same rules as the mapping.',
+  http_lookup: HTTP_LOOKUP_HINT,
+  make_points: 'Makes a point from two coordinate columns, e.g. the longitude and latitude an HTTP lookup got for an address. The rows have geometry from here on, even when the base source has none.',
 }
 
 const HEAD_STYLE = 'font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px'
@@ -100,7 +109,7 @@ const MATCH_OPTIONS = [
 const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge']
 const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
 const KINDS_WITH_FIELDS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay']
-export const KINDS_WITH_REJECTS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'filter', 'remove_duplicates']
+export const KINDS_WITH_REJECTS = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'filter', 'remove_duplicates', 'http_lookup', 'make_points']
 
 // What `rejects` catches for each step type (RejectsMixin in config.py).
 const REJECTS_HINTS: Record<string, string> = {
@@ -110,6 +119,8 @@ const REJECTS_HINTS: Record<string, string> = {
   clip: 'Features clip would drop (outside the mask, or only touching it) go to this layer, unclipped, instead of being discarded.',
   filter: 'Rows the filter drops (where the condition is false or NULL) go to this layer instead of being discarded.',
   remove_duplicates: 'The duplicates (every row but the first of each set) go to this layer instead of being discarded.',
+  http_lookup: 'Rows with no hit (a failed request, or none in the response) go to this layer instead of on down the chain with empty fields.',
+  make_points: 'Rows without both coordinates (as numbers) go to this layer instead of on down the chain with no geometry.',
 }
 
 function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: string[]): string {
@@ -270,6 +281,16 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
       <button class="mini ghost" data-adddrop style="margin-top:6px">${PLUS_ICON} column</button>
     </div>`
   }
+  if (kind === 'http_lookup') {
+    bodyHtml += httpLookupBodyHtml()
+  }
+  if (kind === 'make_points') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="A column or SQL expression; text is cast to a number">y (latitude, northing)${comboField('data-k="y" data-from-list="1"', '', [], 'lat')}</label>
+      <label class="field grow" title="A column or SQL expression; text is cast to a number">x (longitude, easting)${comboField('data-k="x" data-from-list="1"', '', [], 'lon')}</label>
+      <label class="field grow" title="The coordinates' CRS; the points are reprojected to the working CRS">coordinates' CRS${comboField('data-k="crs"', 'EPSG:4326', CRS_COMBO_OPTIONS, 'EPSG:4326')}</label>
+    </div>`
+  }
   if (hasFields) {
     bodyHtml += `<div style="margin-top:10px">
       <span class="head" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">pulled fields&nbsp; source column → output name</span>
@@ -389,6 +410,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     ;((st as Partial<Attributes>).columns || []).forEach(m => addColumn(m))
     ;((st as Partial<Attributes>).drop || []).forEach(col => addDropCol(col))
   }
+  if (kind === 'http_lookup') wireHttpLookup(c, st as Partial<HttpLookup>, syncFn)
 
   // After hydrating: the builder shows the loaded condition as rows when it can.
   if (kind === 'filter') {
@@ -882,6 +904,10 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
     } else if (kind === 'filter') {
       const w = c.querySelector<HTMLInputElement>('[data-k="where"]')?.value ?? ''
       text = w ? `(${w.length > 30 ? w.slice(0, 30) + '…' : w})` : ''
+    } else if (kind === 'http_lookup') {
+      const url = c.querySelector<HTMLInputElement>('[data-k="url"]')?.value.trim() ?? ''
+      const col = c.querySelector<HTMLInputElement>('[data-k="url_column"]')?.value.trim() ?? ''
+      text = url ? (url.replace(/^https?:\/\//, '').split(/[/?]/)[0] || '') : col ? `← ${col}` : ''
     } else if (kind === 'snapshot') {
       const idv = c.querySelector<HTMLInputElement>('[data-k="id"]')?.value ?? ''
       text = idv ? `» ${idv}` : ''
@@ -905,6 +931,8 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   c.querySelector('[data-k="source"]')?.addEventListener('input', updateTitle)
   c.querySelector('[data-k="distance"]')?.addEventListener('input', updateTitle)
   c.querySelector('[data-k="where"]')?.addEventListener('input', updateTitle)
+  c.querySelector('[data-k="url"]')?.addEventListener('input', updateTitle)
+  c.querySelector('[data-k="url_column"]')?.addEventListener('input', updateTitle)
   c.querySelector('[data-k="branch"]')?.addEventListener('input', updateTitle)
   c.querySelector('[data-k="branch"]')?.addEventListener('change', updateTitle)
   c.querySelector('[data-k="rejects"]')?.addEventListener('input', updateTitle)

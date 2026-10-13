@@ -106,18 +106,40 @@ def _format_exitcode(code: int | None) -> str:
 # Every task takes (payload, log, partial, **kwargs): `partial` is a dict it fills with
 # whatever an error report should still carry.
 
+def _http_pending(e) -> dict:
+    """What a preview or counts task answers when an http_lookup step needs responses that
+    aren't cached: the server fetches them (http_lookup.start_job) and asks again."""
+    return {"http_pending": {"step": e.step, "job": e.job}}
+
+
 def _task_preview(config: dict, log: Callable[[str], None], partial: dict, **kwargs) -> Any:
     from .config import load_config_dict
     from .engine import preview_config_pipeline
+    from .http_lookup import HttpPending
 
-    return preview_config_pipeline(load_config_dict(config), log=log, **kwargs)
+    try:
+        return preview_config_pipeline(load_config_dict(config), log=log, **kwargs)
+    except HttpPending as e:
+        return _http_pending(e)
 
 
 def _task_counts(config: dict, log: Callable[[str], None], partial: dict, **kwargs) -> Any:
     from .config import load_config_dict
     from .engine import count_config_pipeline
+    from .http_lookup import HttpPending
 
-    return count_config_pipeline(load_config_dict(config), log=log, **kwargs)
+    try:
+        return count_config_pipeline(load_config_dict(config), log=log, **kwargs)
+    except HttpPending as e:
+        return _http_pending(e)
+
+
+def _task_http_sample(config: dict, log: Callable[[str], None], partial: dict, pipeline_idx: int = 0, step: int = 1) -> Any:
+    from .config import load_config_dict
+    from .engine import Engine, _config_pipeline
+
+    cfg = load_config_dict(config)
+    return Engine(_config_pipeline(cfg, pipeline_idx), log=log, pipeline_index=pipeline_idx).http_sample_url(step)
 
 
 def _task_run(config: dict, log: Callable[[str], None], partial: dict, downloads: dict | None = None) -> Any:
@@ -214,6 +236,7 @@ def _task_convert(target: dict, log: Callable[[str], None], partial: dict) -> No
 _TASKS = {
     "preview": _task_preview, "counts": _task_counts, "run": _task_run,
     "inspect": _task_inspect, "layers": _task_layers, "convert": _task_convert,
+    "http_sample": _task_http_sample,
 }
 
 
@@ -274,6 +297,7 @@ def _serve(conn, interrupt_event, interrupt_target) -> None:
 # copies are, and which files get a Parquet copy.
 _SHARED_SETTINGS = (
     "REMOTE_CACHE_DIR", "TABULAR_CACHE_DIR", "LINEARIZE_CACHE_DIR", "TABULAR_CACHE_MIN_BYTES",
+    "HTTP_CACHE_DIR",
 )
 
 

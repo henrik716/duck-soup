@@ -41,7 +41,7 @@ def test_meta_lists_formats_predicates_and_funcs(client):
     assert {"seq", "x", "y", "geohash", "wkt", "geom_type"} <= set(body["funcs"])
     # Read from the Step union, so a new step type shows up without touching the endpoint.
     assert body["step_types"][0] == "spatial_join" and {"snapshot", "attributes"} <= set(body["step_types"])
-    assert len(body["step_types"]) == len(set(body["step_types"])) == 20
+    assert len(body["step_types"]) == len(set(body["step_types"])) == 22
     assert body["tabular_geom_formats"] == ["xlsx", "csv", "json"]
     assert body["header_row_formats"] == ["xlsx", "csv"]
 

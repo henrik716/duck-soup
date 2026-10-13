@@ -37,7 +37,7 @@ from ..config import (
     load_config,
     load_config_dict,
 )
-from .. import history, version
+from .. import history, http_lookup, version
 from ..engine import plan_config_pipeline
 from ..sources import (
     cached_read_note,
@@ -185,6 +185,28 @@ def _pending_response(sources: list[Source]) -> dict | None:
     if not pending:
         return None
     return {"ok": False, "pending": True, "progress": pending[0], "pending_sources": pending}
+
+
+def _http_waiting(client: str, signature: str) -> dict | None:
+    """While the background job an earlier, identical request started is still fetching an
+    http_lookup step's responses, its progress, in _pending_response's shape: the editor asks
+    again every second or so, and the pipeline needn't be computed again each time."""
+    prog = http_lookup.job_progress(client, signature)
+    if prog is None:
+        return None
+    if prog["stage"] == "error":
+        return {"ok": False, "error": prog["error"]}
+    return {"ok": False, "pending": True, "progress": prog, "pending_sources": [prog]}
+
+
+def _http_pending(result, client: str, signature: str) -> dict | None:
+    """When the engine worker answered that an http_lookup step needs responses that aren't
+    cached (worker._http_pending), start fetching them in the background and answer pending."""
+    if not (isinstance(result, dict) and "http_pending" in result):
+        return None
+    need = result["http_pending"]
+    prog = http_lookup.start_job(client, signature, need["job"], f"step {need['step']}")
+    return {"ok": False, "pending": True, "progress": prog, "pending_sources": [prog]}
 
 
 @app.post("/api/inspect")
@@ -431,6 +453,9 @@ class PreviewRequest(BaseModel):
     # Who's asking (an editor tab): a newer preview from the same client makes this one
     # pointless, so it's skipped or interrupted (see _preview_ticket).
     client: str | None = None
+    # An http_lookup step uses only cached responses and never asks for more (the editor's
+    # live checks); otherwise missing ones are fetched in the background (_http_pending).
+    cached_http: bool = False
 
 
 # The newest preview ticket per client (PreviewRequest.client). Editing a slow pipeline
@@ -464,12 +489,21 @@ def preview(req: PreviewRequest) -> dict:
     pending = _pending_response(cfg.pipelines[min(req.pipeline_idx, len(cfg.pipelines) - 1)].sources)
     if pending:
         return pending
+    http_client = f"preview:{req.client or ''}"
+    signature = http_lookup.request_signature(req.model_dump(exclude={"client"}))
+    pending = _http_waiting(http_client, signature)
+    if pending:
+        return pending
     try:
         rows = ENGINE.call(
             "preview", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit,
             preview_until_step=req.preview_until_step, bbox=req.bbox, rejects=req.rejects,
-            sample=req.sample, tag=("preview", req.client) if req.client else None, stale=stale,
+            sample=req.sample, http="cached" if req.cached_http else "pending",
+            tag=("preview", req.client) if req.client else None, stale=stale,
         )
+        pending = _http_pending(rows, http_client, signature)
+        if pending:
+            return pending
         # Sanitize values to ensure JSON serializability (handles non-UTF-8 strings, bytes, etc.)
         safe_rows = []
         for row in rows:
@@ -492,6 +526,43 @@ def preview(req: PreviewRequest) -> dict:
             "crashed": isinstance(e, EngineCrashed),
             "trace": _trace(e),
         }
+
+
+class HttpSampleRequest(BaseModel):
+    config: dict
+    pipeline_idx: int = 0
+    step: int = Field(ge=1)  # 1-based, like preview_until_step
+
+
+# How much of a response body /api/http_sample sends back (characters).
+_HTTP_SAMPLE_MAX = 200_000
+
+
+@app.post("/api/http_sample")
+def http_sample(req: HttpSampleRequest) -> dict:
+    """An http_lookup step's request for the first row reaching it, and its response (from
+    the cache, or requested now), so the editor can show the JSON to pick fields from."""
+    try:
+        cfg = load_config_dict(req.config)
+        step = cfg.pipelines[req.pipeline_idx].steps[req.step - 1]
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    pending = _pending_response(cfg.pipelines[req.pipeline_idx].sources)
+    if pending:
+        return pending
+    try:
+        url = ENGINE.call("http_sample", req.config, pipeline_idx=req.pipeline_idx, step=req.step)
+        if url is None:
+            return {"ok": False, "error": "No row reaching this step makes a request (no rows, or a NULL in the URL)."}
+        found, missing = http_lookup.lookup([url], step.headers, None, preview=True)
+        if missing:
+            http_lookup.fetch(http_lookup.job_spec(step, [url]))
+            found, _ = http_lookup.lookup([url], step.headers, None, preview=True)
+        status, body = found.get(url, (0, "no response"))
+        return {"ok": True, "url": url, "status": status, "body": body[:_HTTP_SAMPLE_MAX],
+                "truncated": len(body) > _HTTP_SAMPLE_MAX}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed)}
 
 
 class PlanRequest(BaseModel):
@@ -527,10 +598,16 @@ def counts(req: CountsRequest) -> dict:
     pending = _pending_response(cfg.pipelines[min(req.pipeline_idx, len(cfg.pipelines) - 1)].sources)
     if pending:
         return pending
+    signature = http_lookup.request_signature(req.model_dump())
+    pending = _http_waiting("counts", signature)
+    if pending:
+        return pending
     try:
-        return {"ok": True, **ENGINE.call(
+        result = ENGINE.call(
             "counts", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit, bbox=req.bbox,
-        )}
+            http="pending",
+        )
+        return _http_pending(result, "counts", signature) or {"ok": True, **result}
     except Exception as e:
         return {"ok": False, "error": str(e), "crashed": isinstance(e, EngineCrashed)}
 

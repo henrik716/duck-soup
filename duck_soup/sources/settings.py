@@ -41,3 +41,6 @@ PYOGRIO_SAMPLE_ROWS = 500
 
 # Remote file sources are downloaded here — see remote.py.
 REMOTE_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_remote_cache"
+
+# The http_lookup step's response cache (a SQLite file) — see http_lookup.py.
+HTTP_CACHE_DIR = Path(tempfile.gettempdir()) / "duck_soup_http_cache"
