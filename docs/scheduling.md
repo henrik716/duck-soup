@@ -280,7 +280,7 @@ The YAML has no variable substitution. Anything in a `uri` is stored in plain te
 
 ### Run history
 
-Every `duck-soup run` records itself in `runs/<config name>/` in the project folder: when it
+Every `duck-soup run` records itself in `runs/<config file name>/` in the project folder: when it
 ran, whether it worked, the error if it didn't, and how many rows each layer got. The editor
 shows these in its [History tab](editor/preview-and-run.md#run-history), next to the runs
 started from the editor, so you can check last night's run without opening a log file.

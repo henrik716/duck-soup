@@ -93,9 +93,9 @@ The body depends on the step type:
 - **expressions**: any SQL field with a pencil icon (a mapping or attribute `expr`, a dissolve
   key or aggregate) opens the [expression builder](mapping.md#expression-builder), which checks
   the expression against the rows that reach this step.
-- **rejects → output layer**: on joins, `clip` and `filter`, a layer for the rows the step
-  rejects (no match, outside the mask, condition not true). Those rows then go there instead of
-  on down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).
+- **rejects → output layer**: on a spatial, attribute or nearest-neighbour join, `clip` or `filter`, a
+  layer for the rows the step rejects (no match, outside the mask, condition not true). Those
+  rows then go there instead of continuing down the chain or being discarded. See [`rejects`](../reference/steps.md#rejects).
 - **apply to branch**: run this step on a named [snapshot branch](../concepts.md#branches-and-derived-sources)
   instead of the main chain. For a snapshot step this reads **snapshot from branch**.
 

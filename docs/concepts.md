@@ -182,6 +182,7 @@ flowchart LR
     M --> W["COPY … TO output.gpkg / .parquet"]
 ```
 
-DuckDB plans the whole chain as one query, so data streams through without intermediate
-files. Spatial joins use DuckDB's R-tree spatial join, which keeps large point-in-polygon
-joins fast.
+In a preview, DuckDB plans the whole chain as one query, so it only computes the rows the
+preview shows. A run stores each step's result once, as a temporary table in memory, so every
+output layer reads it without recomputing the chain. Spatial joins use DuckDB's R-tree spatial
+join, which keeps large point-in-polygon joins fast.

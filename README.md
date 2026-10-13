@@ -462,6 +462,7 @@ fetches the extension build matching the running DuckDB core version — pinning
 is what keeps the spatial extension version reproducible. Bump the pin (and this note)
 together when upgrading.
 
-**Releasing:** bump `version` in `pyproject.toml`, commit and push, then push a `v*` tag
+**Releasing:** bump `version` in `pyproject.toml` and add the release to
+`docs/changelog.md` in the same commit, push, then push a `v*` tag
 (e.g. `git tag v0.1.16 && git push origin v0.1.16`). CI then publishes to PyPI and
 `ghcr.io/henrik716/duck-soup`.

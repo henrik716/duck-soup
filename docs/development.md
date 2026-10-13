@@ -127,7 +127,8 @@ slowly that the capture times out.
 `v*` tags it also publishes the package to PyPI (`duck-soup-etl`) and the Docker image to
 `ghcr.io/henrik716/duck-soup`.
 
-To release: bump `version` in `pyproject.toml`, commit and push, then push a matching tag
+To release: bump `version` in `pyproject.toml` and add the release to the
+[changelog](changelog.md) in the same commit, push, then push a matching tag
 (`git tag v0.1.15 && git push origin v0.1.15`). PyPI rejects a version that's already been
 published.
 `.github/workflows/docs.yml` builds this site and deploys it.

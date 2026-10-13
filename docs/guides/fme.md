@@ -17,7 +17,7 @@ maps the FME ideas and transformers you already know to their duck soup equivale
 | A side branch that feeds back in later | A [snapshot branch](../concepts.md#branches-and-derived-sources) |
 | Inspector / feature caching | The editor's live [preview](../editor/preview-and-run.md), on every step |
 | Feature counts on the connections | **count rows** in the [pipeline flow](../editor/overview.md#row-counts), on a sample or all the data |
-| Passed / Failed (Unmatched, Outside…) output ports | [`rejects`](../reference/steps.md#rejects) on joins, `clip` and `filter`: the failed rows go to a layer of their own |
+| Passed / Failed (Unmatched, Outside…) output ports | [`rejects`](../reference/steps.md#rejects) on spatial, attribute and nearest-neighbour joins, `clip` and `filter`: the failed rows go to a layer of their own |
 | The canvas, and a transformer's parameters opened from it | The [pipeline flow](../editor/overview.md#ducks-in-a-row-the-pipeline-flow) ("ducks in a row"): click a node and its card opens in a panel beside it |
 | Coordinate system on each reader and writer | One [working CRS](../concepts.md#the-working-crs) for the processing, plus a CRS per source and per layer |
 
@@ -39,7 +39,7 @@ with A as the base.
 | AreaOnAreaOverlayer, LineOnAreaOverlayer | [`intersect_overlay`](../reference/steps.md#intersect_overlay) |
 | LineOnLineOverlayer | [`line_overlay`](../reference/steps.md#line_overlay), one step per overlay dataset |
 
-A spatial join keeps base features that match nothing, like a FeatureMerger's *unmerged*
+A spatial join keeps base features that match nothing, like a FeatureMerger's *Unmerged*
 output joined back in. To route them to their own layer instead, like the *Unmerged* port,
 set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 

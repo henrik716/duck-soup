@@ -236,7 +236,7 @@ shape itself.
 --8<-- "docs/tutorials/generated/erase.md"
 
 - The River Waddle runs through Central Puddle Park, so the park loses that strip (its area
-  drops from about 41,800 m² to 28,600 m², the rest being, well, puddle) and may become a
+  drops from about 41,800 m² to 28,600 m², the missing third was river all along) and may become a
   multi-part polygon.
 - Features that don't touch the river pass through unchanged. A feature erased completely
   is dropped.
@@ -346,7 +346,7 @@ of a later step.
 
 - `columns` takes the same rules as the [mapping](mapping.md). `opened` is text in the
   source, and the first column overwrites it with a number (`cast: INTEGER`).
-- The columns are set in order, so `era` can compare the `opened` set just above it.
+- The columns are set in order, so `era` can use the `opened` value set just above it.
 - The `filter` after it can then use `era`, a column that doesn't exist in the source.
   Without the attributes step, the filter would have to repeat the whole `CASE` expression.
 - You only list what you change. Every column you don't mention (`name`, `category`,

@@ -44,7 +44,7 @@ to go back.
 ![Map and Data Table showing the pipeline output](../assets/screenshots/map-preview-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 - **view**: pipeline output, or any single source.
-- **limit**: how many features to fetch (default 1 000, no upper bound). Above 20 000 the
+- **limit**: how many features to fetch (default 1,000, no upper bound). Above 20,000 the
   editor warns that the map and table may get slow or unresponsive. The table shows
   *limit reached* when there may be more.
 - **in view**: preview only features inside the current map extent, rather than the first N.
@@ -72,8 +72,7 @@ Mapping errors from the preview link to their mapping row the same way
 
 The tab opens by itself only when a problem first appears while you're on **Data Table**, and
 once the preview works again it switches back there. If you move to another tab in between,
-or opened **Problems** yourself, the editor leaves the tabs alone.
-
+or open **Problems** yourself, the editor leaves the tabs alone.
 
 ![The Problems tab with one validation error](../assets/screenshots/problems-tab-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![The Problems tab with one validation error](../assets/screenshots/problems-tab-dark.png#only-dark){ .screenshot .narrow loading=lazy }

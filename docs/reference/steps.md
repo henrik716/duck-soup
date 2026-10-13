@@ -1,8 +1,8 @@
 # Step types
 
 Steps run in order, each one transforming the rows produced by the step before it (or by the
-base source, for the first step). Every step type accepts an optional
-[`branch`](#branch) key, and the joins, `clip` and `filter` an optional
+base source, for the first step). Every step type accepts an optional [`branch`](#branch) key,
+and `spatial_join`, `attribute_join`, `nearest_neighbor`, `clip` and `filter` an optional
 [`rejects`](#rejects) key that sends the rows they'd otherwise drop, or leave unmatched, to a
 layer of their own.
 
@@ -54,8 +54,7 @@ Copies attributes from features in another source that spatially match each base
 | `rejects` | – | Layer for the base features with no match, which then leave the chain. See [`rejects`](#rejects). |
 
 !!! warning "`match: first` hides multiple matches"
-    A duck paddling exactly on the boundary between two overlapping ponds silently gets only
-    one of them. Use
+    A feeding zone that reaches into two ponds silently gets only one of them. Use
     `on_multiple: largest_overlap` for "which one is it mostly in", or `match: all` to see
     every match.
 
@@ -261,7 +260,7 @@ it's **Update Attributes**. Use it when a later step needs a value that isn't a 
 key to dissolve or join on, or a value to filter by.
 
 **You only list what you change.** Every column you don't mention is kept as it is and goes on
-to the next step, so there's no need to list them all, as the mapping does. Remove one with
+to the next step, so, unlike in the mapping, there's no need to list them all. Remove one with
 `drop`.
 
 ```yaml
@@ -334,7 +333,7 @@ own. It's available on these steps:
 - type: spatial_join
   source: ponds
   fields: {pond_name: name}
-  rejects: ducks_on_land    # unmatched ducks go here, not on with an empty pond_name
+  rejects: ducks_on_land    # unmatched ducks go here, not down the chain with an empty pond_name
 - type: filter
   where: "bread_crumbs >= 1000"
   rejects: hungry_ducks     # instead of being discarded

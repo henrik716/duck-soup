@@ -81,7 +81,7 @@ Other formats ignore these keys.
 ```
 
 Curved geometry types (CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface),
-which DuckDB can't parse, are linearized automatically with `pyogrio`. The result is cached, so
+which DuckDB can't parse, are linearised automatically with `pyogrio`. The result is cached, so
 repeated previews stay fast.
 
 On Windows, files of 2 GiB or more are read through `pyogrio` instead of `ST_Read`, which
@@ -182,9 +182,9 @@ A file-based source (`gpkg`, `geojson`, `shp`, `flatgeobuf`, `gml`, `fgdb`, `csv
   crs: EPSG:5973
 ```
 
-- The file is **downloaded** into the system temp folder and then read locally. That also
-  makes export endpoints usable, the ones that build the file on every request and don't
-  support partial reads; reading them directly through GDAL times out.
+- The file is **downloaded** into the system temp folder and then read locally. This also
+  makes export endpoints usable: ones that build the file on every request and don't support
+  partial reads, which time out when GDAL reads them directly.
 - **Previews reuse the download.** Inspecting, previewing and counting in the editor read
   the newest download until you click **refresh** on the source card, including after
   restarting the editor. Datasets rarely change between two previews, and fetching them
@@ -203,9 +203,9 @@ A file-based source (`gpkg`, `geojson`, `shp`, `flatgeobuf`, `gml`, `fgdb`, `csv
 - Several remote sources download at the same time, each URL once even if several sources
   use it. A run started while the editor is downloading a file waits for that download and
   uses it.
-- If a download fails, the read fails. There's no fallback to an older copy. In the editor
-  the error stays until you change the source's settings or click **refresh**, or for a
-  minute, instead of being retried with every preview.
+- If a download fails, the read fails. There's no fallback to an older copy. In the editor,
+  the error stays for a minute, or until you change the source's settings or click
+  **refresh**, instead of being retried with every preview.
 - Downloads and Parquet copies are kept in the system temp folder. A copy replaced by a
   newer download is removed an hour later, so a run that's still reading it, in the editor
   or in another `duck-soup run`, isn't disrupted.

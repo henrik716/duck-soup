@@ -141,7 +141,7 @@ project folder.
 duck soup pins DuckDB to `>=1.5.4,<1.6`. DuckDB always installs the `spatial` extension build
 that matches its own version, so the pin is what keeps spatial behaviour reproducible.
 Curved geometry (CircularString, CompoundCurve, CurvePolygon, MultiCurve, MultiSurface), which
-DuckDB's spatial extension can't parse, is linearized automatically with `pyogrio`, so no
+DuckDB's spatial extension can't parse, is linearised automatically with `pyogrio`, so no
 extras are needed.
 
 ## Next steps

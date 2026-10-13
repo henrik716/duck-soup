@@ -100,6 +100,7 @@ nav:
       - Mapping & codelists: reference/mapping.md
       - Command line: reference/cli.md
   - Development: development.md
+  - Changelog: changelog.md
 
 # Generated tables/snippets for the tutorials: included into pages, not pages themselves.
 exclude_docs: |

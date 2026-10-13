@@ -55,21 +55,22 @@ that can't be cast become NULL rather than failing the run.
 
 ## Expression builder
 
-Choosing `expr` and clicking the edit icon opens the expression builder, a side drawer with:
+Choosing `expr` and clicking the pencil icon opens the expression builder, a side drawer with:
 
-- a SQL editor with syntax highlighting, auto-closing brackets/quotes and column/function
+- A SQL editor with syntax highlighting, auto-closing brackets/quotes and column/function
   autocomplete. <kbd>Tab</kbd> indents the line (or every selected line) and
   <kbd>Shift</kbd>+<kbd>Tab</kbd> outdents; while the autocomplete list is open,
-  <kbd>Tab</kbd> picks the suggestion instead,
-- **Available Columns**: grouped like the field pool (**base**, **step 1 · spatial_join**, …);
-  click a column to insert it,
-- **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date, …,
-  e.g. `LEAST`/`GREATEST`, `CONCAT_WS`, `LPAD`, `REGEXP_EXTRACT`, `DATE_DIFF`), click to insert,
-- a **live check** that runs the expression against real sample rows from your pipeline and
+  <kbd>Tab</kbd> picks the suggestion instead.
+- **Available Columns**, grouped like the field pool (**base**, **step 1 · spatial_join**, …).
+  Click a column to insert it.
+- **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date,
+  …), such as `LEAST`/`GREATEST`, `CONCAT_WS`, `LPAD`, `REGEXP_EXTRACT` and `DATE_DIFF`. Click
+  one to insert it.
+- A **live check** that runs the expression against real sample rows from your pipeline and
   shows either sample results or the SQL error. A syntax error or unknown column shows at
   once. Sample results need the pipeline's steps to run on a few rows, which on a slow
-  pipeline takes some seconds; the check counts them meanwhile. It doesn't stop or delay the
-  main preview.
+  pipeline takes some seconds; the check counts the seconds meanwhile. It doesn't stop or
+  delay the main preview.
 
 ![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-light.png#only-light){ .screenshot loading=lazy }
 ![The expression builder with a live check against sample rows](../assets/screenshots/expr-drawer-dark.png#only-dark){ .screenshot loading=lazy }

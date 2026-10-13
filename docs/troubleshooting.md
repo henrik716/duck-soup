@@ -57,7 +57,7 @@
        must match exactly. The editor's layer dropdown lists the valid ones.
     3. For ArcGIS REST, test the `where` clause in the service's own query page. An invalid
        one makes the server return an error.
-    4. A WFS layer that comes back with suspiciously round numbers of features (1 000, 10 000)
+    4. A WFS layer that comes back with suspiciously round numbers of features (1,000, 10,000)
        has probably hit the server's response limit. See [WFS](reference/sources.md#wfs).
 
 ??? failure "Postgres: connection refused or authentication failed"
@@ -108,7 +108,7 @@
     `cast` uses `TRY_CAST`, so values that can't be converted become NULL instead of failing
     the run: `unknown` as `INTEGER`, or `March 2024` as `DATE`. Preview the column without the
     cast to see the raw values, then clean them with an `expr` (for example
-    `strptime(inspected, '%d/%m/%Y')`) before casting. See
+    `strptime(inspected, '%B %Y')` for `March 2024`) before casting. See
     [`cast`](tutorials/mapping.md#cast-set-the-column-type).
 
 ??? question "Dates before 1970 are missing or wrong in the GeoPackage"

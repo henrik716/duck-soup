@@ -6,7 +6,7 @@ output (the **output file** set on the config card). The YAML side is covered un
 
 - **layer name**: the table name inside the GeoPackage (for a multi-layer GeoParquet output,
   the file name).
-- **CRS**: the CRS geometry is reprojected to on write. Pick it from the searchable list of
+- **CRS**: the CRS the geometry is reprojected to when it's written. Pick it from the searchable list of
   common CRSs (search by code or name, e.g. *UTM 33*), or type any `AUTHORITY:CODE`.
 - **filter**: an optional SQL condition. Rows where it's false are left out of *this* layer
   only. A live check under the field tells you whether it parses.
@@ -15,8 +15,8 @@ output (the **output file** set on the config card). The YAML side is covered un
 ![The output layers tab](../assets/screenshots/output-layers-dark.png#only-dark){ .screenshot loading=lazy }
 
 All layers of a pipeline get the same rows, so filters are how you split them. For example, a
-`ducks` layer with no filter and a `ducks_off_pond` layer with `pond IS NULL` (ducks
-that wandered off for a waddle). To take rows out of the chain at a particular step instead,
+`ducks` layer with no filter can sit next to a `ducks_off_pond` layer with `pond IS NULL`
+(ducks that wandered off for a waddle). To take rows out of the chain at a particular step instead,
 give that step a [`rejects`](../reference/steps.md#rejects) layer. Those don't appear in this
 tab: they're set on the step, and written as they are at that step, without the mapping.
 

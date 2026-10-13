@@ -17,7 +17,7 @@ The left side is where you **build**. The right side is where you **see** the re
 | Control | What it does |
 |---|---|
 | **version** | The badge next to the name (e.g. `v1.3.3`). Click it for the release notes. When PyPI has a newer release it reads `update to …`, and a click copies the upgrade command (see [Install](../getting-started/install.md)); run it, then restart duck soup. |
-| **load** | Opens a config saved in the project folder's `pipelines/` directory. The editor reopens the last config you used on startup. |
+| **load** | Opens a config saved in the project folder's `pipelines/` directory. On startup, the editor reopens the last config you used. |
 | **new** | Starts a blank config with one empty pipeline. |
 | **import** | Opens a dialog where you paste a pipeline YAML from anywhere (git, email, a colleague). It replaces what's open. |
 | **export .py** | Downloads the config as a standalone Python script that runs without the editor. See [Export as a Python script](preview-and-run.md#export-as-a-python-script). |
@@ -28,14 +28,15 @@ The left side is where you **build**. The right side is where you **see** the re
 | **cancel** | Shown while a run is going. Stops it at once; see [Running](preview-and-run.md#running). |
 | **docs** | Opens these docs in a new browser tab. |
 | **☀ / ☾** | Switches the editor between dark and light mode. It follows your OS setting until you click it, and then remembers your choice. The map's basemap switches with it. |
-| **status** | Shows `valid`, `validating…`, `previewing… 8s` on a slow preview, `running…`, what a preview is waiting on (e.g. `segmentert: downloading… 23.4 MB`), or the first line of an error. Click it to open the **Problems** tab. |
+| **status** | Shows `valid`, `validating…`, `previewing… 8s` on a slow preview, `running…`, what a preview is waiting on (e.g. `roads: downloading… 23.4 MB`), or the first line of an error. Click it to open the **Problems** tab. |
 
 ## Ducks in a row: the pipeline flow
 
 The **ducks in a row** panel at the top draws the config as a flow chart, one row per
-pipeline. The name is the idiom: getting your ducks in a row means putting things in order,
-and that's what a pipeline is, an ordered chain your features waddle through, one step after
-another, before they file into the output. Each row starts with its base source (marked **base**). The steps run left to right,
+pipeline. The name comes from the idiom. Getting your ducks in a row means putting things in
+order, and that's what a pipeline is: an ordered chain your features waddle through, one step
+after another, before they file into the output. Each row starts with its base source (marked
+**base**). The steps run left to right,
 each with the source it joins against above it, and the pipeline's output layers converge on
 the shared output file. A step with a [`rejects`](../reference/steps.md#rejects) layer has a
 red side branch for it: below the step, or above it for a step on a snapshot branch. The
@@ -48,8 +49,8 @@ To see more or less of it:
 - **−** / **+**, or <kbd>Ctrl</kbd>+wheel (a pinch on a trackpad), zoom between 50% and 150%,
   around the pointer. The percentage button resets to 100%. A plain wheel still scrolls the
   page.
-- Drag an empty part of the diagram to pan, sideways or up and down. The diagram is at most
-  60% of the window tall, and scrolls beyond that.
+- Drag an empty part of the diagram to pan, sideways or up and down. The diagram takes up at
+  most 60% of the window's height, and scrolls beyond that.
 
 The zoom you pick is remembered per config, in your browser.
 
@@ -78,7 +79,7 @@ diagram instead. Every change made from the diagram can be undone with
 
 **count rows** in the diagram's header counts the rows on every connection:
 
-- **sample** counts the first *limit* base features (the preview limit, by default 1 000), or
+- **sample** counts the first *limit* base features (the preview limit, by default 1,000), or
   only those in view while the map's **in view** is on. It's quick, and shows where rows get
   lost or multiplied.
 - **all data** counts everything, including each source's rows. It takes about as long as a

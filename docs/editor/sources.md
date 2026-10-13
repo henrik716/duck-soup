@@ -63,7 +63,7 @@ in Docker, that's the container, so only mounted folders are visible.
 |---|---|
 | **id** | Your handle for the source, used by `base`, steps and derived sources. |
 | **format** | Detected from the file extension when possible (marked *from extension*). |
-| **uri / path / url** | A file path, a `.gdb` folder, a service URL or a Postgres connection string. The folder button opens a file browser at the current file's folder (or the project folder): search the folder and its subfolders, sort by name/type/size/date, jump to project folders, home or drives from the sidebar, or click the path bar (Ctrl+L) to paste a path. Double-click or Enter picks a file; by default only supported data files are shown. |
+| **uri / path / url** | A file path, a `.gdb` folder, a service URL or a Postgres connection string. The folder button opens the [file browser](#the-file-browser) at the current file's folder (or the project folder). |
 | **layer / typename / sheet / collection** | Filled with the layers, feature types, sheets, collections or tables found in the source. Pick one. |
 | **crs** | Detected from the data where possible (marked *detected*). Searchable list of common EPSG codes. |
 | **repair invalid geometry** | `make_valid`: on by default. |
@@ -119,7 +119,7 @@ the card's badge shows the progress in place of *inspecting…*:
 - *converting to Parquet for fast previews… 12 s*.
 
 The status at the top of the editor shows the same while a preview waits on the source, or
-lists them all when several are pending, e.g. *2 sources: segmentert 23.4 MB · roads
+lists them all when several are pending, e.g. *2 sources: roads 23.4 MB · sightings
 converting*.
 
 Once it's done, the card shows when the file was downloaded, e.g. *Downloaded 2 h ago ·

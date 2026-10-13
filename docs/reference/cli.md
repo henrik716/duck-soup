@@ -85,7 +85,7 @@ Starts the web editor.
 On start, `serve` prints the version and, when PyPI has a newer release, the command to
 upgrade. The editor shows the version next to its name; when an update exists, that badge
 turns into "update to x.y.z", and clicking it copies the upgrade command. The check is a
-single request to `pypi.org`, repeated at most every 6 hours, and when it fails (offline,
+single request to `pypi.org`, repeated at most once every 6 hours, and when it fails (offline,
 firewalled) nothing is shown.
 
 !!! danger "Don't expose the editor to untrusted networks"
