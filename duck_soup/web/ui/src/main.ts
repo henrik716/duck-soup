@@ -73,8 +73,9 @@ function currentJson(): string {
   try { return JSON.stringify(collectConfig()) } catch { return '' }
 }
 
-function isDirty(): boolean {
-  return lastSavedJson !== '' && currentJson() !== lastSavedJson
+/** `json`: the config as currentJson() gives it, when the caller has just collected it. */
+function isDirty(json: string = currentJson()): boolean {
+  return lastSavedJson !== '' && json !== lastSavedJson
 }
 
 function markSaved(): void {
@@ -82,9 +83,9 @@ function markSaved(): void {
   updateDirtyIndicator()
 }
 
-function updateDirtyIndicator(): void {
+function updateDirtyIndicator(json?: string): void {
   const btn = qs<HTMLButtonElement>('#saveBtn')
-  const dirty = isDirty()
+  const dirty = isDirty(json)
   btn?.classList.toggle('dirty', dirty)
   if (btn) btn.title = dirty ? 'Save config — you have unsaved changes' : 'Save config'
 }
@@ -195,10 +196,9 @@ function setActivePreview(next: typeof activePreview): void {
   runPreview()
 }
 
-function updateMapLayerSelect(): void {
+function updateMapLayerSelect(cfg: Config): void {
   const sel = document.getElementById('map-layer-select') as HTMLSelectElement | null
   if (!sel) return
-  const cfg = collectConfig()
   const prev = sel.value
   sel.innerHTML = '<option value="">pipeline output</option>'
   cfg.pipelines.forEach(pdef => {
@@ -220,12 +220,29 @@ function updateMapLayerSelect(): void {
 }
 
 // ---- sync: runs after every form change ----
+// Every edit and every card's event syncs, so a burst of them (each source card of a big
+// config answering its inspect) syncs once: collecting the config is the costly part, and a
+// sync per card, each collecting all the cards, took a minute for the tutorial's 34
+// pipelines. A timer, not requestAnimationFrame, which a background tab never runs.
+let syncQueued = false
+
 function sync(): void {
-  updateMapLayerSelect()
+  if (syncQueued) return
+  syncQueued = true
+  window.setTimeout(() => {
+    syncQueued = false
+    runSync()
+  }, 0)
+}
+
+function runSync(): void {
   const cfg = collectConfig()
+  updateMapLayerSelect(cfg)
   syncFlowEditor()
   updateLineageDiagram(cfg)
-  updateDirtyIndicator()
+  let json = ''
+  try { json = JSON.stringify(cfg) } catch { /* as currentJson */ }
+  updateDirtyIndicator(json)
   clearTimeout(syncTimer)
   syncTimer = window.setTimeout(validate, 250)
 }

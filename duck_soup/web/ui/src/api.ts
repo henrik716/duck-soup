@@ -19,6 +19,7 @@ import type {
   ValidateResponse,
   VersionResponse,
 } from './types'
+import { sharedRequests } from './request-share'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
@@ -194,17 +195,25 @@ export async function exportScript(config: Config, name: string): Promise<Export
   return r.json()
 }
 
+// Cards with the same source definition (or file) share one inspect: see request-share.ts.
+// An answer is kept for a few seconds, enough for a config's cards loading together.
+const INSPECT_SHARE_MS = 10_000
+const sharedInspects = sharedRequests<InspectResponse>(d => d.ok && !d.pending, INSPECT_SHARE_MS)
+const sharedFileInspects = sharedRequests<InspectFileResponse>(d => d.ok && !d.pending, INSPECT_SHARE_MS)
+
 export async function inspectSource(source: Source): Promise<InspectResponse> {
-  const r = await fetch('/api/inspect', {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ source }),
+  const body = JSON.stringify({ source })
+  return sharedInspects.get(body, async () => {
+    const r = await fetch('/api/inspect', { method: 'POST', headers: JSON_HEADERS, body })
+    return r.json()
   })
-  return r.json()
 }
 
 /** Download a remote file source again; answers pending while it runs (like inspect). */
 export async function refreshSource(source: Source): Promise<InspectResponse> {
+  // The file is downloaded again: what was inspected before is out of date.
+  sharedInspects.clear()
+  sharedFileInspects.clear()
   const r = await fetch('/api/refresh_source', {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -214,12 +223,11 @@ export async function refreshSource(source: Source): Promise<InspectResponse> {
 }
 
 export async function inspectFile(uri: string, format: string): Promise<InspectFileResponse> {
-  const r = await fetch('/api/inspect_file', {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ uri, format }),
+  const body = JSON.stringify({ uri, format })
+  return sharedFileInspects.get(body, async () => {
+    const r = await fetch('/api/inspect_file', { method: 'POST', headers: JSON_HEADERS, body })
+    return r.json()
   })
-  return r.json()
 }
 
 export async function fetchFiles(subpath: string): Promise<FilesResponse> {

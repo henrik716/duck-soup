@@ -57,6 +57,10 @@ next to the editor's name show the version you're running.
 
 - A layer without geometry and without a mapping, such as a rejects layer from a CSV
   source, failed to write to a GeoPackage. (1.7.0)
+- A config with many pipelines sharing their sources, such as the tutorial's, took minutes
+  to load in the editor, with previews waiting until it was done. Source cards with the
+  same source now share one inspect, and a burst of edits syncs the editor once. The
+  tutorial config loads in seconds. (1.7.0)
 
 **Docs**
 
