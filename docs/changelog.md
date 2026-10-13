@@ -7,6 +7,58 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
+## 1.6 — 2026-10-13
+
+!!! warning "Upgrading"
+    - An `attribute_join` whose `right` column has duplicate values now takes the first
+      matching row in the source's row order. Before, it took an arbitrary one, so a pipeline
+      with duplicate keys may now write different values. Use `match: summarize` to combine
+      them instead. (1.6.0)
+
+**Pipeline YAML**
+
+- Aggregates without SQL: a [`dissolve`](reference/steps.md#dissolve) or
+  [`combine_lines`](reference/steps.md#combine_lines) aggregate can be `{from: column, how: …}`
+  as well as a SQL `expr`. `how` is `any`, `most_common`, `from_largest`, `all`, `sum`,
+  `average`, `min`, `max` or `count`, and `to` defaults to the column's name. See
+  [Keeping other columns](reference/steps.md#keeping-other-columns). (1.6.0)
+- `spatial_join` and `attribute_join` take `match: summarize`: one row per feature, with
+  each field combining the values of all its matches, e.g. a count of trees per district or a
+  list of the streets crossing a parcel. See
+  [Summarizing matches](reference/steps.md#summarizing-matches). (1.6.0)
+- An aggregate that can't work on its column (a sum of text, a column that isn't there) is an
+  error that says so before anything runs, and the Problems tab links to it. (1.6.0)
+
+**Editor**
+
+- Dissolve and Combine Lines cards list the columns reaching the step, marked as grouped by,
+  kept or dropped. Click one to keep it, or **by** to group by it. Each kept column is a row:
+  how to combine its values, from a list, with a switch to SQL. **+ keep all** and **+ count**
+  add rows in one click. (1.6.0)
+- A join that keeps the first match warns when features in the sample data match several. (1.6.0)
+- Conditions without SQL: the filter step, output layer filters and derived sources' `where`
+  are rows of *column · operator · value* (is, greater than, contains, is empty, is one of, …),
+  with a switch to SQL. The YAML still holds the SQL. (1.6.0)
+- Map preview: hover a feature to highlight it, and click it to select it. A selected feature
+  is drawn on top, its attributes open in a popup, and its row is highlighted in the Data
+  Table. Where features overlap, the popup steps through them (*1 of 3 here*). Clicking a
+  table row selects its feature on the map. (1.6.0)
+- The live checks (expression builder, field checks, the join warning) run on the first
+  1000 base features, so a check after a dissolve no longer computes over all the data and
+  holds up the preview. (1.6.0)
+
+**Fixes**
+
+- Dissolve and Combine Lines steps are saved with `type` first again (1.5.1 wrote it last).
+  (1.6.0)
+
+**Docs**
+
+- [Keeping other columns](reference/steps.md#keeping-other-columns) and
+  [Summarizing matches](reference/steps.md#summarizing-matches) in the step reference, the
+  tutorial's dissolve and combine_lines examples without SQL, and the editor pages for the new
+  controls. (1.6.0)
+
 ## 1.5 — 2026-10-13
 
 **Pipeline YAML**
@@ -19,7 +71,6 @@ next to the editor's name show the version you're running.
 **Docs**
 
 - A [`combine_lines`](tutorials/steps.md#combine_lines) example in Steps by example. (1.5.1)
-
 - This changelog. (1.5.0)
 - Clearer wording across the editor, reference and guide pages. The `rejects` docs now name
   every step type that takes it, and the concepts page says how previews and runs compute
