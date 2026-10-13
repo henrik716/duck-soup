@@ -9,7 +9,16 @@ next to the editor's name show the version you're running.
 
 ## 1.5 — 2026-10-13
 
+**Pipeline YAML**
+
+- New [`combine_lines`](reference/steps.md#combine_lines) step, shown as **Combine Lines** in
+  the editor: joins lines that meet end to end into longer lines, one feature per connected
+  chain with the same `by` values. `aggregates` are computed per chain, and
+  `preserve_direction` (on by default) only joins lines running the same way. (1.5.1)
+
 **Docs**
+
+- A [`combine_lines`](tutorials/steps.md#combine_lines) example in Steps by example. (1.5.1)
 
 - This changelog. (1.5.0)
 - Clearer wording across the editor, reference and guide pages. The `rejects` docs now name
