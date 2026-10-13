@@ -257,9 +257,10 @@ shape itself.
 - The four districts become the two wards, Upstream and Downstream. Leave `by` out to merge
   everything into a single feature (a town boundary, for example).
 - **Only the `by` keys and the `aggregates` are kept**, since the other columns have no
-  single value per ward. An aggregate computes one: `sum(population)` adds up the districts'
-  populations, and `string_agg` lists their names. `count(*)`, `min`, `max`, `avg` and
-  `any_value` work the same way.
+  single value per ward. An aggregate says how to combine them: `how: sum` adds up the
+  districts' populations, and `how: all` lists their names. `most_common`, `average`, `min`,
+  `max`, `count` and others work the same way, and so does a SQL aggregate in `expr`. See
+  [Keeping other columns](../reference/steps.md#keeping-other-columns).
 - A key can also be a SQL expression with a name, such as
   `{to: initial, expr: "left(district_name, 1)"}`, to group by a computed value.
 

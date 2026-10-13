@@ -5,6 +5,8 @@ import { collectPipelineDef } from './pipeline-card'
 import { attachLiveValidation, renderValidationMsg } from '../validation'
 import type { Config, DerivedSource } from '../types'
 import { renderIcons } from '../icons'
+import { attachConditionBuilder } from '../condition-builder'
+import { resolveSchemaScoped } from '../schema'
 
 // ---- derived source card ----
 // A filtered/buffered view of an existing source, registered under its own
@@ -25,7 +27,7 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
         <label class="field grow">id<input data-k="id" placeholder="fylke_buffered"></label>
         <label class="field grow">from${comboField('data-k="from"', ds.from ?? '', sourceIds)}</label>
       </div>
-      <label class="field" style="margin-top:8px">where (optional SQL filter)
+      <label class="field" style="margin-top:8px">where (optional: only the rows that match)
         <input data-k="where" placeholder="facility_type = 'ISPS'">
         <div class="expr-validation-msg" data-where-validation></div>
       </label>
@@ -93,6 +95,12 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
   })
   whereInp.addEventListener('input', () => whereValidation.schedule())
   whereInp.addEventListener('blur', () => whereValidation.runNow())
+  // The `from` source's columns.
+  attachConditionBuilder(whereInp, () => {
+    const card = c.closest('.pipeline-card')
+    const fromId = fromInp.value.trim()
+    return card && fromId ? resolveSchemaScoped(card, fromId).map(col => ({ ...col, origin: fromId })) : []
+  })
 
   const titleEl = c.querySelector<HTMLElement>('.item-title')!
   const updateTitle = () => {

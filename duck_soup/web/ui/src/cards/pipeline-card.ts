@@ -15,7 +15,7 @@ import { derivedSourceCard } from './derived-source-card'
 import { stepCard, KINDS_WITH_REJECTS, readAggregates, readAttributes, readByKeys } from './step-card'
 import { mapRow, type MapRowElement } from './map-row'
 import { outputLayerCard, readLayerMapping } from './output-layer-card'
-import type { DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
+import type { Aggregate, AggregateHow, DerivedSource, MapItem, OutputLayer, PipelineDef, Source, Step } from '../types'
 
 // ---- pipeline card ----
 let _plCounter = 0
@@ -678,6 +678,8 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
     if (t === 'attribute_join') {
       st['left'] = val(c, 'left')
       st['right'] = val(c, 'right')
+      // Only written when it changes anything, so existing YAML round-trips unchanged.
+      if (val(c, 'match') === 'summarize') st['match'] = 'summarize'
     }
     if (t === 'nearest_neighbor') {
       const maxDist = val(c, 'max_distance')
@@ -707,11 +709,19 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
       if (drop.length) st['drop'] = drop
     }
     if (['spatial_join', 'attribute_join', 'nearest_neighbor', 'intersect_overlay', 'line_overlay'].includes(t)) {
-      const f: Record<string, string> = {}
+      // With match: summarize a field says how to combine the matches' values.
+      const summarize = st['match'] === 'summarize'
+      const f: Record<string, string | Omit<Aggregate, 'to'>> = {}
       c.querySelectorAll('[data-fields] .kv').forEach(r => {
         const o = r.querySelector<HTMLInputElement>('[data-fo]')!.value.trim()
         const col = r.querySelector<HTMLInputElement>('[data-fc]')!.value.trim()
-        if (o && col) f[o] = col
+        if (!o) return
+        if (!summarize) { if (col) f[o] = col; return }
+        const how = r.querySelector<HTMLSelectElement>('[data-fhow]')!.value
+        const expr = r.querySelector<HTMLInputElement>('[data-fexpr]')!.value.trim()
+        if (how === 'sql') { if (expr) f[o] = { expr } }
+        else if (how === 'count') f[o] = { how: 'count' }
+        else if (col) f[o] = { from: col, how: how as AggregateHow }
       })
       st['fields'] = f
     }

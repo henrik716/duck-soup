@@ -16,8 +16,8 @@ from typing import Callable
 
 from . import mapping
 from .config import (
-    AttributeJoin, Attributes, Buffer, Centroid, Clip, CombineLines, Dissolve, Erase, ExprColumn, Filter,
-    IntersectOverlay, LineOverlay, Merge, NearestNeighbor, SpatialJoin,
+    Aggregate, AttributeJoin, Attributes, Buffer, Centroid, Clip, CombineLines, Dissolve, Erase,
+    ExprColumn, Filter, IntersectOverlay, LineOverlay, Merge, NearestNeighbor, SpatialJoin,
 )
 from .sql_util import quote_ident as _ident, quote_literal as _lit
 
@@ -81,6 +81,11 @@ def spatial_join_sql(prev: str, step: SpatialJoin, log: Log, _ctx: StepContext) 
         log(f"spatial_join {step.predicate} {step.source} (match=all)")
         return sql
 
+    if step.match == "summarize":
+        log(f"spatial_join {step.predicate} {step.source} (summarize {', '.join(step.fields)})")
+        return _summarize_select(
+            prev, src_view, f"{pred}(a.geom, b.geom)", step.fields, flag=bool(step.rejects)
+        )
     fields = {out: f"b.{_ident(col)}" for out, col in step.fields.items()}
     # Deterministic match selection: __src_row is a stable row_number() assigned to
     # each join-source row when its view is created (see Engine._create_source_views), so
@@ -153,6 +158,42 @@ def _per_row_match_select(
     ORDER BY a.__a_row
     """
 
+def _summarize_select(
+    prev: str, src_view: str, on: str, fields: dict, flag: bool, left: str | None = None,
+) -> str:
+    """Every `prev` row (`a`), with each of `fields` ({output: Aggregate}) computed over its
+    matches in `src_view` (`b`): the source rows satisfying `on`. A row with no matches
+    gets NULLs, and 0 for a count. `left` is an expression computed on `a` first as
+    `__left` (attribute_join's), for `on` to use.
+
+    The aggregates see only the source's columns (their SQL names them bare, as written),
+    so they run over a subquery of the matched source rows, numbered by base row. The plain
+    JOIN lets DuckDB plan a spatial `on` as its SPATIAL_JOIN, as in _per_row_match_select.
+    """
+    aggs = ", ".join(_expr_column(agg) for agg in fields.values())
+    outs = "".join(
+        f", coalesce(m.{_ident(out)}, 0) AS {_ident(out)}" if agg.how == "count"
+        else f", m.{_ident(out)}"
+        for out, agg in fields.items()
+    )
+    matched = ", m.__a_row IS NOT NULL AS __matched" if flag else ""
+    extra = f", ({left}) AS __left" if left is not None else ""
+    drop = "__a_row, __left" if left is not None else "__a_row"
+    return f"""
+    WITH a AS MATERIALIZED (
+        SELECT *{extra}, row_number() OVER () AS __a_row FROM {_ident(prev)}
+    ),
+    m AS (
+        SELECT __a_row{(', ' + aggs) if aggs else ''}
+        FROM (SELECT b.*, a.__a_row FROM a JOIN {src_view} b ON {on})
+        GROUP BY __a_row
+    )
+    SELECT a.* EXCLUDE ({drop}){outs}{matched}
+    FROM a LEFT JOIN m ON m.__a_row = a.__a_row
+    ORDER BY a.__a_row
+    """
+
+
 def _best_match_select(
     prev: str,
     src_view: str,
@@ -186,6 +227,12 @@ def _best_match_select(
 
 def attribute_join_sql(prev: str, step: AttributeJoin, log: Log, _ctx: StepContext) -> str:
     src_view = _src(step.source)
+    if step.match == "summarize":
+        log(f"attribute_join {step.source} on {step.right} (summarize {', '.join(step.fields)})")
+        return _summarize_select(
+            prev, src_view, f"b.{_ident(step.right)} = a.__left", step.fields,
+            flag=bool(step.rejects), left=step.left,
+        )
     pulled = ", ".join(f"j.{_ident(out)}" for out in step.fields)
     inner = [f"b.{_ident(col)} AS {_ident(out)}" for out, col in step.fields.items()]
     matched = ""
@@ -202,6 +249,7 @@ def attribute_join_sql(prev: str, step: AttributeJoin, log: Log, _ctx: StepConte
         SELECT {', '.join(inner) if inner else '1'}
         FROM {src_view} b
         WHERE b.{_ident(step.right)} = a.__left
+        ORDER BY b.__src_row
         LIMIT 1
     ) j ON true
     """
@@ -276,10 +324,34 @@ def _erase_select(prev: str, src_view: str, on: str) -> str:
         ),
     ))
 
-def _expr_column(col: ExprColumn) -> str:
+# The SQL of each aggregate `how` (config.AGGREGATE_HOWS), with {col} for the quoted column.
+# from_largest takes the value of the longest line or the largest area: a polygon's length
+# and a line's area are 0, so the larger of the two measures whichever the feature is.
+AGGREGATE_SQL = {
+    "any": "any_value({col})",
+    "most_common": "mode({col})",
+    "from_largest": "arg_max({col}, greatest(ST_Area(geom), ST_Length(geom)))",
+    "all": "string_agg(DISTINCT CAST({col} AS VARCHAR), ', ' ORDER BY CAST({col} AS VARCHAR))",
+    "sum": "sum({col})",
+    "average": "avg({col})",
+    "min": "min({col})",
+    "max": "max({col})",
+    "count": "count({col})",
+}
+
+
+def aggregate_sql(agg: Aggregate) -> str:
+    """The SQL of an aggregate: its `expr`, or what its `how` does to its `from` column."""
+    if agg.expr is not None:
+        return agg.expr
+    return AGGREGATE_SQL[agg.how].format(col=_ident(agg.from_) if agg.from_ else "*")
+
+
+def _expr_column(col: ExprColumn | Aggregate) -> str:
     """`col` as a SELECT item. Bracketed, like mapping.map_expr, so an expression with a
     top-level operator stays one expression."""
-    return f"({col.expr}) AS {_ident(col.to)}"
+    sql = aggregate_sql(col) if isinstance(col, Aggregate) else col.expr
+    return f"({sql}) AS {_ident(col.to)}"
 
 
 def dissolve_sql(prev: str, step: Dissolve, log: Log, _ctx: StepContext) -> str:

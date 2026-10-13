@@ -329,8 +329,8 @@ EXAMPLES: dict[str, dict] = {
     },
     "dissolve": {
         "pipeline": {"base": "districts", "steps": [{"type": "dissolve", "by": ["ward"], "aggregates": [
-            {"to": "population", "expr": "sum(population)"},
-            {"to": "districts", "expr": "string_agg(district_name, ', ' ORDER BY district_name)"},
+            {"from": "population", "how": "sum"},
+            {"to": "districts", "from": "district_name", "how": "all"},
         ]}]},
         "table": [("ward", "ward"), ("population", "population"), ("districts", "districts"),
                   ("area_ha", "round(ST_Area(geom) / 10000, 1)")],
@@ -347,8 +347,8 @@ EXAMPLES: dict[str, dict] = {
             {"type": "line_overlay", "source": "lit_paths", "fields": {"lamps": "lamps"}, "tolerance": 0.1},
             {"type": "line_overlay", "source": "boardwalks", "fields": {"material": "material"}, "tolerance": 0.1},
             {"type": "combine_lines", "by": ["name", "lamps"], "aggregates": [
-                {"to": "pieces", "expr": "count(*)"},
-                {"to": "materials", "expr": "string_agg(DISTINCT material, ', ' ORDER BY material)"},
+                {"to": "pieces", "how": "count"},
+                {"to": "materials", "from": "material", "how": "all"},
             ]},
         ]},
         "table": [("name", "name"), ("lamps", "lamps"), ("pieces", "pieces"), ("materials", "materials"),

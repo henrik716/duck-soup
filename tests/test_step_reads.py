@@ -14,6 +14,14 @@ _STEPS = {
     "spatial_join_all": {"type": "spatial_join", "match": "all", "fields": {"f": "name"}},
     "spatial_join_rejects": {"type": "spatial_join", "fields": {"f": "name"}, "rejects": "r"},
     "attribute_join": {"left": "name", "right": "name", "fields": {"f": "name"}},
+    "spatial_join_summarize": {
+        "type": "spatial_join", "match": "summarize", "rejects": "r",
+        "fields": {"n": {"how": "count"}, "f": {"from": "name", "how": "all"}},
+    },
+    "attribute_join_summarize": {
+        "type": "attribute_join", "left": "name", "right": "name", "match": "summarize",
+        "fields": {"n": {"how": "count"}},
+    },
     "nearest_neighbor": {"fields": {"f": "name"}},
     "buffer": {"distance": 1},
     "centroid": {},
@@ -66,7 +74,8 @@ def _pipeline(tmp_path, kind: str, n_steps: int, n_layers: int = 1):
         if step_type not in _SOURCELESS:
             step["source"] = f"s{i}"
         if "fields" in step:
-            step["fields"] = {f"f{i}": "name"}
+            pulled = {"from": "name", "how": "all"} if step.get("match") == "summarize" else "name"
+            step["fields"] = {f"f{i}": pulled}
         if "rejects" in step:
             step["rejects"] = f"rejects_{i}"
         steps.append(step)

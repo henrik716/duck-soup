@@ -5,6 +5,8 @@ import { mapRow } from './cards/map-row'
 import { showToast } from './toast'
 import type { SourceProgress } from './types'
 import { renderIcons } from './icons'
+import { exprValue } from './expr-field'
+import { exprMentions } from './aggregates'
 
 // ---- slow-source progress (download / Parquet conversion) ----
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`
@@ -278,6 +280,56 @@ function renderAttributesPool(scope: Element, card: HTMLElement): void {
   }
 }
 
+/** Of `columns` (the ones reaching a dissolve or combine_lines card), the lower-cased names
+ *  of its group keys (plain columns), and of the columns its aggregates keep: by name, by
+ *  their `from` column, or used in their SQL. */
+export function aggregateColumnStates(card: Element, columns: string[]): { keys: Set<string>; kept: Set<string> } {
+  const keys = new Set<string>()
+  card.querySelectorAll('[data-by-row]').forEach(r => {
+    const as = r.querySelector<HTMLInputElement>('[data-by-as]')?.value.trim()
+    const col = exprValue(r.querySelector<HTMLInputElement>('[data-by-col]')!).trim()
+    if (!as && col) keys.add(col.toLowerCase())
+  })
+  const kept = new Set([...card.querySelectorAll<HTMLInputElement>('[data-agg-to], [data-agg-from]')]
+    .map(i => i.value.trim().toLowerCase()).filter(Boolean))
+  card.querySelectorAll<HTMLInputElement>('[data-agg-expr]').forEach(i => {
+    const expr = exprValue(i)
+    columns.filter(n => exprMentions(expr, n)).forEach(n => kept.add(n.toLowerCase()))
+  })
+  return { keys, kept }
+}
+
+/** A dissolve or combine_lines card's "columns reaching this step" list, marked as group
+ *  keys, kept (an aggregate keeps them) or dropped. Click a dropped one to keep it, or its
+ *  "by" to group by it (`_aggKeep` / `_aggGroup`, see step-card.ts). */
+function renderAggregatePool(scope: Element, card: HTMLElement): void {
+  const list = card.querySelector<HTMLElement>('.st-pool-list')
+  if (!list) return
+  const columns = collectColumnsBeforeStep(scope, card)
+  const { keys, kept } = aggregateColumnStates(card, columns.map(c => c.name))
+  const actions = card as HTMLElement & { _aggKeep?: (name: string) => void; _aggGroup?: (name: string) => void }
+  list.innerHTML = ''
+  for (const c of columns) {
+    const key = c.name.toLowerCase()
+    if (key === 'geom' || key.startsWith('__')) continue
+    const chip = mkEl('span', { className: 'st-pool-chip' })
+    const state = keys.has(key) ? 'is-key' : kept.has(key) ? 'is-set' : 'is-dropped'
+    chip.classList.add(state)
+    const tip = state === 'is-key' ? 'grouped by' : state === 'is-set' ? 'kept' : 'dropped: click to keep it'
+    chip.innerHTML = `<button type="button" class="st-pool-set" title="${esc(c.name)}${c.type ? ` (${esc(c.type)})` : ''}: ${tip}">${esc(c.name)}${c.type ? `<span class="pool-field-type">${esc(c.type)}</span>` : ''}</button>`
+    if (state === 'is-dropped') chip.querySelector('.st-pool-set')!.addEventListener('click', () => actions._aggKeep?.(c.name))
+    if (state !== 'is-key') {
+      chip.insertAdjacentHTML('beforeend', `<button type="button" class="st-pool-group" title="Group by ${esc(c.name)}" aria-label="Group by ${esc(c.name)}">by</button>`)
+      chip.querySelector('.st-pool-group')!.addEventListener('click', () => actions._aggGroup?.(c.name))
+    }
+    list.appendChild(chip)
+  }
+  if (!list.children.length) {
+    list.innerHTML = '<div class="pool-empty">No columns known yet. Set the base source first.</div>'
+  }
+  card.querySelectorAll<HTMLElement & { _recheck?: () => void }>('[data-agg-row]').forEach(r => r._recheck?.())
+}
+
 export function collectAvailableColumnsScoped(scope: Element): Set<string> {
   const baseId = scope.querySelector<HTMLInputElement>('.pl-base')?.value
   const cols = new Set<string>()
@@ -404,6 +456,7 @@ export function updateDatalistsScoped(scope: Element): void {
     ensureComboOption(inp, cur)
   })
   scope.querySelectorAll<HTMLElement>('.pl-steps > .card[data-type="attributes"]').forEach(card => renderAttributesPool(scope, card))
+  scope.querySelectorAll<HTMLElement>('.pl-steps > .card:is([data-type="dissolve"], [data-type="combine_lines"])').forEach(card => renderAggregatePool(scope, card))
 
   // Populate each step's source-column selects from the inspected source schema.
   // `[data-src-col]` is attribute_join's `right`, which picks from the same schema as the

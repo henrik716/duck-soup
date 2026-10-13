@@ -108,11 +108,14 @@ export async function previewConfig(
   /** Who's asking: previews from the same client replace each other (default: this tab's
    *  main preview). A live check passes its own, so it doesn't stop the main preview. */
   client = CLIENT_ID,
+  /** Run the chain on the first `sample` base features only (a live check), rather than
+   *  on all the data a dissolve or summarize step would otherwise read. */
+  sample?: number,
 ): Promise<PreviewResponse> {
   const r = await fetch('/api/preview', {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects, client }),
+    body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects, client, sample }),
   })
   return r.json()
 }

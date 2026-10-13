@@ -37,7 +37,7 @@ from . import sources as src_readers
 from . import mapping, steps
 from .config import (
     Attributes, Buffer, CombineLines, Config, Dissolve, NearestNeighbor, OutputLayer, PipelineDef,
-    Snapshot, is_parquet_path, reject_layer_names,
+    Snapshot, NUMERIC_AGGREGATE_HOWS, is_parquet_path, reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -63,6 +63,8 @@ class MappingError(ValueError):
         detail = str(error).splitlines()[0].strip()
         if isinstance(item, str):
             name, kind = item, "column"
+        elif getattr(item, "how", None) is not None:  # an aggregate without SQL
+            name, kind = item.to, item.how
         else:
             name = item.to
             kind = next(
@@ -72,6 +74,32 @@ class MappingError(ValueError):
         head = f"{label} '{name}' ({kind}): {detail}"
         super().__init__("\n".join([head, path, f"  {detail}"]))
         self.path = path
+
+
+_NUMERIC_TYPES = (
+    "TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT",
+    "UINTEGER", "UBIGINT", "UHUGEINT", "FLOAT", "DOUBLE", "DECIMAL",
+)
+
+
+def _is_numeric(typ: str) -> bool:
+    return typ.upper().startswith(_NUMERIC_TYPES)
+
+
+def _type_in_words(typ: str) -> str:
+    """A DuckDB column type as an error message can say it: "text", "a date", ..."""
+    t = typ.upper()
+    if t == "VARCHAR":
+        return "text"
+    if t == "BOOLEAN":
+        return "true/false"
+    if t == "DATE":
+        return "a date"
+    if t.startswith("TIMESTAMP"):
+        return "a date and time"
+    if t.startswith("GEOMETRY"):
+        return "a geometry"
+    return f"of type {typ}"
 
 
 def _parse_error_in_expr(con: duckdb.DuckDBPyConnection, item, error: Exception) -> Exception:
@@ -187,7 +215,8 @@ class Engine:
                     f"row_number() OVER () AS __src_row FROM {read}"
                 )
             else:
-                select = f"SELECT * FROM {read}"
+                # Numbered too, so "first match" in an attribute_join means the first row.
+                select = f"SELECT *, row_number() OVER () AS __src_row FROM {read}"
             self.log(f"source '{s.id}' ({s.format}) -> {_ident(view)}")
             self._emit(con, view, select, "source", id=s.id, title=f"source '{s.id}' ({s.format})")
 
@@ -301,6 +330,11 @@ class Engine:
             if build is None:  # pragma: no cover
                 raise ValueError(f"unknown step type: {step}")
             sql = build(cur, step, lambda m, i=i: self.log(f"step {i}: {m}"), self._step_context())
+            if con is not None and getattr(step, "match", None) == "summarize":
+                self._check_aggregate_columns(
+                    con, i, [(f"fields.{out}", agg) for out, agg in step.fields.items()],
+                    f"src_{step.source}", "field", f"in '{step.source}'",
+                )
             if con is not None and isinstance(step, (Attributes, Dissolve, CombineLines)):
                 self._check_step(con, i, step, cur)
             new_view = f"step_{i}"
@@ -335,6 +369,10 @@ class Engine:
                 return e
             return None
 
+        if not isinstance(step, Attributes):
+            self._check_aggregate_columns(
+                con, i, [(f"aggregates.{j}", agg) for j, agg in enumerate(step.aggregates)], prev,
+            )
         failure = plan_error(step)
         if failure is None:
             return
@@ -360,6 +398,38 @@ class Engine:
                 _parse_error_in_expr(con, item, error), label=f"step {i} {what}",
             )
         raise failure
+
+    def _check_aggregate_columns(
+        self, con: duckdb.DuckDBPyConnection, i: int, aggregates: list, view: str,
+        what: str = "aggregate", where: str = "at this step",
+    ) -> None:
+        """Raise MappingError for an aggregate whose `how` can't work on its `from` column (a
+        missing column, a sum of text, ...), in words rather than DuckDB's binder error.
+        `aggregates` are (path within the step, Aggregate) pairs over the rows of `view`."""
+        types = {
+            name.lower(): (name, typ)
+            for name, typ, *_ in con.execute(f"DESCRIBE SELECT * FROM {_ident(view)}").fetchall()
+        }
+        for field, agg in aggregates:
+            if agg.how is None:
+                continue
+            problem = None
+            if agg.how == "from_largest" and "geom" not in types:
+                problem = "from the largest needs geometry, and these rows have none"
+            elif agg.from_ is not None and agg.from_.lower() not in types:
+                problem = f"there's no column '{agg.from_}' {where}"
+            elif agg.from_ is not None and agg.how in NUMERIC_AGGREGATE_HOWS:
+                name, typ = types[agg.from_.lower()]
+                if not _is_numeric(typ):
+                    problem = (
+                        f"{name} is {_type_in_words(typ)}, and {agg.how} only works on numbers. "
+                        "Use one value, most common or all of them instead"
+                    )
+            if problem:
+                raise MappingError(
+                    f"pipelines.{self.pipeline_index}.steps.{i - 1}.{field}", agg,
+                    ValueError(problem), label=f"step {i} {what}",
+                )
 
     # -- mapping ------------------------------------------------------------
     def _check_mapping(self, con: duckdb.DuckDBPyConnection, prev: str, layer: OutputLayer) -> None:
@@ -576,12 +646,18 @@ class Engine:
         preview_until_step: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
         rejects: bool = False,
+        sample: int | None = None,
     ) -> list[dict]:
         """Up to `limit` rows of the output's first layer, or of the step
-        `preview_until_step` (0: the base source), or with `rejects` of that step's rejects."""
+        `preview_until_step` (0: the base source), or with `rejects` of that step's rejects.
+
+        With `sample`, the chain runs on the first `sample` base features only. Without it a
+        step that needs all its rows before it gives any (a dissolve, a summarize) computes
+        over all the data, however small `limit` is: the editor's live checks pass one."""
         with self._session() as (con, workdir):
             prev = self._prepare(
-                con, workdir, bbox=bbox, max_features=limit, limit_steps=preview_until_step,
+                con, workdir, bbox=bbox, max_features=sample or limit, limit_steps=preview_until_step,
+                base_limit=sample,
             )
             if rejects:
                 if preview_until_step not in self.reject_views:
@@ -716,11 +792,13 @@ def preview_config_pipeline(
     bbox: tuple[float, float, float, float] | None = None,
     rejects: bool = False,
     log: Callable[[str], None] | None = None,
+    sample: int | None = None,
 ) -> list[dict]:
     """Preview one pipeline from a Config (defaults to the first)."""
     engine = Engine(_config_pipeline(config, pipeline_idx), log=log, pipeline_index=pipeline_idx)
     return engine.preview(
         limit=limit, preview_until_step=preview_until_step, bbox=bbox, rejects=rejects,
+        sample=sample,
     )
 
 

@@ -55,7 +55,9 @@ export function attachLiveValidation(opts: LiveValidationOptions): LiveValidatio
     pending()
     const ticker = setInterval(() => { if (disposed || mySeq !== seq) clearInterval(ticker); else pending() }, 1000)
     try {
-      const d = await previewConfig(cfg, 0, 5, undefined, undefined, false, client)
+      // A few rows, from the first 1000 base features: without the sample, a check after a
+      // dissolve or summarize would compute it over all the data.
+      const d = await previewConfig(cfg, 0, 5, undefined, undefined, false, client, 1000)
       if (disposed || mySeq !== seq || d.stale) return
       if (d.ok && d.rows) {
         const sample = opts.extractSample

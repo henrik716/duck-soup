@@ -24,9 +24,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..config import (
+    AGGREGATE_HOWS,
     HEADER_ROW_FORMATS,
     JOIN_PREDICATES,
     MAP_FUNCS,
+    NUMERIC_AGGREGATE_HOWS,
     SOURCE_FORMATS,
     STEP_TYPES,
     TABULAR_GEOM_FORMATS,
@@ -51,6 +53,7 @@ from ..sources import (
     list_oapif_collections,
     list_wfs_layers,
 )
+from ..steps import AGGREGATE_SQL
 from ..worker import ENGINE, RUNNER, EngineCancelled, EngineCrashed, EngineSuperseded
 
 ROOT = Path(os.environ.get("DUCK_SOUP_ROOT", Path.home() / "duck-soup")).resolve()
@@ -78,6 +81,11 @@ def meta() -> dict:
         "formats": SOURCE_FORMATS,
         "predicates": JOIN_PREDICATES,
         "funcs": MAP_FUNCS,
+        "aggregate_hows": AGGREGATE_HOWS,
+        "numeric_aggregate_hows": NUMERIC_AGGREGATE_HOWS,
+        # What each `how` compiles to ({col}: the quoted column), so the editor can turn one
+        # into SQL to edit.
+        "aggregate_sql": AGGREGATE_SQL,
         "step_types": STEP_TYPES,
         "tabular_geom_formats": list(TABULAR_GEOM_FORMATS),
         "header_row_formats": list(HEADER_ROW_FORMATS),
@@ -417,6 +425,9 @@ class PreviewRequest(BaseModel):
     bbox: tuple[float, float, float, float] | None = None
     # With preview_until_step: show that step's rejects instead of the rows it passes on.
     rejects: bool = False
+    # Run the chain on the first `sample` base features only (the editor's live checks):
+    # see Engine.preview.
+    sample: int | None = Field(default=None, ge=1)
     # Who's asking (an editor tab): a newer preview from the same client makes this one
     # pointless, so it's skipped or interrupted (see _preview_ticket).
     client: str | None = None
@@ -457,7 +468,7 @@ def preview(req: PreviewRequest) -> dict:
         rows = ENGINE.call(
             "preview", req.config, pipeline_idx=req.pipeline_idx, limit=req.limit,
             preview_until_step=req.preview_until_step, bbox=req.bbox, rejects=req.rejects,
-            tag=("preview", req.client) if req.client else None, stale=stale,
+            sample=req.sample, tag=("preview", req.client) if req.client else None, stale=stale,
         )
         # Sanitize values to ensure JSON serializability (handles non-UTF-8 strings, bytes, etc.)
         safe_rows = []

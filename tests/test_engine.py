@@ -193,6 +193,55 @@ def _step_output(
     return con.execute(sql.replace(" t", f' "{view}"')).fetchall()
 
 
+def test_spatial_join_summarize_aggregates_each_features_matches(tmp_path):
+    zones = [*_ZONES, ("C", _square(20, 20, 21, 21))]  # C contains no point
+    fields = {"n": {"how": "count"}, "names": {"from": "name", "how": "all"}, "lowest": {"from": "name", "how": "min"}}
+    rows = _step_output(
+        tmp_path, zones, _POINTS,
+        [{"type": "spatial_join", "source": "other", "match": "summarize", "fields": fields}],
+        "SELECT name, n, names, lowest FROM t",
+    )
+    assert rows == [("A", 2, "p1, p2", "p1"), ("B", 2, "p2, p4", "p2"), ("C", 0, None, None)]
+    # with rejects, a feature with no match leaves the chain
+    rows = _step_output(
+        tmp_path, zones, _POINTS,
+        [{"type": "spatial_join", "source": "other", "match": "summarize", "fields": fields, "rejects": "lonely"}],
+        "SELECT name FROM t",
+    )
+    assert rows == [("A",), ("B",)]
+
+
+def test_attribute_join_first_is_the_first_source_row_and_summarize_takes_them_all(tmp_path):
+    lookup = [("p1", _point(0, 0)), ("p1", _point(5, 5)), ("p2", _point(1, 1))]
+    first = _step_output(
+        tmp_path, _POINTS, lookup,
+        [{"type": "attribute_join", "source": "other", "left": "name", "right": "name", "fields": {"g": "geom"}}],
+        "SELECT name, ST_AsText(g) FROM t",
+    )
+    assert first == [("p1", "POINT (0 0)"), ("p2", "POINT (1 1)"), ("p3", None), ("p4", None)]
+    summed = _step_output(
+        tmp_path, _POINTS, lookup,
+        [{"type": "attribute_join", "source": "other", "left": "name", "right": "name", "match": "summarize",
+          "fields": {"n": {"how": "count"}, "xs": {"expr": "string_agg(ST_X(geom)::INT::VARCHAR, ',' ORDER BY ST_X(geom))"}}}],
+        "SELECT name, n, xs FROM t",
+    )
+    assert summed == [("p1", 2, "0,5"), ("p2", 1, "1"), ("p3", 0, None), ("p4", 0, None)]
+
+
+def test_summarized_join_fields_explain_a_column_that_cant_work(tmp_path):
+    from duck_soup.engine import MappingError
+
+    with pytest.raises(MappingError) as info:
+        _step_output(tmp_path, _ZONES, _POINTS, [{"type": "spatial_join", "source": "other", "match": "summarize",
+                     "fields": {"total": {"from": "name", "how": "sum"}, "x": {"from": "colour", "how": "any"}}}], "SELECT 1")
+    head, path, _ = str(info.value).split("\n")
+    assert head == "step 1 field 'total' (sum): name is text, and sum only works on numbers. Use one value, most common or all of them instead"
+    assert path == "pipelines.0.steps.0.fields.total"
+    with pytest.raises(MappingError, match="there's no column 'colour' in 'other'"):
+        _step_output(tmp_path, _ZONES, _POINTS, [{"type": "spatial_join", "source": "other", "match": "summarize",
+                     "fields": {"x": {"from": "colour", "how": "any"}}}], "SELECT 1")
+
+
 def test_spatial_join_first_match_keeps_base_order_and_lowest_source_row(tmp_path):
     rows = _step_output(
         tmp_path, _POINTS, _ZONES,
@@ -798,6 +847,114 @@ def test_combine_lines_errors_name_the_aggregate(tmp_path):
     ]}])
     assert head.startswith("step 1 aggregate 'bad' (expr): Binder Error")
     assert path == "pipelines.0.steps.0.aggregates.0"
+
+
+def _roads(tmp_path, step: dict) -> list[dict]:
+    """`step` (a dissolve or combine_lines) over four road segments with a few attributes:
+    a, b and c join end to end on Main St (b is the longest), d is a side road."""
+    import json
+
+    feats = [
+        ("a", "Main St", 30, "A", True, [(0, 0), (10, 0)]),
+        ("b", "Main St", 50, "B", False, [(10, 0), (40, 0)]),
+        ("c", "Main St", 30, "A", None, [(40, 0), (50, 0)]),
+        ("d", "Side Rd", 20, None, True, [(100, 0), (105, 0)]),
+    ]
+    path = tmp_path / "roads.geojson"
+    path.write_text(json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": _line(*coords),
+         "properties": {"id": i, "street": street, "speed": speed, "class": cls, "lit": lit}}
+        for i, street, speed, cls, lit, coords in feats
+    ]}), encoding="utf-8")
+    cfg = load_config_dict({
+        "name": "t", "working_crs": "EPSG:25833", "base": "roads",
+        "sources": [{"id": "roads", "format": "geojson", "uri": str(path), "crs": "EPSG:25833"}],
+        "steps": [step], "mapping": [],
+        "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out", "crs": "EPSG:25833"},
+    })
+    return sorted(preview_config_pipeline(cfg, limit=50), key=lambda r: r["street"])
+
+
+@pytest.mark.parametrize("kind", ["dissolve", "combine_lines"])
+def test_aggregates_without_sql(tmp_path, kind):
+    (main, side) = _roads(tmp_path, {"type": kind, "by": ["street"], "aggregates": [
+        {"from": "class", "how": "most_common"},
+        {"to": "class_of_longest", "from": "class", "how": "from_largest"},
+        {"to": "ids", "from": "id", "how": "all"},
+        {"to": "total_speed", "from": "speed", "how": "sum"},
+        {"to": "mean_speed", "from": "speed", "how": "average"},
+        {"to": "slowest", "from": "speed", "how": "min"},
+        {"to": "fastest", "from": "speed", "how": "max"},
+        {"to": "segments", "how": "count"},
+        {"to": "lit_count", "from": "lit", "how": "count"},  # counts the values, not NULLs
+        {"to": "one", "from": "street", "how": "any"},
+    ]})
+    assert {k: main[k] for k in main if k not in ("__geojson", "street")} == {
+        "class": "A", "class_of_longest": "B", "ids": "a, b, c", "total_speed": 110,
+        "mean_speed": pytest.approx(110 / 3), "slowest": 30, "fastest": 50,
+        "segments": 3, "lit_count": 2, "one": "Main St",
+    }
+    assert (side["ids"], side["class"], side["segments"]) == ("d", None, 1)
+
+
+def test_aggregate_to_defaults_to_its_column_and_needs_a_complete_form(tmp_path):
+    from duck_soup.config import Aggregate
+
+    assert Aggregate.model_validate({"from": "speed", "how": "max"}).to == "speed"
+    assert Aggregate.model_validate({"to": "n", "how": "count"}).from_ is None
+    for bad, msg in [
+        ({"from": "speed"}, "needs 'how'"),
+        ({"to": "x", "how": "sum"}, "needs a column"),
+        ({"how": "count"}, "needs a name"),
+        ({"to": "x", "from": "speed", "how": "sum", "expr": "sum(speed)"}, "not both"),
+        ({"from": "speed", "how": "median"}, "how"),
+    ]:
+        with pytest.raises(ValueError, match=msg):
+            Aggregate.model_validate(bad)
+
+
+def test_grouped_steps_dump_type_first_and_aggregates_without_their_default_name(tmp_path):
+    import yaml
+
+    from duck_soup.config import dump_config_yaml
+
+    cfg = _config(tmp_path, [("a", _line((0, 0), (1, 0)))], [{"type": "combine_lines", "aggregates": [
+        {"from": "name", "how": "any"}, {"to": "first", "from": "name", "how": "min"},
+    ]}], [])
+    step = yaml.safe_load(dump_config_yaml(cfg))["pipelines"][0]["steps"][0]
+    assert list(step)[0] == "type"
+    assert step["aggregates"] == [{"from": "name", "how": "any"}, {"to": "first", "from": "name", "how": "min"}]
+
+
+def test_preview_sample_runs_the_chain_on_the_first_base_features(tmp_path):
+    base = [(f"r{i}", _line((i * 10, 0), (i * 10 + 10, 0))) for i in range(6)]  # one chain of 6
+    cfg = _config(tmp_path, base, [{"type": "combine_lines", "aggregates": [{"to": "n", "how": "count"}]}], [])
+    assert [r["n"] for r in preview_config_pipeline(cfg, limit=50)] == [6]
+    assert [r["n"] for r in preview_config_pipeline(cfg, limit=50, sample=4)] == [4]
+
+
+def test_aggregate_sql_covers_every_how():
+    from duck_soup.config import AGGREGATE_HOWS
+    from duck_soup.steps import AGGREGATE_SQL
+
+    assert list(AGGREGATE_SQL) == AGGREGATE_HOWS
+
+
+@pytest.mark.parametrize("agg,message", [
+    ({"to": "s", "from": "class", "how": "sum"}, "class is text, and sum only works on numbers"),
+    ({"to": "s", "from": "lit", "how": "average"}, "lit is true/false, and average only works"),
+    ({"to": "s", "from": "colour", "how": "any"}, "there's no column 'colour' at this step"),
+])
+def test_aggregates_without_sql_explain_a_column_that_cant_work(tmp_path, agg, message):
+    from duck_soup.engine import MappingError
+
+    with pytest.raises(MappingError) as info:
+        _roads(tmp_path, {"type": "combine_lines", "by": ["street"], "aggregates": [
+            {"from": "speed", "how": "max"}, agg,
+        ]})
+    head, path, _ = str(info.value).split("\n")
+    assert head.startswith(f"step 1 aggregate 's' ({agg['how']}): {message}")
+    assert path == "pipelines.0.steps.0.aggregates.1"
 
 
 def _step_error(tmp_path, steps):

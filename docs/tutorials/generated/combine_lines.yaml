@@ -13,5 +13,5 @@ steps:
   - name
   - lamps
   aggregates:
-  - {to: pieces, expr: "count(*)"}
-  - {to: materials, expr: "string_agg(DISTINCT material, ', ' ORDER BY material)"}
+  - {to: pieces, how: count}
+  - {to: materials, from: material, how: all}

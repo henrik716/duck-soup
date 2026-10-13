@@ -4,5 +4,5 @@ steps:
   by:
   - ward
   aggregates:
-  - {to: population, expr: "sum(population)"}
-  - {to: districts, expr: "string_agg(district_name, ', ' ORDER BY district_name)"}
+  - {from: population, how: sum}
+  - {to: districts, from: district_name, how: all}

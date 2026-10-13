@@ -59,7 +59,11 @@ The body depends on the step type:
 
 - **source**: which source, derived source or snapshot to join against or use as a mask.
 - **predicate**: `intersects`, `contains` or `within` (spatial join, clip, erase).
-- **match**: `first` (one row per base feature) or `all` (one row per match). Spatial join only.
+- **match**: `first` (one row per base feature), `all` (one row per match, spatial join
+  only) or `summarize` (one row per base feature, with its matches combined). With `first`, a
+  warning under the field says how many features in the sample data match several.
+  With `summarize`, each pulled field gets a dropdown for how to combine the matches' values
+  (count, all of them, most common, sum, …, or SQL).
 - **when several match**: with `match: first`, which match a base feature keeps. `first` takes
   the match that comes first in the join source. `largest_overlap` takes the one with the
   biggest intersection area. Spatial join only, and hidden when **match** is `all`.
@@ -69,16 +73,27 @@ The body depends on the step type:
 - **pulled fields**: the `source column → output name` pairs this step copies in. **+ field**
   adds one, and **+ all columns** pulls every column of the join source not already pulled. A
   step with no pulled fields still matches, but copies nothing.
-- **where**: for a filter, a SQL boolean such as `pond IS NOT NULL`, checked live against
-  sample data.
+- **condition**: for a filter, which rows to keep, as rows of *column · operator · value*
+  (is, is not, greater than, contains, is empty, is one of, …), all of which hold or any of
+  which does. The **<>** button shows it as SQL, to write anything the rows can't; SQL the
+  rows can show switches back to them. It's checked live against sample data.
 - **distance**, **max distance**, **distance field**: in working-CRS units.
-- **group by**: for dissolve and combine lines, the keys features are grouped on. A key is a column, or a SQL
-  expression with a name in **as**, to group by a computed value. Leave the list empty to
-  dissolve everything into one feature (or, for combine lines, to join any lines that meet).
-- **aggregates**: for dissolve, columns computed per group (for combine lines, per chain): a name, and a SQL aggregate such as
-  `sum(population)` or `string_agg(name, ', ')`. The expression builder (the pencil icon) lists
-  the aggregate functions first. Its live check runs the dissolve, so it catches a column used
-  outside an aggregate. Only the keys and aggregates are kept. Every other column is dropped.
+- **columns reaching this step**: for dissolve and combine lines, every column coming in.
+  Group keys are highlighted, kept columns outlined, and the ones the step would drop struck
+  through. Click a struck-through column to keep it, or its **by** to group by it.
+- **group by**: for dissolve and combine lines, the keys features are grouped on. A key is a
+  column, or a SQL expression with a name in **as**, to group by a computed value. Leave the
+  list empty to dissolve everything into one feature (or, for combine lines, to join any lines
+  that meet).
+- **other columns**: for dissolve and combine lines, the columns kept besides the keys, with
+  one value per group (per line, for combine lines). Each row is a name, how to combine the
+  values (one value, most common, from the largest, all of them, sum, average, lowest,
+  highest, count) and the column. Sum and average are only offered for number columns.
+  **+ keep all** keeps every dropped column as one value each, and **+ count** adds the
+  number of features combined. The **<>** button
+  switches a row to SQL, filled in with what it did. The expression builder lists the
+  aggregate functions first, and its live check runs the step, so it catches a column used
+  outside an aggregate. See [Keeping other columns](../reference/steps.md#keeping-other-columns).
 - **only join lines running the same way**: for combine lines, on by default. Untick it to let
   a line be reversed so it joins one running the other way.
 - **Update Attributes** (an attributes step) changes only what you list. Every other column is

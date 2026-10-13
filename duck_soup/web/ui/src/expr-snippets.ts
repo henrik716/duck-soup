@@ -93,8 +93,8 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
   }
 ]
 
-// Shown (first) only where an aggregate is written: a dissolve step's aggregate columns,
-// which compute one value per group from its rows.
+// Shown (first) only where an aggregate is written in SQL: a dissolve or combine_lines step's
+// aggregate columns, which compute one value per group (or line) from its rows.
 export const AGGREGATE_SNIPPETS: ExprSnippetCategory = {
   category: 'Aggregate (per group)',
   snippets: [
@@ -106,7 +106,11 @@ export const AGGREGATE_SNIPPETS: ExprSnippetCategory = {
     { name: 'string_agg', code: `string_agg(DISTINCT column, ', ' ORDER BY column)`, doc: 'The values joined into one string' },
     { name: 'list', code: 'list(DISTINCT column)', doc: 'The values as a list' },
     { name: 'any_value', code: 'any_value(column)', doc: 'A value from one of the rows (when they all share it)' },
-    { name: 'arg_max', code: 'arg_max(column, ST_Area(geom))', doc: 'The value from the row with the largest second argument' },
+    { name: 'mode', code: 'mode(column)', doc: 'The most common value' },
+    { name: 'arg_max', code: 'arg_max(column, ST_Area(geom))', doc: 'The value from the row with the largest second argument (here: the largest area)' },
+    { name: 'arg_max (longest)', code: 'arg_max(column, ST_Length(geom))', doc: 'The value from the longest line' },
+    { name: 'bool_and', code: 'bool_and(column)', doc: 'True only if it is true on every row' },
+    { name: 'bool_or', code: 'bool_or(column)', doc: 'True if it is true on any row' },
     { name: 'count(DISTINCT)', code: 'count(DISTINCT column)', doc: 'Number of different values' },
   ],
 }

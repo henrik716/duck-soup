@@ -40,7 +40,7 @@ Copies attributes from features in another source that spatially match each base
 - type: spatial_join
   source: ponds
   predicate: intersects        # intersects | contains | within
-  match: first                 # first | all
+  match: first                 # first | all | summarize
   on_multiple: largest_overlap # first | largest_overlap (only with match: first)
   fields: {pond_name: name, pond_vibe: vibe}
 ```
@@ -49,15 +49,35 @@ Copies attributes from features in another source that spatially match each base
 |---|---|---|
 | `source` | **required** | Source, derived source or snapshot to join against. |
 | `predicate` | `intersects` | Relationship from the base feature's point of view: base *intersects* / *contains* / *is within* the source feature. |
-| `match` | `first` | `first`: one row per base feature (NULL fields when nothing matches). `all`: one row per matching pair; base features with no match are kept once, with NULL fields. |
+| `match` | `first` | `first`: one row per base feature (NULL fields when nothing matches). `all`: one row per matching pair; base features with no match are kept once, with NULL fields. `summarize`: one row per base feature, each field combining the values of all its matches (see [Summarizing matches](#summarizing-matches)). |
 | `on_multiple` | `first` | With `match: first`, which match wins when several do. `first` = the lowest original row order in the source (deterministic). `largest_overlap` = the biggest intersection area (ties fall back to row order). |
 | `fields` | `{}` | Columns to copy. |
 | `rejects` | – | Layer for the base features with no match, which then leave the chain. See [`rejects`](#rejects). |
 
 !!! warning "`match: first` hides multiple matches"
     A feeding zone that reaches into two ponds silently gets only one of them. Use
-    `on_multiple: largest_overlap` for "which one is it mostly in", or `match: all` to see
-    every match.
+    `on_multiple: largest_overlap` for "which one is it mostly in", `match: summarize` to
+    count or list them, or `match: all` to see every match. The editor warns when features in
+    the sample data match several.
+
+### Summarizing matches
+
+With `match: summarize`, each feature keeps one row, and each field says how to combine the
+values of all its matches, the same way as [Keeping other columns](#keeping-other-columns):
+
+```yaml
+- type: spatial_join
+  source: trees
+  match: summarize
+  fields:
+    tree_count: {how: count}
+    species:    {from: species, how: all}
+    tallest:    {from: height, how: max}
+    crowns_m2:  {expr: "sum(ST_Area(geom))"}
+```
+
+A feature with no matches gets a count of 0 and NULL for the rest. `from_largest` takes the
+value of the largest matching feature, and an `expr` sees the join source's columns.
 
 ## `attribute_join`
 
@@ -76,11 +96,24 @@ A left join on a column value, like a VLOOKUP.
 | `source` | The source to look values up in (spatial or tabular). |
 | `left` | A SQL expression evaluated on the current row: usually just a column name, but it can be `upper(code)` or a quoted literal like `'Mallard'`. |
 | `right` | Column on the join source that must equal `left`. |
-| `fields` | Columns to copy. |
+| `match` | `first` (default): the first matching row, in the source's row order. `summarize`: each field combines the values of all the matching rows. |
+| `fields` | Columns to copy. With `match: summarize`, how to combine each one, as in [Summarizing matches](#summarizing-matches). |
 | `rejects` | Layer for the rows with no match, which then leave the chain. See [`rejects`](#rejects). |
 
-Each row picks up at most **one** match. If `right` has duplicate values, which duplicate is
-used isn't defined, so make the key unique.
+With `match: first`, each row picks up at most **one** match: if `right` has duplicate
+values, the first of them in the source. The editor warns when rows in the sample data
+match several. To use all of them, summarize:
+
+```yaml
+- type: attribute_join
+  source: inspections
+  left: pond_id
+  right: pond_id
+  match: summarize
+  fields:
+    inspections: {how: count}
+    last_inspected: {from: date, how: max}
+```
 
 ## `nearest_neighbor`
 
@@ -199,7 +232,7 @@ Merges geometries that share the same group-by values.
 ```
 
 A `by` entry is a column name, or a SQL expression with a name (`{to, expr}`) to group by a
-computed value. `aggregates` adds columns computed per group with a SQL aggregate function:
+computed value. `aggregates` keeps other columns, with one value per group:
 
 ```yaml
 - type: dissolve
@@ -207,17 +240,15 @@ computed value. `aggregates` adds columns computed per group with a SQL aggregat
     - pond
     - {to: decade, expr: "floor(year(spotted) / 10) * 10"}
   aggregates:
-    - {to: ducks, expr: "count(*)"}
-    - {to: crumbs, expr: "sum(bread_crumbs)"}
-    - {to: names, expr: "string_agg(DISTINCT name, ', ' ORDER BY name)"}
-    - {to: biggest, expr: "arg_max(name, ST_Area(geom))"}
+    - {to: ducks, how: count}
+    - {to: crumbs, from: bread_crumbs, how: sum}
+    - {to: names, from: name, how: all}
+    - {from: species, how: most_common}
 ```
 
-**Only the `by` keys and the `aggregates` are kept.** Every other column is dropped. An
-aggregate can use any column of the rows going in, but only inside an aggregate function
-(`count`, `sum`, `avg`, `min`, `max`, `string_agg`, `list`, `any_value`, `arg_max`, …). A
-bare column that isn't a key is an error. Without `by`, the aggregates are computed over
-everything, in the one feature that's left.
+**Only the `by` keys and the `aggregates` are kept.** Every other column is dropped. See
+[Keeping other columns](#keeping-other-columns) for how to choose. Without `by`, the
+aggregates are computed over everything, in the one feature that's left.
 
 ## `combine_lines`
 
@@ -228,7 +259,8 @@ same `by` values, and each connected chain becomes one feature.
 - type: combine_lines
   by: [road_name, speed_limit]   # omit or [] to combine all lines
   aggregates:
-    - {to: segments, expr: "count(*)"}
+    - {to: segments, how: count}
+    - {from: surface, how: from_largest}
     - {to: length_m, expr: "sum(ST_Length(geom))"}
   preserve_direction: true        # default
 ```
@@ -238,7 +270,7 @@ difference is what makes up a feature:
 
 - **One feature per connected chain, not per group.** Two stretches of the same road that
   don't touch stay two features, each a single line.
-- **Aggregates are computed per chain**, over the features that make it up: `count(*)` is
+- **Aggregates are computed per chain**, over the features that make it up: a `count` is
   the number of segments in that chain, not in the whole group.
 - **A chain stops where three or more lines meet**, so a street with side roads joining it
   comes out as one line between each pair of junctions.
@@ -254,6 +286,54 @@ each, with their aggregates computed over that one feature.
 
 Use `dissolve` instead when you want one feature per group whatever touches what, or for
 polygons.
+
+## Keeping other columns
+
+`dissolve` and `combine_lines` turn many features into one, so a column that isn't a `by` key
+can have several values where the result has room for one. It's dropped unless an
+`aggregates` entry says how to combine them. Give the column (`from`) and `how`:
+
+| `how` | In the editor | Gives | Works on |
+|---|---|---|---|
+| `any` | one value | One of the values, picked at random. For a column that's the same throughout | anything |
+| `most_common` | most common | The value most features have | anything |
+| `from_largest` | from the largest | The value of the longest line or the largest area | anything |
+| `all` | all of them | Every different value, as text joined with `, ` | anything |
+| `sum` | sum | The values added up | numbers |
+| `average` | average | The mean | numbers |
+| `min` / `max` | lowest / highest | Smallest / largest number, earliest / latest date, first / last alphabetically | numbers, dates, text |
+| `count` | count | Without `from`: how many features were combined. With it: how many have a value | anything |
+
+```yaml
+aggregates:
+  - {from: bruksklasse, how: most_common}        # keeps its name
+  - {to: streets, from: LOK.GATENAVN, how: all}  # `to` renames it
+  - {to: segments, how: count}
+```
+
+- `to` is the column's name after the step. It defaults to the `from` column's.
+- **Group by it or aggregate it?** Group by a column when a change in its value should start
+  a new feature: two speed limits make two lines. Aggregate it when it shouldn't.
+- Empty values (NULL) are skipped. A result is only empty when every value is.
+- `any` really is random when the values differ. Use it for columns that are the same
+  throughout a group; for the others, group by them or pick another `how`.
+- `sum` or `average` on a column that isn't a number is an error that says so, before
+  anything runs.
+
+For anything else, write a SQL aggregate in `expr` instead of `from` and `how`:
+
+```yaml
+aggregates:
+  - {to: length_m, expr: "sum(ST_Length(geom))"}
+  - {to: newest_class, expr: "arg_max(bruksklasse, oppdatert)"}
+  - {to: all_lit, expr: "bool_and(lit)"}
+```
+
+An expression can use any column of the rows going in, but only inside an aggregate function
+(`count`, `sum`, `avg`, `min`, `max`, `mode`, `string_agg`, `list`, `any_value`, `arg_max`,
+`bool_and`, …). A bare column that isn't a key is an error. Quote a column name with dots or
+other special characters: `mode("NET.TYPEVEG")`. In a GeoPackage, prefer `string_agg` to
+`list`: GeoPackage has no list type.
 
 ## `filter`
 

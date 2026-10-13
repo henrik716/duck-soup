@@ -99,9 +99,10 @@
     Preview step by step to find which.
 
 ??? question "Columns disappeared after a step"
-    `dissolve` and `combine_lines` keep only their `by` keys and their `aggregates`. Keep a value per group with an
-    aggregate (`any_value(name)`, `sum(population)`, `string_agg(name, ', ')`), dissolve on
-    more columns, or join the attributes back in afterwards. An `attributes` step's `drop`
+    `dissolve` and `combine_lines` keep only their `by` keys and their `aggregates`. Keep a
+    value per group with an aggregate (`{from: name, how: most_common}`, or **+ keep all** on
+    the card), group by more columns, or join the attributes back in afterwards. See
+    [Keeping other columns](reference/steps.md#keeping-other-columns). An `attributes` step's `drop`
     also removes columns.
 
 ??? question "A column I cast is full of NULLs"

@@ -32,9 +32,9 @@ with A as the base.
 
 | FME transformer | duck soup |
 |---|---|
-| PointOnAreaOverlayer, SpatialRelator | [`spatial_join`](../reference/steps.md#spatial_join) (`predicate`: intersects / contains / within) |
+| PointOnAreaOverlayer, SpatialRelator | [`spatial_join`](../reference/steps.md#spatial_join) (`predicate`: intersects / contains / within). Their match counts and lists: [`match: summarize`](../reference/steps.md#summarizing-matches) |
 | SpatialFilter | `spatial_join` with [`rejects`](../reference/steps.md#rejects): matches go on as *Passed*, the rest to the rejects layer as *Failed* |
-| FeatureMerger, DatabaseJoiner, Joiner | [`attribute_join`](../reference/steps.md#attribute_join) |
+| FeatureMerger, DatabaseJoiner, Joiner | [`attribute_join`](../reference/steps.md#attribute_join); a FeatureMerger's list of all matches: `match: summarize` |
 | NeighborFinder | [`nearest_neighbor`](../reference/steps.md#nearest_neighbor) |
 | AreaOnAreaOverlayer, LineOnAreaOverlayer | [`intersect_overlay`](../reference/steps.md#intersect_overlay) |
 | LineOnLineOverlayer | [`line_overlay`](../reference/steps.md#line_overlay), one step per overlay dataset |

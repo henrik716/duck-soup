@@ -7,11 +7,15 @@ import { mapRow, type MapRowElement } from './map-row'
 import { resolveSchemaScoped, collectColumnsBeforeStep } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
 import { exprField, exprValue } from '../expr-field'
-import { AGGREGATE_SNIPPETS } from '../expr-snippets'
 import { fieldPreviewConfig } from '../field-preview'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Attributes, ExprColumn, MapItem } from '../types'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Attributes, ExprColumn, MapItem, Aggregate } from '../types'
 import { renderIcons } from '../icons'
+import { attachConditionBuilder } from '../condition-builder'
+import { howOptionsHtml } from './aggregate-row'
+import { wireMatchWarning } from './match-check'
+import { addAggregateRow, droppedColumns, readAggregateRows, type AggregateListContext } from './aggregate-row'
 import { showToast } from '../toast'
+import { quoteIdent } from '../aggregates'
 
 // ---- step card ----
 const STEP_ICONS: Record<string, string> = {
@@ -51,15 +55,15 @@ const STEP_LABELS: Record<string, string> = {
 }
 
 const STEP_HINTS: Record<string, string> = {
-  spatial_join: 'Copies attributes from the first spatially matching feature in the join source.',
-  attribute_join: 'Copies attributes from a row in the join source matched on a column value.',
+  spatial_join: 'Copies attributes from the spatially matching feature in the join source: the first match, a row per match, or a summary of all the matches (a count, a list, a sum, …).',
+  attribute_join: 'Copies attributes from a row in the join source matched on a column value, or summarizes all the matching rows (a count, a list, a sum, …).',
   nearest_neighbor: 'Copies attributes (and optionally the distance) from the closest feature in another source, regardless of overlap.',
   buffer: 'Expands (positive) or shrinks (negative) feature geometry by a fixed distance in working CRS units (e.g. metres). Requires a spatial base source.',
   centroid: 'Replaces each feature\'s geometry with its centroid point. Requires a spatial base source.',
   clip: 'Clips base features to their overlap with a mask source. Features with no overlap are dropped. Both sources must be spatial.',
   erase: 'Removes the overlap with a mask source from base feature geometry. Non-overlapping features are kept unchanged. Both sources must be spatial.',
-  dissolve: 'Merges features that share the same group-by values, combining their geometries via union. Group by columns or SQL expressions; keep other values per group with aggregates (sum, count, string_agg, …). Every other column is dropped.',
-  combine_lines: 'Joins lines that meet end to end into longer lines: one feature per connected chain of lines that share the group-by values. A chain stops where three or more lines meet. Keep other values per chain with aggregates (sum, count, string_agg, …); every other column is dropped. Features that are not lines are kept one per feature.',
+  dissolve: 'Merges features that share the same group-by values, combining their geometries via union. Group by columns or SQL expressions. Every other column is dropped unless you keep it, with one value per group (most common, sum, all of them, …).',
+  combine_lines: 'Joins lines that meet end to end into longer lines: one feature per connected chain of lines that share the group-by values. A chain stops where three or more lines meet. Every other column is dropped unless you keep it, with one value per line (most common, sum, all of them, …). Features that are not lines are kept one per feature.',
   intersect_overlay: 'Produces one output row per intersecting (base × source) pair with the intersection as geometry. Row count may increase significantly. Both sources must be spatial.',
   line_overlay: 'Cuts the lines where they lie on top of the source lines. Shared stretches get the source fields; every other piece is kept with empty fields, so the complete network flows on to the next step. Chain one per overlay dataset.',
   filter: 'Drops rows where this SQL condition is false — e.g. reject rows a prior join left unmatched.',
@@ -70,6 +74,13 @@ const STEP_HINTS: Record<string, string> = {
 
 const HEAD_STYLE = 'font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px'
 const PLUS_ICON = '<i data-lucide="plus" style="width:12px;height:12px"></i>'
+
+// A join's `match`: what to do when a feature matches several.
+const MATCH_OPTIONS = [
+  { value: 'first', label: '<span style="font-family:var(--mono);font-weight:600;">first</span> <span data-tag style="font-size:10px;color:var(--muted);">keep one match</span>' },
+  { value: 'all', label: '<span style="font-family:var(--mono);font-weight:600;">all</span> <span data-tag style="font-size:10px;color:var(--muted);">a row per match</span>' },
+  { value: 'summarize', label: '<span style="font-family:var(--mono);font-weight:600;">summarize</span> <span data-tag style="font-size:10px;color:var(--muted);">count, list, sum … the matches</span>' },
+]
 
 const KINDS_WITH_SOURCE = ['spatial_join', 'attribute_join', 'nearest_neighbor', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'merge']
 const KINDS_WITH_PREDICATE = ['spatial_join', 'clip', 'erase']
@@ -104,7 +115,7 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
     bodyHtml += `<div class="row" style="margin-top:8px${kind === 'attribute_join' ? ';align-items:flex-start' : ''}">
       <label class="field grow">source${comboField('data-k="source"', '', sourceIds, '', 'No sources defined yet — add one above')}</label>
       ${hasPredicate ? `<label class="field grow">predicate${comboField('data-k="predicate"', predicateVal, META.predicates)}</label>` : ''}
-      ${kind === 'spatial_join' ? `<label class="field grow">match${comboField('data-k="match"', matchVal, ['first', 'all'], 'first')}</label>
+      ${kind === 'spatial_join' ? `<label class="field grow" title="What to do when a feature matches several">match${comboField('data-k="match"', matchVal, MATCH_OPTIONS, 'first')}</label>
         <label class="field grow" data-on-multiple-field title="Which match to keep when a feature matches several — only applies to match: first">when several match${comboField('data-k="on_multiple"', onMultipleVal, [
           { value: 'first', label: '<span style="font-family:var(--mono);font-weight:600;">first</span> <span data-tag style="font-size:10px;color:var(--muted);">join source row order</span>' },
           { value: 'largest_overlap', label: '<span style="font-family:var(--mono);font-weight:600;">largest_overlap</span> <span data-tag style="font-size:10px;color:var(--muted);">biggest intersection area</span>' },
@@ -113,15 +124,18 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
         <label class="field grow" title="A column on the running row, or a SQL literal such as 'Embassies'">left column${comboField('data-k="left" data-from-list="1"', '', [], "category or 'Embassies'", 'No upstream columns yet — set the base source')}
           <div class="expr-validation-msg" data-left-validation></div></label>
         <label class="field grow" title="The column on the join source to match against">right column${comboField('data-k="right" data-src-col="1"', '', [], '— column —', 'Pick a source for this step first')}
+          <div class="expr-validation-msg" aria-hidden="true"></div></label>
+        <label class="field grow" title="What to do when a row matches several rows of the source">match${comboField('data-k="match"', matchVal, MATCH_OPTIONS.filter(o => o.value !== 'all'), 'first')}
           <div class="expr-validation-msg" aria-hidden="true"></div></label>` : ''}
-    </div>`
+    </div>
+    ${kind === 'spatial_join' || kind === 'attribute_join' ? '<div class="expr-validation-msg" data-match-warning></div>' : ''}`
     if (kind === 'merge') {
       bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['merge']}</p>`
     }
   }
   if (kind === 'filter') {
     bodyHtml += `<div class="row" style="margin-top:8px">
-      <label class="field grow">where (SQL boolean expression)<input data-k="where" placeholder="matched_name IS NOT NULL">
+      <label class="field grow">condition<input data-k="where" placeholder="matched_name IS NOT NULL">
         <div class="expr-validation-msg" data-where-validation></div></label>
     </div>`
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['filter']}</p>`
@@ -153,9 +167,8 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['centroid']}</p>`
   }
   if (kind === 'dissolve' || kind === 'combine_lines') {
-    const per = kind === 'dissolve' ? 'group' : 'chain'
+    const per = kind === 'dissolve' ? 'group' : 'line'
     const empty = kind === 'dissolve' ? 'dissolve all' : 'combine all lines'
-    bodyHtml += `<p class="hint" style="margin-top:8px">⚠ Only the group-by keys and aggregates below are kept after this step.</p>`
     if (kind === 'combine_lines') {
       const preserve = (st as Partial<CombineLines>).preserve_direction !== false
       bodyHtml += `<div class="row" style="margin-top:8px">
@@ -163,15 +176,24 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
           <input type="checkbox" data-k="preserve_direction" ${preserve ? 'checked' : ''}> only join lines running the same way</label>
       </div>`
     }
-    bodyHtml += `<div style="margin-top:10px">
+    bodyHtml += `<details class="st-pool" open style="margin-top:10px">
+      <summary class="head" style="${HEAD_STYLE};cursor:pointer">columns reaching this step&nbsp;<span style="font-weight:normal;text-transform:none;letter-spacing:0">(click one to keep it · <b>by</b> to group by it · struck through = dropped)</span></summary>
+      <div class="st-pool-list"></div>
+    </details>
+    <div style="margin-top:10px">
       <span class="head" style="${HEAD_STYLE}">group by&nbsp;<span style="font-weight:normal">(a column, or a SQL expression with a name · empty = ${empty})</span></span>
       <div data-by-cols></div>
       <button class="mini ghost" data-addby style="margin-top:6px">${PLUS_ICON} key</button>
     </div>
     <div style="margin-top:10px">
-      <span class="head" style="${HEAD_STYLE}">aggregates&nbsp;<span style="font-weight:normal">(one value per ${per}, e.g. ${kind === 'dissolve' ? 'sum(population)' : 'sum(ST_Length(geom))'})</span></span>
+      <span class="head" style="${HEAD_STYLE}">other columns&nbsp;<span style="font-weight:normal">(one value per ${per})</span></span>
+      <p class="hint" style="margin:0 0 6px">A column you don't group by is dropped unless you keep it here. Pick how its values are combined: one value, the most common, all of them, a sum, …</p>
       <div data-aggs></div>
-      <button class="mini ghost" data-addagg style="margin-top:6px">${PLUS_ICON} aggregate</button>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="mini ghost" data-addagg>${PLUS_ICON} column</button>
+        <button class="mini ghost" data-keepall title="Keep every dropped column, as one value each">${PLUS_ICON} keep all</button>
+        <button class="mini ghost" data-addcount title="How many features each ${per} was made from">${PLUS_ICON} count</button>
+      </div>
     </div>`
   }
   if (kind === 'attributes') {
@@ -195,6 +217,7 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
   if (hasFields) {
     bodyHtml += `<div style="margin-top:10px">
       <span class="head" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">pulled fields&nbsp; source column → output name</span>
+      <p class="hint f-how" style="margin:0 0 6px">Each field combines the values of all the matches: how many there are, all of them, the most common, a sum, …</p>
       <div data-fields></div>
       <div class="fields-empty" data-fields-empty>Nothing pulled yet — this step will match features but copy no attributes.</div>
       <div style="display:flex;gap:6px;margin-top:6px">
@@ -287,7 +310,8 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   }
   // hydrate pulled fields
   if (hasFields) {
-    Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay | LineOverlay>).fields || {}).forEach(([o, col]) => addField(o, col))
+    Object.entries((st as Partial<SpatialJoin | AttributeJoin | NearestNeighbor | IntersectOverlay | LineOverlay>).fields || {}).forEach(([o, spec]) =>
+      typeof spec === 'string' ? addField(o, spec) : addField(o, spec.from ?? '', spec.expr ? 'sql' : spec.how ?? 'all', spec.expr ?? ''))
     updateFieldsEmpty()
   }
   // hydrate dissolve/combine_lines keys and aggregates, attribute columns and drops
@@ -300,15 +324,34 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
     ;((st as Partial<Attributes>).drop || []).forEach(col => addDropCol(col))
   }
 
+  // After hydrating: the builder shows the loaded condition as rows when it can.
+  if (kind === 'filter') {
+    attachConditionBuilder(c.querySelector<HTMLInputElement>('[data-k="where"]')!, () => {
+      const card = c.closest('.pipeline-card')
+      return card ? collectColumnsBeforeStep(card, c) : []
+    })
+  }
+
   // on_multiple is a tie-break for match: first — with match: all every match is kept,
   // so there's nothing to choose between and the field would only mislead.
   if (kind === 'spatial_join') {
     const matchInp = c.querySelector<HTMLInputElement>('[data-k="match"]')!
     const onMultipleField = c.querySelector<HTMLElement>('[data-on-multiple-field]')!
-    const syncOnMultiple = () => { onMultipleField.style.display = matchInp.value.trim() === 'all' ? 'none' : '' }
+    const syncOnMultiple = () => { onMultipleField.style.display = ['all', 'summarize'].includes(matchInp.value.trim()) ? 'none' : '' }
     matchInp.addEventListener('input', syncOnMultiple)
     matchInp.addEventListener('change', syncOnMultiple)
     syncOnMultiple()
+  }
+
+  // match: summarize turns each pulled field into "how to combine the matches" (CSS shows the
+  // rows' how dropdowns on .summarizing), and match: first gets a warning when it drops matches.
+  if (kind === 'spatial_join' || kind === 'attribute_join') {
+    const matchInp = c.querySelector<HTMLInputElement>('[data-k="match"]')!
+    const syncSummarizing = () => c.classList.toggle('summarizing', matchInp.value.trim() === 'summarize')
+    matchInp.addEventListener('input', syncSummarizing)
+    matchInp.addEventListener('change', syncSummarizing)
+    syncSummarizing()
+    wireMatchWarning(c, kind)
   }
 
   wireStepTitle(c, kind)
@@ -354,6 +397,16 @@ function wireFieldValidation(c: HTMLElement, kind: Step['type']): void {
     })
     leftInp.addEventListener('input', () => leftValidation.schedule())
     leftInp.addEventListener('blur', () => leftValidation.runNow())
+    // `left` is SQL, so a column picked from the list whose name isn't a bare identifier
+    // (`NET.VEGLENKESEKVENSID` would read as table NET's column) goes in double-quoted.
+    leftInp.addEventListener('change', () => {
+      const v = leftInp.value.trim()
+      const scope = c.closest('.pipeline-card')
+      if (!v || /^[A-Za-z_][A-Za-z0-9_]*$/.test(v) || !scope) return
+      if (!collectColumnsBeforeStep(scope, c).some(col => col.name === v)) return
+      leftInp.value = quoteIdent(v)
+      leftInp.dispatchEvent(new Event('input', { bubbles: true }))
+    })
 
     // `right` is a bare column name on the join source, not arbitrary SQL — checking it
     // against the join source's real schema is instant and needs no network round trip.
@@ -454,11 +507,18 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
   const updateFieldsEmpty = () => {
     if (fieldsEmpty && fieldsBox) fieldsEmpty.hidden = fieldsBox.children.length > 0
   }
-  const addField = (out = '', col = '') => {
+  // `how` and `expr` are for match: summarize (the row's how dropdown and SQL field, which
+  // only show then): how to combine the column's values over a feature's matches.
+  const addField = (out = '', col = '', how = '', expr = '') => {
     if (!fieldsBox) return
     const r = mkEl('div', { className: 'kv' })
     r.style.marginTop = '6px'
-    r.innerHTML = `${comboField('data-fc', col, col ? [col] : [], '— column —', 'Pick a source for this step first')}
+    const initialHow = how || 'all'
+    r.dataset['how'] = initialHow
+    r.innerHTML = `<select data-fhow class="f-how" title="How to combine the matches' values" style="flex:0 0 22%">${howOptionsHtml(initialHow)}<option value="sql"${initialHow === 'sql' ? ' selected' : ''}>SQL…</option></select>
+      <span class="arrow f-how f-of">of</span>
+      ${comboField('data-fc', col, col ? [col] : [], '— column —', 'Pick a source for this step first')}
+      <input data-fexpr class="f-expr" placeholder="sum(population)" value="${esc(expr)}">
       <span class="arrow"><i data-lucide="arrow-right" style="width:12px;height:12px;color:var(--muted)"></i></span>
       <input data-fo placeholder="output_name" value="${esc(out)}">
       <button class="mini danger ghost" data-fdel aria-label="Remove this pulled field"><i data-lucide="x" style="width:12px;height:12px"></i></button>`
@@ -485,6 +545,13 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
       r.remove(); updateFieldsEmpty(); syncFn()
     })
     outInp.addEventListener('input', () => { delete outInp.dataset['autofilled']; syncFn() })
+    const howSel = r.querySelector<HTMLSelectElement>('[data-fhow]')!
+    howSel.addEventListener('change', () => {
+      r.dataset['how'] = howSel.value
+      if (howSel.value === 'count' && !outInp.value.trim()) { outInp.value = 'count'; outInp.dataset['autofilled'] = '1' }
+      syncFn()
+    })
+    r.querySelector('[data-fexpr]')!.addEventListener('input', syncFn)
     colInp.addEventListener('input', () => { autoName(); syncFn() })
     colInp.addEventListener('change', () => { autoName(); syncFn() })
     wireCombos(r)
@@ -510,7 +577,6 @@ function wireFieldsList(c: HTMLElement, syncFn: () => void) {
 // dissolve, combine_lines: group keys (a column, or an expression with a name) and aggregates
 function wireDissolveLists(c: HTMLElement, kind: Step['type'], syncFn: () => void) {
   const byBox = c.querySelector<HTMLElement>('[data-by-cols]')
-  const aggBox = c.querySelector<HTMLElement>('[data-aggs]')
   // Only what reaches this step: a later step's columns don't exist yet here.
   const columns = () => {
     const card = c.closest('.pipeline-card')
@@ -551,39 +617,45 @@ function wireDissolveLists(c: HTMLElement, kind: Step['type'], syncFn: () => voi
     renderIcons(r)
   }
 
-  const addAggregate = (agg: Partial<ExprColumn> = {}) => {
-    if (!aggBox) return
-    const r = mkEl('div', { className: 'kv' })
-    r.dataset['aggRow'] = ''
-    r.style.marginTop = '6px'
-    r.innerHTML = `<input data-agg-to placeholder="output_name" value="${esc(agg.to ?? '')}" style="flex:0 0 32%">
-      <span class="arrow">=</span>`
-    const toInp = r.querySelector<HTMLInputElement>('[data-agg-to]')!
-    r.appendChild(exprField({
-      value: agg.expr ?? '',
-      placeholder: 'sum(population), count(*), …',
-      attrs: 'data-agg-expr',
-      onChange: syncFn,
-      drawer: () => ({
-        columns: columns(),
-        // The steps before this one, then this step with only the draft as its aggregate:
-        // an aggregate is only valid over the group.
-        buildPreviewConfig: draft => fieldPreviewConfig(c, [], {
-          type: kind === 'combine_lines' ? 'combine_lines' : 'dissolve',
-          by: readByKeys(c), aggregates: [{ to: '_expr_preview', expr: draft }],
-        }),
-        snippets: [AGGREGATE_SNIPPETS],
-      }),
-    }))
-    r.insertAdjacentHTML('beforeend', `<button class="mini danger ghost" data-aggdel aria-label="Remove this aggregate"><i data-lucide="x" style="width:12px;height:12px"></i></button>`)
-    toInp.addEventListener('input', syncFn)
-    r.querySelector('[data-aggdel]')!.addEventListener('click', () => { r.remove(); syncFn() })
-    aggBox.appendChild(r)
-    renderIcons(r)
+  const ctx: AggregateListContext = {
+    card: c, kind: kind === 'combine_lines' ? 'combine_lines' : 'dissolve', byKeys: () => readByKeys(c),
+    syncFn,
   }
+  const addAggregate = (agg: Partial<Aggregate> = {}) => addAggregateRow(ctx, agg)
+
+  // The "reaching this step" list (schema.ts renderAggregatePool) calls these.
+  const keep = (names: string[]) => {
+    if (!names.length) { showToast('Every column reaching this step is already kept', 'info'); return }
+    mutate(names.length > 1 ? 'keep all columns' : 'keep column')
+    names.forEach(from => addAggregate({ from, how: 'any' }))
+    ctx.syncFn()
+  }
+  const actions = c as HTMLElement & { _aggKeep?: (name: string) => void; _aggGroup?: (name: string) => void }
+  actions._aggGroup = name => {
+    const lower = name.toLowerCase()
+    if (readByKeys(c).some(k => typeof k === 'string' && k.toLowerCase() === lower)) { showToast(`Already grouped by ${name}`, 'info'); return }
+    mutate('group by column')
+    // A key is kept as it is: a row keeping the same column goes.
+    c.querySelectorAll<HTMLElement>('[data-agg-row][data-mode="easy"]').forEach(r => {
+      if (r.querySelector<HTMLInputElement>('[data-agg-from]')!.value.trim().toLowerCase() === lower) r.remove()
+    })
+    addByKey(name)
+    ctx.syncFn()
+  }
+  actions._aggKeep = name => {
+    if (!droppedColumns(c).some(n => n.toLowerCase() === name.toLowerCase())) { showToast(`${name} is already kept`, 'info'); return }
+    keep([name])
+  }
+  c.querySelector('[data-keepall]')?.addEventListener('click', e => { e.stopPropagation(); keep(droppedColumns(c)) })
+  c.querySelector('[data-addcount]')?.addEventListener('click', e => {
+    e.stopPropagation()
+    mutate('add count')
+    addAggregate({ to: 'count', how: 'count' })
+    ctx.syncFn()
+  })
 
   c.querySelector('[data-addby]')?.addEventListener('click', e => { e.stopPropagation(); addByKey(); syncFn() })
-  c.querySelector('[data-addagg]')?.addEventListener('click', e => { e.stopPropagation(); addAggregate(); syncFn() })
+  c.querySelector('[data-addagg]')?.addEventListener('click', e => { e.stopPropagation(); addAggregate({ how: 'any' }); ctx.syncFn() })
   return { addByKey, addAggregate }
 }
 
@@ -597,14 +669,8 @@ export function readByKeys(c: Element): (string | ExprColumn)[] {
   })
 }
 
-/** A dissolve or combine_lines card's aggregates (rows missing a name or an expression left out). */
-export function readAggregates(c: Element): ExprColumn[] {
-  return [...c.querySelectorAll('[data-agg-row]')].flatMap(r => {
-    const to = r.querySelector<HTMLInputElement>('[data-agg-to]')!.value.trim()
-    const expr = exprValue(r.querySelector<HTMLInputElement>('[data-agg-expr]')!).trim()
-    return to && expr ? [{ to, expr }] : []
-  })
-}
+/** A dissolve or combine_lines card's aggregates (rows still being filled in left out). */
+export const readAggregates = readAggregateRows
 
 /** An attributes card's set columns and drops. */
 export function readAttributes(c: Element): { columns: MapItem[]; drop: string[] } {

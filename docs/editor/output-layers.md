@@ -8,8 +8,9 @@ output (the **output file** set on the config card). The YAML side is covered un
   the file name).
 - **CRS**: the CRS the geometry is reprojected to when it's written. Pick it from the searchable list of
   common CRSs (search by code or name, e.g. *UTM 33*), or type any `AUTHORITY:CODE`.
-- **filter**: an optional SQL condition. Rows where it's false are left out of *this* layer
-  only. A live check under the field tells you whether it parses.
+- **filter**: optional: only the rows that match go into *this* layer. Pick conditions as
+  *column · operator · value* rows, or write SQL with the **<>** button, as for the
+  [filter step](steps.md). A live check under the field tells you whether it works.
 
 ![The output layers tab](../assets/screenshots/output-layers-light.png#only-light){ .screenshot loading=lazy }
 ![The output layers tab](../assets/screenshots/output-layers-dark.png#only-dark){ .screenshot loading=lazy }

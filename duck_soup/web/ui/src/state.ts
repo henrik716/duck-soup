@@ -3,6 +3,8 @@
 export const META = {
   formats: [] as string[], predicates: [] as string[], funcs: [] as string[], step_types: [] as string[],
   tabular_geom_formats: [] as string[], header_row_formats: [] as string[],
+  aggregate_hows: [] as string[], numeric_aggregate_hows: [] as string[],
+  aggregate_sql: {} as Record<string, string>,
 }
 export const SOURCE_SCHEMAS: Record<string, { name: string; type: string }[]> = {}
 

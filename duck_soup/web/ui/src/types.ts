@@ -41,13 +41,18 @@ export interface DerivedSource {
 // for the rows this step rejects (no match / filtered out / clipped away), which then leave
 // the chain — see RejectsMixin in config.py.
 
+/** A join's fields: {output: source column}, or with match: summarize, {output: an aggregate
+ *  over the matches} (its name is the key). */
+export type JoinFields = Record<string, string | Omit<Aggregate, 'to'>>
+
 export interface SpatialJoin {
   type: 'spatial_join'
   source: string
   predicate: JoinPredicate
-  match?: 'first' | 'all'
+  match?: 'first' | 'all' | 'summarize'
   on_multiple?: 'first' | 'largest_overlap'
-  fields: Record<string, string>
+  /** {output: source column}; with match: summarize, {output: how to combine the matches}. */
+  fields: JoinFields
   branch?: string
   rejects?: string
 }
@@ -57,7 +62,8 @@ export interface AttributeJoin {
   source: string
   left: string
   right: string
-  fields: Record<string, string>
+  match?: 'first' | 'summarize'
+  fields: JoinFields
   branch?: string
   rejects?: string
 }
@@ -98,17 +104,29 @@ export interface Erase {
   branch?: string
 }
 
-/** A named SQL expression: a dissolve or combine_lines group key or aggregate. */
+/** A named SQL expression: a dissolve or combine_lines group key. */
 export interface ExprColumn {
   to: string
   expr: string
+}
+
+/** How an aggregate combines a column's values without SQL (config.AGGREGATE_HOWS). */
+export type AggregateHow = 'any' | 'most_common' | 'from_largest' | 'all' | 'sum' | 'average' | 'min' | 'max' | 'count'
+
+/** One value per group (or chain): `how` to combine the `from` column, or a SQL `expr`.
+ *  `to` defaults to `from`. */
+export interface Aggregate {
+  to?: string
+  from?: string
+  how?: AggregateHow
+  expr?: string
 }
 
 export interface Dissolve {
   type: 'dissolve'
   /** A column name, or a named expression to group by. */
   by: (string | ExprColumn)[]
-  aggregates?: ExprColumn[]
+  aggregates?: Aggregate[]
   branch?: string
 }
 
@@ -116,7 +134,7 @@ export interface CombineLines {
   type: 'combine_lines'
   /** A column name, or a named expression to group by. */
   by: (string | ExprColumn)[]
-  aggregates?: ExprColumn[]
+  aggregates?: Aggregate[]
   /** Only join lines running the same way (default true). */
   preserve_direction?: boolean
   branch?: string
@@ -242,6 +260,10 @@ export interface MetaResponse {
   // taking header_row: config.TABULAR_GEOM_FORMATS / HEADER_ROW_FORMATS.
   tabular_geom_formats: SourceFormat[]
   header_row_formats: SourceFormat[]
+  aggregate_hows: AggregateHow[]
+  numeric_aggregate_hows: AggregateHow[]
+  /** The SQL of each `how`, with {col} for the quoted column. */
+  aggregate_sql: Record<AggregateHow, string>
 }
 
 export interface VersionResponse {

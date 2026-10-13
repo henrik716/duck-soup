@@ -700,11 +700,16 @@ body.resizing-y { cursor: row-resize; }
 .st-pool-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); overflow: hidden; }
 .st-pool-chip button { background: none; border: none; color: var(--ink); font-family: var(--mono); font-size: 11px; padding: 3px 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .st-pool-chip .st-pool-drop { color: var(--muted); padding: 3px 6px; border-left: 1px solid var(--line); }
+.st-pool-chip .st-pool-group { color: var(--muted); padding: 3px 6px; border-left: 1px solid var(--line); font-size: 10px; text-decoration: none; }
+.st-pool-chip .st-pool-group:hover, .st-pool-chip .st-pool-group:focus-visible { background: var(--accent-soft); color: var(--accent); }
 .st-pool-chip .st-pool-set:hover, .st-pool-chip .st-pool-set:focus-visible { background: var(--accent-soft); color: var(--accent); }
 .st-pool-chip .st-pool-drop:hover, .st-pool-chip .st-pool-drop:focus-visible { background: var(--warn-soft); color: var(--warn-hover); }
 .st-pool-chip.is-set { border-color: var(--accent); }
 .st-pool-chip.is-set .st-pool-set { color: var(--accent); }
 .st-pool-chip.is-dropped .st-pool-set { text-decoration: line-through; color: var(--muted); }
+.st-pool-chip.is-key { border-color: var(--accent); background: var(--accent-soft); }
+.st-pool-chip.is-key .st-pool-set { color: var(--accent); cursor: default; font-weight: 600; }
+.st-pool-chip.is-set .st-pool-set { cursor: default; }
 
 .side-actions { display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
 
@@ -1195,6 +1200,23 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .expr-validation-msg.ok { color: var(--ok); }
 .expr-validation-msg.bad { color: var(--warn); }
 .expr-validation-msg.pending { color: var(--muted); }
+.expr-validation-msg.caution { color: var(--tok-number); }
+.agg-row .expr-validation-msg:empty { min-height: 0; }
+/* Condition builder (condition-builder.ts) over a SQL condition field */
+.cond-builder { margin: 4px 0 6px; }
+.cond-head { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.cond-head select { width: auto; padding: 3px 6px; font-size: 12px; }
+.cond-head .spacer { flex: 1; }
+.cond-builder .cond-row { margin-top: 6px; }
+.cond-builder [data-cond-sql-head], .cond-builder.is-sql [data-cond-easy-head],
+.cond-builder.is-sql .cond-rows, .cond-builder.is-sql [data-cond-add] { display: none; }
+.cond-builder.is-sql [data-cond-sql-head] { display: inline; }
+.cond-builder.is-empty:not(.is-sql) { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; }
+.cond-builder.is-empty:not(.is-sql) [data-cond-easy-head] { display: none; }
+/* Join fields with match: summarize (step-card.ts): each row says how to combine the matches. */
+.f-how:not(.summarizing *), [data-fields] .f-expr { display: none; }
+.card.summarizing [data-fields] .kv[data-how="sql"] .f-expr { display: block; flex: 1; }
+.card.summarizing [data-fields] .kv:is([data-how="sql"], [data-how="count"]) :is(.combo, .f-of) { display: none; }
 /* Cheap client-side checks (unknown column, malformed CRS) — flags the input itself rather
    than a separate message, since there's nothing more to say than "hover for why". */
 input.field-invalid, .combo input.field-invalid { border-color: var(--warn) !important; }
@@ -1257,26 +1279,6 @@ input.field-invalid, .combo input.field-invalid { border-color: var(--warn) !imp
   animation: highlightFlash 1.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* ---- Table Toolbar ---- */
-.table-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  gap: 12px;
-  flex-shrink: 0;
-}
-.table-toolbar input {
-  max-width: 280px;
-  height: 32px;
-  padding: 6px 12px;
-  font-size: 12px;
-}
-.table-toolbar button {
-  height: 32px;
-  padding: 6px 14px;
-  font-size: 12px;
-}
 /* Preview rows select their feature on the map (and the map selects them). The zebra
    background is inline, hence !important. scroll-margin keeps a row scrolled to from the map
    clear of the sticky header. */
@@ -1325,6 +1327,26 @@ tr.preview-row:focus-visible {
   color: var(--accent);
 }
 
+/* ---- Table Toolbar ---- */
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.table-toolbar input {
+  max-width: 280px;
+  height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.table-toolbar button {
+  height: 32px;
+  padding: 6px 14px;
+  font-size: 12px;
+}
 
 /* ---- Sortable Table Headers ---- */
 th.sortable {

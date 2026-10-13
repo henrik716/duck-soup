@@ -7,6 +7,8 @@ import { mapRow, type MapRowElement } from './map-row'
 import { attachCrsFormatCheck, attachLiveValidation, renderValidationMsg } from '../validation'
 import type { Config, MapItem, OutputLayer } from '../types'
 import { renderIcons } from '../icons'
+import { attachConditionBuilder } from '../condition-builder'
+import { collectColumnsBeforeStep } from '../schema'
 
 // ---- output layer card ----
 // One entry in a pipeline's `layers:` list — the same upstream chain, written
@@ -29,7 +31,7 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
         <label class="field grow">layer name<input data-k="layer" placeholder="MyLayer"></label>
         <label class="field grow">CRS${comboField('data-k="crs"', '', CRS_COMBO_OPTIONS, 'EPSG:25833')}</label>
       </div>
-      <label class="field" style="margin-top:8px">filter (optional SQL; rows where this is false are excluded from this layer)
+      <label class="field" style="margin-top:8px">filter (optional: only the rows that match go into this layer)
         <input data-k="filter" placeholder="county IS NOT NULL">
         <div class="expr-validation-msg" data-filter-validation></div>
       </label>
@@ -95,6 +97,11 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
   })
   filterInp.addEventListener('input', () => filterValidation.schedule())
   filterInp.addEventListener('blur', () => filterValidation.runNow())
+  // The columns at the end of the step chain (this card isn't a step, so all of them).
+  attachConditionBuilder(filterInp, () => {
+    const card = c.closest('.pipeline-card')
+    return card ? collectColumnsBeforeStep(card, c) : []
+  })
 
   const layerInp = c.querySelector<HTMLInputElement>('[data-k="layer"]')!
   const crsInp = c.querySelector<HTMLInputElement>('[data-k="crs"]')!

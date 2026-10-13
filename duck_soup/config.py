@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union, get_args
 
 import yaml
-from pydantic import AfterValidator, BaseModel, Field, model_validator
+from pydantic import (
+    AfterValidator, BaseModel, Field, field_serializer, model_serializer, model_validator,
+)
 
 # Formats we know how to read. Most go through DuckDB's ST_Read (GDAL); see the
 # duck_soup.sources docstring for the ones that don't.
@@ -51,6 +53,14 @@ MAP_FUNCS = [
     "uuid", "seq", "now", "today", "lat", "lon", "x", "y", "mgrs", "geohash",
     "wkb", "wkt", "geom_type", "area", "length",
 ]
+
+# The ways a dissolve/combine_lines aggregate can combine a column without SQL (`how`); the
+# SQL of each is steps.AGGREGATE_SQL, which must list the same names.
+AGGREGATE_HOWS = [
+    "any", "most_common", "from_largest", "all", "sum", "average", "min", "max", "count",
+]
+# The ones that only work on numbers.
+NUMERIC_AGGREGATE_HOWS = ["sum", "average"]
 
 CASE_MATCH_TYPES = ["match", "like", "regex"]
 
@@ -218,14 +228,108 @@ class RejectsMixin(BaseModel):
         return data
 
 
-class SpatialJoin(StepBase, RejectsMixin):
+class Aggregate(BaseModel):
+    """One value per group (or per chain) for a dissolve or combine_lines step: `how` to
+    combine the `from` column's values (no SQL needed), or a SQL aggregate in `expr`.
+    `to` defaults to the `from` column's name."""
+
+    to: str = Field("", description="Output column name (default: the `from` column)")
+    from_: Optional[str] = Field(None, alias="from", description="The column to combine")
+    how: Optional[Literal[tuple(AGGREGATE_HOWS)]] = Field(  # type: ignore[valid-type]
+        None, description="How to combine its values: " + ", ".join(AGGREGATE_HOWS)
+    )
+    expr: Optional[str] = Field(None, description="A SQL aggregate, instead of from/how")
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip(cls, data):
+        # Trim only, like MapItem.expr; a blank field (the editor mid-edit) counts as unset.
+        if isinstance(data, dict):
+            data = {k: v.strip() if k in ("to", "from", "from_", "expr") and isinstance(v, str) else v
+                    for k, v in data.items()}
+            data = {k: v for k, v in data.items() if not (k != "to" and v == "")}
+        return data
+
+    @model_serializer(mode="wrap")
+    def _no_default_name(self, handler):
+        # `to` is the `from` column's name unless given: written only when it isn't.
+        data = handler(self)
+        if self.from_ is not None and self.to == self.from_:
+            data.pop("to", None)
+        return data
+
+    @model_validator(mode="after")
+    def _complete(self):
+        if not self.to:
+            self.to = self.from_ or ""
+        if not self.to:
+            raise ValueError("an aggregate needs a name ('to')")
+        if self.expr is not None:
+            if self.how is not None or self.from_ is not None:
+                raise ValueError(f"aggregate '{self.to}': give either expr, or from and how, not both")
+        elif self.how is None:
+            raise ValueError(f"aggregate '{self.to}' needs 'how' (or a SQL 'expr')")
+        elif self.from_ is None and self.how != "count":
+            raise ValueError(f"aggregate '{self.to}' needs a column ('from') for how: {self.how}")
+        return self
+
+
+JoinFields = dict[str, Union[str, Aggregate]]
+
+
+class _SummarizingJoin(BaseModel):
+    """`fields` for a join that can summarize its matches (`match: summarize`): each field is
+    then an aggregate over the matches, `{output: {from: col, how: ...}}` (or `{expr: ...}`),
+    instead of `{output: source_column}`."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _name_field_aggregates(cls, data):
+        # An aggregate's name is its key in `fields`.
+        if isinstance(data, dict) and isinstance(data.get("fields"), dict):
+            data = {**data, "fields": {
+                out: {**spec, "to": out} if isinstance(spec, dict) else spec
+                for out, spec in data["fields"].items()
+            }}
+        return data
+
+    @model_validator(mode="after")
+    def _fields_match_mode(self):
+        summarize = self.match == "summarize"
+        for out, spec in self.fields.items():
+            if summarize and isinstance(spec, str):
+                raise ValueError(
+                    f"{self.type}: with match: summarize, say how to combine field '{out}', "
+                    f"e.g. {{from: {spec}, how: all}}"
+                )
+            if not summarize and not isinstance(spec, str):
+                raise ValueError(
+                    f"{self.type}: field '{out}' says how to combine matches, which needs "
+                    "match: summarize"
+                )
+        return self
+
+    @field_serializer("fields", check_fields=False)
+    def _fields_without_names(self, fields):
+        # The key already names each aggregate.
+        return {
+            out: spec if isinstance(spec, str)
+            else {k: v for k, v in spec.model_dump(by_alias=True, exclude_none=True).items() if k != "to"}
+            for out, spec in fields.items()
+        }
+
+
+class SpatialJoin(StepBase, RejectsMixin, _SummarizingJoin):
     type: Literal["spatial_join"] = "spatial_join"
     source: str = Field(..., description="id of the source to join against")
     predicate: Literal[tuple(JOIN_PREDICATES)] = "intersects"  # type: ignore[valid-type]
-    match: Literal["first", "all"] = Field(
+    match: Literal["first", "all", "summarize"] = Field(
         "first",
         description="'first': keep only the first match (current behaviour). "
-        "'all': one output row per match, base row repeated for each",
+        "'all': one output row per match, base row repeated for each. "
+        "'summarize': one row per feature, each field an aggregate over its matches",
     )
     on_multiple: Literal["first", "largest_overlap"] = Field(
         "first",
@@ -233,19 +337,29 @@ class SpatialJoin(StepBase, RejectsMixin):
         "on the join source's original row order. 'largest_overlap': pick the match with "
         "the largest ST_Intersection area (ties broken by original row order).",
     )
-    fields: dict[str, str] = Field(
+    fields: JoinFields = Field(
         default_factory=dict,
-        description="{output_name: source_column} fields to pull from the match",
+        description="{output_name: source_column} fields to pull from the match; with match: "
+        "summarize, {output_name: {from: source_column, how: ...}}",
     )
     rejects: Optional[str] = _rejects_field("the features with no match")
 
 
-class AttributeJoin(StepBase, RejectsMixin):
+class AttributeJoin(StepBase, RejectsMixin, _SummarizingJoin):
     type: Literal["attribute_join"] = "attribute_join"
     source: str
     left: str = Field(..., description="SQL expression on the base row (or a literal)")
     right: str = Field(..., description="Column on the joined source to match on")
-    fields: dict[str, str] = Field(default_factory=dict)
+    match: Literal["first", "summarize"] = Field(
+        "first",
+        description="'first': the first matching row, in the source's row order. "
+        "'summarize': each field an aggregate over all the matching rows",
+    )
+    fields: JoinFields = Field(
+        default_factory=dict,
+        description="{output_name: source_column}; with match: summarize, "
+        "{output_name: {from: source_column, how: ...}}",
+    )
     rejects: Optional[str] = _rejects_field("the rows with no match")
 
 
@@ -290,7 +404,7 @@ class Erase(StepBase):
 
 
 class ExprColumn(BaseModel):
-    """A named SQL expression: a dissolve or combine_lines group key or aggregate."""
+    """A named SQL expression: a dissolve or combine_lines group key."""
 
     to: str = Field(..., description="Output column name")
     expr: str = Field(..., description="SQL expression")
@@ -315,14 +429,18 @@ class ExprColumn(BaseModel):
 class _GroupedStep(StepBase):
     """Group keys and per-group aggregates, shared by dissolve and combine_lines."""
 
+    # Declared here only so it comes first: a field keeps the position it's first declared
+    # at, and the subclasses' `type` would otherwise follow `by` and `aggregates` in a dump.
+    type: str
+
     by: list[Union[str, ExprColumn]] = Field(
         default_factory=list,
         description="Group keys: a column name, or {to, expr} to group by a SQL expression; "
         "empty = one group",
     )
-    aggregates: list[ExprColumn] = Field(
+    aggregates: list[Aggregate] = Field(
         default_factory=list,
-        description="Columns computed per group with a SQL aggregate, e.g. "
+        description="Columns computed per group, e.g. {from: population, how: sum} or "
         "{to: total, expr: 'sum(population)'}",
     )
 

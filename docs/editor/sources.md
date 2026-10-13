@@ -149,7 +149,8 @@ has:
 
 - **id**: the new name.
 - **from**: the source (or another derived source) to start from.
-- **where**: an optional SQL filter, e.g. `vibe = 'chill'`.
+- **where**: optional: only the rows that match, e.g. *vibe is chill*. Pick conditions as
+  *column · operator · value* rows, or write SQL with the **<>** button.
 - **buffer distance**: optional, in working-CRS units.
 - **repair invalid geometry**: on by default.
 
