@@ -247,7 +247,7 @@ def capture(url: str, channel: str, only: set[str]) -> None:
                                 ("output", "output-layers", True)) if want(t[1])]
             if want("step-gallery"):
                 # Tall enough for every group of the gallery, which otherwise scrolls.
-                gp = open_page(url, b, theme, 1600, 1700, 1.5, lineage_collapsed=True)
+                gp = open_page(url, b, theme, 1600, 2500, 1.5, lineage_collapsed=True)
                 pl_tab(gp, "steps")
                 gp.locator(".pipeline-card >> nth=0 >> .pl-add-step").click()
                 gp.mouse.move(0, 0)

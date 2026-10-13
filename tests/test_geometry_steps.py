@@ -1,5 +1,5 @@
-"""The geometry clean-up steps: simplify, snap_to_grid, clean_coverage, explode and
-remove_duplicates."""
+"""The geometry clean-up steps: simplify, snap_to_grid, clean_coverage, fill_holes,
+eliminate_slivers, split_lines, explode and remove_duplicates."""
 from __future__ import annotations
 
 import json
@@ -24,13 +24,18 @@ def _line(*coords: tuple[float, float]) -> dict:
     return {"type": "LineString", "coordinates": [list(c) for c in coords]}
 
 
-def _config(tmp_path: Path, base: list, steps: list[dict], *, mapping: list[dict] | None = None, **pipeline):
-    """A pipeline over `base` ([(name, geometry)]); the mapping defaults to the name, the
-    geometry as WKT, its area and its vertex count."""
-    path = tmp_path / "base.geojson"
+def _geojson(path: Path, features: list) -> str:
     path.write_text(json.dumps({"type": "FeatureCollection", "features": [
-        {"type": "Feature", "properties": {"name": name}, "geometry": geom} for name, geom in base
+        {"type": "Feature", "properties": {"name": name}, "geometry": geom} for name, geom in features
     ]}), encoding="utf-8")
+    return str(path)
+
+
+def _config(tmp_path: Path, base: list, steps: list[dict], *, mapping: list[dict] | None = None,
+            more: dict[str, list] | None = None, **pipeline):
+    """A pipeline over `base` ([(name, geometry)]), with `more` ({id: features}) as further
+    sources; the mapping defaults to the name, the geometry as WKT, its area and its vertex
+    count."""
     if mapping is None:
         mapping = [
             {"to": "name", "from": "name"},
@@ -40,8 +45,11 @@ def _config(tmp_path: Path, base: list, steps: list[dict], *, mapping: list[dict
         ]
     return load_config_dict({
         "name": "t", "working_crs": pipeline.pop("working_crs", "EPSG:25833"),
-        "sources": [{"id": "base", "format": "geojson", "uri": str(path),
-                     "crs": pipeline.pop("base_crs", "EPSG:25833")}],
+        "sources": [
+            {"id": sid, "format": "geojson", "uri": _geojson(tmp_path / f"{sid}.geojson", feats),
+             "crs": pipeline.pop("base_crs", "EPSG:25833") if sid == "base" else "EPSG:25833"}
+            for sid, feats in {"base": base, **(more or {})}.items()
+        ],
         "base": "base", "steps": steps, "mapping": mapping,
         "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out", "crs": "EPSG:25833"},
         **pipeline,
@@ -191,27 +199,138 @@ def test_remove_duplicates_by_geometry_ignores_start_vertex_and_direction(tmp_pa
     assert [r["name"] for r in both] == ["sq", "sq_rotated", "ln", "ln_reversed", "other"]
 
 
+# A 10 x 10 square with a 1 x 1 hole and a 4 x 4 one.
+_DONUT = {"type": "Polygon", "coordinates": [
+    _square(0, 0, 10, 10)["coordinates"][0], _square(1, 1, 2, 2)["coordinates"][0],
+    _square(4, 4, 8, 8)["coordinates"][0],
+]}
+
+
+def test_fill_holes_fills_every_hole_or_the_small_ones(tmp_path):
+    multi = {"type": "MultiPolygon", "coordinates": [_DONUT["coordinates"], _square(20, 0, 21, 1)["coordinates"]]}
+    base = [("donut", _DONUT), ("multi", multi), ("line", _line((0, 0), (1, 1))), ("none", None)]
+    rows = _rows(tmp_path, base, [{"type": "fill_holes"}])
+    assert [(r["name"], r["area"]) for r in rows] == [("donut", 100), ("multi", 101), ("line", 0), ("none", None)]
+    assert rows[1]["wkt"].startswith("MULTIPOLYGON")
+    small = _rows(tmp_path, base, [{"type": "fill_holes", "max_area": 5}])
+    assert [r["area"] for r in small[:2]] == [100 - 16, 101 - 16]
+
+
+# Two neighbours and a 0.5 wide sliver along their shared corner region: it touches `big`
+# along 7 units (x = 10, y 3..10) and `wide` along 0.5 (y = 3).
+_SLIVER_SET = [
+    ("big", _square(0, 0, 10, 10)), ("wide", _square(10, 0, 30, 3)),
+    ("sliver", _square(10, 3, 10.5, 10)), ("lonely", _square(50, 50, 50.1, 50.1)),
+]
+
+
+def test_eliminate_slivers_merges_into_the_longest_border(tmp_path):
+    rows = _rows(tmp_path, _SLIVER_SET, [{"type": "eliminate_slivers", "max_area": 5}])
+    assert [(r["name"], r["area"]) for r in rows] == [("big", 103.5), ("wide", 60), ("lonely", 0.01)]
+
+
+def test_eliminate_slivers_can_merge_into_the_largest_neighbour(tmp_path):
+    # This sliver runs 20 along `wide` (60) and only 0.5 along `big` (100).
+    base = [("big", _square(0, 0, 10, 10)), ("wide", _square(10, 0, 30, 3)), ("sliver", _square(10, 3, 30, 3.5))]
+    step = {"type": "eliminate_slivers", "max_area": 11}
+    longest = _rows(tmp_path, base, [step])
+    assert [(r["name"], r["area"]) for r in longest] == [("big", 100), ("wide", 70)]
+    largest = _rows(tmp_path, base, [{**step, "merge_into": "largest"}])
+    assert [(r["name"], r["area"]) for r in largest] == [("big", 110), ("wide", 60)]
+
+
+def test_eliminate_slivers_picks_by_condition_and_only_merges_into_the_rest(tmp_path):
+    # Picked by name, `big` is a sliver too: both go into `wide`, the one neighbour left.
+    picked = _rows(tmp_path, _SLIVER_SET, [{"type": "eliminate_slivers", "where": "name IN ('big', 'sliver')"}])
+    assert [(r["name"], r["area"]) for r in picked] == [("wide", 163.5), ("lonely", 0.01)]
+    # With max_area too, both must hold: `big` is too large.
+    both = _rows(tmp_path, _SLIVER_SET, [{"type": "eliminate_slivers", "max_area": 5, "where": "name IN ('big', 'sliver')"}])
+    assert [(r["name"], r["area"]) for r in both] == [("big", 103.5), ("wide", 60), ("lonely", 0.01)]
+
+
+def test_split_lines_cuts_where_lines_cross_or_touch(tmp_path):
+    base = [
+        ("h", _line((0, 0), (10, 0))), ("v", _line((5, -5), (5, 5))),
+        ("t", _line((8, 0), (8, 4))),  # ends on h: cuts h, isn't cut itself
+        ("far", _line((0, 20), (5, 20))), ("pt", {"type": "Point", "coordinates": [1, 1]}),
+    ]
+    rows = _rows(tmp_path, base, [{"type": "split_lines"}])
+    assert [(r["name"], r["wkt"]) for r in rows] == [
+        ("h", "LINESTRING (0 0, 5 0)"), ("h", "LINESTRING (5 0, 8 0)"), ("h", "LINESTRING (8 0, 10 0)"),
+        ("v", "LINESTRING (5 -5, 5 0)"), ("v", "LINESTRING (5 0, 5 5)"),
+        ("t", "LINESTRING (8 0, 8 4)"), ("far", "LINESTRING (0 20, 5 20)"), ("pt", "POINT (1 1)"),
+    ]
+
+
+def test_split_lines_cuts_at_shared_stretches_and_keeps_vertices(tmp_path):
+    # b runs along a from x 4 to 6: a is cut at both ends of the shared stretch
+    base = [("a", _line((0, 0), (3, 0), (10, 0))), ("b", _line((4, 0), (6, 0), (6, 5)))]
+    rows = _rows(tmp_path, base, [{"type": "split_lines"}])
+    assert [(r["name"], r["wkt"]) for r in rows if r["name"] == "a"] == [
+        ("a", "LINESTRING (0 0, 3 0, 4 0)"), ("a", "LINESTRING (4 0, 6 0)"), ("a", "LINESTRING (6 0, 10 0)"),
+    ]
+
+
+def test_split_lines_tolerance_cuts_at_line_ends_that_just_miss(tmp_path):
+    # b stops 2 mm short of a, c ends 3 mm past it: exact noding cuts at neither
+    base = [("a", _line((0, 0), (10, 0))), ("b", _line((4, 5), (4, 0.002))), ("c", _line((7, 5), (7, -0.003)))]
+    exact = _rows(tmp_path, base, [{"type": "split_lines"}])
+    assert [r["wkt"] for r in exact if r["name"] == "a"] == ["LINESTRING (0 0, 7 0)", "LINESTRING (7 0, 10 0)"]
+    near = _rows(tmp_path, base, [{"type": "split_lines", "tolerance": 0.01}])
+    assert [r["wkt"] for r in near if r["name"] == "a"] == [
+        "LINESTRING (0 0, 4 0)", "LINESTRING (4 0, 7 0)", "LINESTRING (7 0, 10 0)",
+    ]
+    # b itself isn't moved or cut
+    assert [r["wkt"] for r in near if r["name"] == "b"] == ["LINESTRING (4 5, 4 0.002)"]
+
+
+def test_split_lines_by_a_source_cuts_at_polygon_edges(tmp_path):
+    rows = _rows(tmp_path, [("h", _line((0, 0), (10, 0)))], [{"type": "split_lines", "source": "zones"}],
+                 more={"zones": [("z", _square(3, -1, 6, 1))]})
+    assert [r["wkt"] for r in rows] == ["LINESTRING (0 0, 3 0)", "LINESTRING (3 0, 6 0)", "LINESTRING (6 0, 10 0)"]
+
+
+def test_split_lines_numbers_rows_for_later_joins(tmp_path):
+    base = [("h", _line((0, 0), (10, 0))), ("v", _line((5, -5), (5, 5)))]
+    steps = [
+        {"type": "split_lines"},
+        {"type": "attributes", "columns": [{"to": "piece", "expr": "round(ST_XMin(geom) + ST_YMin(geom))"}]},
+        {"type": "snapshot", "id": "pieces"},
+        {"type": "spatial_join", "source": "pieces", "predicate": "within", "fields": {"same": "piece"}},
+    ]
+    rows = _rows(tmp_path, base, steps, mapping=[{"to": "piece", "from": "piece"}, {"to": "same", "from": "same"}])
+    assert all(r["piece"] == r["same"] for r in rows) and len(rows) == 4
+
+
 @pytest.mark.parametrize("step,message", [
     ({"type": "simplify", "tolerance": 1, "keep_outer_boundary": True}, "needs shared_boundaries"),
     ({"type": "simplify", "tolerance": 0}, "greater than 0"),
     ({"type": "snap_to_grid", "grid_size": -1}, "greater than 0"),
     ({"type": "remove_duplicates"}, "list the columns to compare"),
     ({"type": "explode", "part_field": "geom"}, "reserved"),
+    ({"type": "eliminate_slivers"}, "give max_area, or a where condition"),
+    ({"type": "eliminate_slivers", "where": "  "}, "give max_area, or a where condition"),
+    ({"type": "fill_holes", "max_area": 0}, "greater than 0"),
+    ({"type": "split_lines", "source": "nowhere"}, "unknown source 'nowhere'"),
 ])
 def test_invalid_steps_are_refused(tmp_path, step, message):
     with pytest.raises(ValueError, match=message):
         _config(tmp_path, [("a", _square(0, 0, 1, 1))], [step])
 
 
-def test_blank_part_field_means_none(tmp_path):
-    cfg = _config(tmp_path, [("a", _square(0, 0, 1, 1))], [{"type": "explode", "part_field": " "}])
-    assert cfg.pipelines[0].steps[0].part_field is None
+def test_blank_fields_mean_none(tmp_path):
+    steps = [{"type": "explode", "part_field": " "}, {"type": "split_lines", "source": ""}]
+    explode, split = _config(tmp_path, [("a", _square(0, 0, 1, 1))], steps).pipelines[0].steps
+    assert explode.part_field is None and split.source is None
 
 
 @pytest.mark.parametrize("step", [
     {"type": "simplify", "tolerance": 0.001},
     {"type": "snap_to_grid", "grid_size": 0.001},
     {"type": "clean_coverage", "max_gap_width": 0.001},
+    {"type": "fill_holes", "max_area": 0.001},
+    {"type": "eliminate_slivers", "max_area": 0.001},
+    {"type": "split_lines", "tolerance": 0.001},
 ])
 def test_distances_need_a_projected_working_crs(tmp_path, step):
     cfg = _config(tmp_path, [("a", _square(0, 0, 1, 1))], [step], working_crs="EPSG:4326", base_crs="EPSG:4326")

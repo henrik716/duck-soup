@@ -462,6 +462,72 @@ class Explode(StepBase):
         return self
 
 
+class FillHoles(StepBase):
+    """Polygons without their holes: every hole, or with `max_area` only the smaller ones."""
+
+    type: Literal["fill_holes"] = "fill_holes"
+    max_area: Optional[float] = Field(
+        None, gt=0,
+        description="Only fill holes smaller than this area (working CRS units, e.g. m²); "
+        "default: every hole",
+    )
+
+
+class EliminateSlivers(StepBase):
+    """Small polygons merged into a neighbour: each polygon smaller than `max_area` (and/or
+    matching `where`) is unioned into the neighbouring polygon it shares the longest border
+    with (or the largest one), and its row is gone. One pass: a sliver whose neighbours are
+    all slivers too stays as it is."""
+
+    type: Literal["eliminate_slivers"] = "eliminate_slivers"
+    max_area: Optional[float] = Field(
+        None, gt=0, description="Eliminate polygons smaller than this area (working CRS units, e.g. m²)"
+    )
+    where: Optional[str] = Field(
+        None,
+        description="SQL condition picking the polygons to eliminate; with max_area, both must hold",
+    )
+    merge_into: Literal["longest_border", "largest"] = Field(
+        "longest_border",
+        description="The neighbour that takes a sliver: the one sharing the longest border "
+        "with it, or the largest",
+    )
+
+    @model_validator(mode="after")
+    def _something_to_eliminate(self):
+        self.where = (self.where or "").strip() or None
+        if self.max_area is None and self.where is None:
+            raise ValueError("eliminate_slivers: give max_area, or a where condition picking the polygons")
+        return self
+
+
+class SplitLines(StepBase):
+    """Lines cut where they cross or touch each other (noding), or with `source` where they
+    cross that source's lines or polygon edges, and with `tolerance` where a line ends
+    within that distance of one. Each piece is a row with its line's attributes; the pieces are the line's own geometry, so neighbouring pieces share their
+    end points exactly."""
+
+    type: Literal["split_lines"] = "split_lines"
+    source: Optional[str] = Field(
+        None,
+        description="Cut at this source's lines (or polygon edges) instead of where the "
+        "lines cross each other",
+    )
+    tolerance: Optional[float] = Field(
+        None, gt=0,
+        description="A line ending this close (working CRS units) to another line cuts it "
+        "there too, though they don't touch; without it, only lines that meet exactly cut",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_source(cls, data):
+        # The editor writes a blank combo as "": the lines cut each other.
+        if isinstance(data, dict) and isinstance(data.get("source"), str) and not data["source"].strip():
+            data = {k: v for k, v in data.items() if k != "source"}
+        return data
+
+
 class Clip(StepBase, RejectsMixin):
     type: Literal["clip"] = "clip"
     source: str = Field(..., description="id of the mask source")
@@ -846,9 +912,9 @@ class Attributes(StepBase):
 Step = Annotated[
     Union[
         SpatialJoin, AttributeJoin, NearestNeighbor, Buffer, Centroid, Clip, Erase,
-        Dissolve, CombineLines, Simplify, SnapToGrid, CleanCoverage, Explode,
-        IntersectOverlay, LineOverlay, Filter, RemoveDuplicates, Merge, Snapshot,
-        Attributes, HttpLookup, MakePoints,
+        Dissolve, CombineLines, SplitLines, Simplify, SnapToGrid, CleanCoverage, FillHoles,
+        EliminateSlivers, Explode, IntersectOverlay, LineOverlay, Filter, RemoveDuplicates,
+        Merge, Snapshot, Attributes, HttpLookup, MakePoints,
     ],
     Field(discriminator='type'),
 ]

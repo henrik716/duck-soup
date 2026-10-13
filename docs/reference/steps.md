@@ -25,9 +25,12 @@ layer of their own.
 | | [`erase`](#erase) | may shrink | ✓ | – |
 | | [`dissolve`](#dissolve) | shrinks | ✓ | keeps only `by` and `aggregates` |
 | | [`combine_lines`](#combine_lines) | shrinks | ✓ | keeps only `by` and `aggregates` |
+| | [`split_lines`](#split_lines) | grows | ✓ | – |
 | | [`simplify`](#simplify) | same | ✓ | – |
 | | [`snap_to_grid`](#snap_to_grid) | same | ✓ | – |
 | | [`clean_coverage`](#clean_coverage) | same | ✓ | – |
+| | [`fill_holes`](#fill_holes) | same | ✓ | – |
+| | [`eliminate_slivers`](#eliminate_slivers) | shrinks | ✓ | – |
 | | [`explode`](#explode) | grows | ✓ | optional part number |
 | Rows | [`filter`](#filter) | may shrink | – | – |
 | | [`remove_duplicates`](#remove_duplicates) | may shrink | – | – |
@@ -362,6 +365,39 @@ each, with their aggregates computed over that one feature.
 Use `dissolve` instead when you want one feature per group whatever touches what, or for
 polygons.
 
+## `split_lines`
+
+Cuts lines where they cross or touch each other, so every crossing becomes a shared end
+point: the noding a road or pipe network needs before it's analysed. FME's Intersector,
+QGIS's Split lines at intersections and Split with lines.
+
+```yaml
+- type: split_lines
+  source: municipalities   # optional: cut at this source's lines or polygon edges instead
+  tolerance: 0.05          # optional, working-CRS units
+```
+
+- **Without `source`**, the lines cut each other: a line is cut wherever another line crosses
+  it, ends on it, or starts or stops sharing a stretch with it. A line ending on another
+  cuts that one but isn't cut itself. A line isn't cut where it crosses itself.
+- **With `source`**, the lines are cut where that source's lines cross them, or, for a
+  polygon source, its polygons' edges: say, a road network split at municipality borders.
+  The source lines aren't added.
+- **Each piece is a row** with its line's attributes. The pieces are the line's own geometry,
+  cut at the crossings, so neighbouring pieces share their end points exactly, and 3D lines
+  keep their heights. Multilines are cut part by part.
+- **`tolerance`**: without it, lines cut each other only where they meet exactly. Lines
+  digitised separately rarely do: a path meant to end on another stops a few millimetres
+  short, or overshoots it. With `tolerance`, a line ending within that distance of another
+  cuts it at the closest point, and cuts closer together than that are one cut. The line
+  that ends near it isn't moved. Set it just above the expected error, e.g. `0.05` for
+  data in metres. Requires a projected working CRS.
+- Every crossing is cut, including where one line passes over another (a bridge). To keep
+  levels apart, split them on separate [branches](#branch), or `filter` them first.
+
+Points and polygons pass through. Use [`combine_lines`](#combine_lines) to join pieces back
+into longer lines.
+
 ## Keeping other columns
 
 `dissolve` and `combine_lines` turn many features into one, so a column that isn't a `by` key
@@ -473,6 +509,44 @@ A polygon that lay wholly under another comes out empty, with its row kept. Poin
 pass through unchanged. Requires a projected working CRS when `snap_distance` or
 `max_gap_width` is set.
 
+## `fill_holes`
+
+Removes the holes in polygons: FME's DonutHoleExtractor, QGIS's Delete holes.
+
+```yaml
+- type: fill_holes
+  max_area: 25    # optional: only holes smaller than this (working-CRS units, e.g. m²)
+```
+
+Without `max_area`, every hole is filled. Multipolygons are filled part by part. Points and
+lines pass through. Requires a projected working CRS when `max_area` is set.
+
+## `eliminate_slivers`
+
+Merges small polygons into a neighbour: QGIS's Eliminate selected polygons. Slivers left by
+an overlay, or areas too small for a map at a smaller scale, go into the polygon next to
+them.
+
+```yaml
+- type: eliminate_slivers
+  max_area: 100                    # polygons smaller than this (working-CRS units, e.g. m²)
+  where: "landuse = 'unclassified'"   # optional; with max_area, both must hold
+  merge_into: longest_border       # longest_border (default) | largest
+```
+
+- **Which polygons**: those smaller than `max_area`, those matching `where`, or with both,
+  those matching both. Give at least one.
+- **Which neighbour**: of the polygons it shares a border with (a line, not just a corner),
+  the one sharing the longest border, or with `merge_into: largest` the largest one. Ties go
+  to the first in row order. The neighbour keeps its own attributes and gets the sliver's
+  area; the sliver's row is gone.
+- **One pass.** A sliver whose neighbours are all slivers too, or that has no neighbours,
+  stays as it is.
+
+It works best on polygons that fit together edge to edge: put a
+[`clean_coverage`](#clean_coverage) before it when they overlap or nearly fit. Points and
+lines pass through. Requires a projected working CRS when `max_area` is set.
+
 ## `explode`
 
 Multipart to singleparts: splits multipolygons, multilines and geometry collections into one
@@ -573,7 +647,18 @@ A replaced column moves to the end of the row. Column order only matters for the
 where the mapping sets it. A `func` such as `uuid` or `now` gets one value per feature for
 the whole run. A preview may recompute it, though, so it can differ between previews.
 `geom` can't be dropped. Setting it with an `expr` replaces the geometry, so the expression
-must return one.
+must return one:
+
+```yaml
+- type: attributes
+  columns:
+    - {to: geom, expr: "ST_Boundary(geom)"}   # polygons → their outlines
+```
+
+Other conversions work the same way: `ST_ConvexHull(geom)`, `ST_Envelope(geom)`,
+`ST_PointOnSurface(geom)`, `ST_BuildArea(geom)` (closed lines → polygons),
+`ST_LineInterpolatePoint(geom, 0.5)` (a line's midpoint), … The expression builder's
+**Geometry (new shape)** group lists them.
 
 ### Keep or drop?
 

@@ -39,6 +39,11 @@ _STEPS = {
     "snap_to_grid": {"grid_size": 0.01},
     "clean_coverage": {"max_gap_width": 1},
     "explode": {"part_field": "part"},
+    "fill_holes": {"max_area": 1},
+    "eliminate_slivers": {"max_area": 1, "where": "name IS NOT NULL"},
+    "split_lines": {},
+    "split_lines_source": {"type": "split_lines", "source": "s", "tolerance": 0.1},
+    "split_lines_tolerance": {"type": "split_lines", "tolerance": 0.1},
     "remove_duplicates": {"by": ["name"], "geometry": True, "rejects": "r"},
     "intersect_overlay": {"fields": {"f": "name"}},
     "line_overlay": {"fields": {"f": "name"}},
@@ -52,7 +57,8 @@ _STEPS = {
 }
 _SOURCELESS = {
     "buffer", "centroid", "dissolve", "combine_lines", "simplify", "snap_to_grid", "clean_coverage",
-    "explode", "filter", "remove_duplicates", "attributes", "http_lookup", "make_points",
+    "explode", "fill_holes", "eliminate_slivers", "split_lines", "filter", "remove_duplicates",
+    "attributes", "http_lookup", "make_points",
 }
 
 
@@ -85,7 +91,7 @@ def _pipeline(tmp_path, kind: str, n_steps: int, n_layers: int = 1):
     steps = []
     for i in range(n_steps):
         step = {"type": step_type, **spec}
-        if step_type not in _SOURCELESS:
+        if step_type not in _SOURCELESS or "source" in step:
             step["source"] = f"s{i}"
         if "fields" in step:
             pulled = {"from": "name", "how": "all"} if step.get("match") == "summarize" else "name"

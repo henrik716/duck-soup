@@ -1,0 +1,3 @@
+base: reedbeds
+steps:
+- {type: clean_coverage, max_gap_width: 3}

@@ -64,7 +64,9 @@ Add `--force` to start over. To use another folder, pass it as an argument
 | `paths` | `paths.geojson` | 4 lines | `name` (the footpath network) |
 | `lit_paths` | `lit_paths.geojson` | 3 lines | `lamps` (`LED`/`gas`): the lamp-lit stretches of the paths |
 | `boardwalks` | `boardwalks.geojson` | 3 lines | `material`: the stretches of path that are boardwalk |
+| `reedbeds` | `reedbeds.geojson` | 3 polygons | `name`, `vegetation`: marsh zones north of the river, surveyed zone by zone, so they overlap and leave a gap |
 | `categories` | `categories.csv` | none (table) | `code`, `label` |
+| `sightings` | `sightings.csv` | none (table) | `species`, `seen`, `lon`, `lat` (text; one sighting has none) |
 
 A few features are there on purpose, to show what happens at the edges:
 

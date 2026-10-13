@@ -1,0 +1,6 @@
+base: places
+steps:
+- type: remove_duplicates
+  by:
+  - category
+  rejects: second_in_category

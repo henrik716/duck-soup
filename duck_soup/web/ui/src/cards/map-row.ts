@@ -5,6 +5,7 @@ import { comboField, wireCombos, type ComboOptionDef } from '../combo'
 import { collectAvailableColumnsScoped, collectAvailableColumnDetailsScoped, collectColumnsBeforeStep, stepOutputColumns } from '../schema'
 import { openCodelistDrawer } from './codelist'
 import { exprField } from '../expr-field'
+import { GEOMETRY_SNIPPETS } from '../expr-snippets'
 import { fieldPreviewConfig } from '../field-preview'
 import type { CodeList, Config, MapItem } from '../types'
 import { renderIcons } from '../icons'
@@ -250,6 +251,9 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
               buildPreviewConfig: draft => opts.previewConfig
                 ? opts.previewConfig(draft)
                 : fieldPreviewConfig(row, [{ to: '_expr_preview', expr: draft }]),
+              // Setting `geom` replaces the geometry: the functions returning one come first.
+              snippets: row.querySelector<HTMLInputElement>('[data-to]')?.value.trim().toLowerCase() === 'geom'
+                ? [GEOMETRY_SNIPPETS] : undefined,
             }
           },
         }))

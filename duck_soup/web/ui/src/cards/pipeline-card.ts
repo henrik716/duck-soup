@@ -730,6 +730,20 @@ export function collectPipelineDef(card: HTMLElement): PipelineDef {
         if (v > 0) st[k] = v
       }
     }
+    if (t === 'split_lines') {
+      if (val(c, 'source')) st['source'] = val(c, 'source')
+      const tol = parseFloat(val(c, 'tolerance'))
+      if (tol > 0) st['tolerance'] = tol
+    }
+    if (t === 'fill_holes' || t === 'eliminate_slivers') {
+      const maxArea = parseFloat(val(c, 'max_area'))
+      if (maxArea > 0) st['max_area'] = maxArea
+    }
+    if (t === 'eliminate_slivers') {
+      const where = val(c, 'where').trim()
+      if (where) st['where'] = where
+      if (val(c, 'merge_into') === 'largest') st['merge_into'] = 'largest'
+    }
     if (t === 'explode') {
       const partField = val(c, 'part_field').trim()
       if (partField) st['part_field'] = partField

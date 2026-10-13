@@ -264,6 +264,16 @@ function renderAttributesPool(scope: Element, card: HTMLElement): void {
   const actions = card as HTMLElement & { _poolSet?: (name: string) => void; _poolDrop?: (name: string) => void }
   list.innerHTML = ''
   const groups = new Map<string, AvailableColumnDetail[]>()
+  // The geometry has a chip of its own: it can be replaced (an expression returning a
+  // geometry, such as ST_Boundary(geom)), but not dropped.
+  if (details.some(c => c.name.toLowerCase() === 'geom')) {
+    list.appendChild(mkEl('div', { className: 'st-pool-head', textContent: 'geometry' }))
+    const chip = mkEl('span', { className: 'st-pool-chip' })
+    chip.classList.toggle('is-set', set.has('geom'))
+    chip.innerHTML = `<button type="button" class="st-pool-set" title="Replace the geometry with an expression, e.g. ST_Boundary(geom) or ST_ConvexHull(geom): the expression builder's Geometry group has more">geom</button>`
+    chip.querySelector('.st-pool-set')!.addEventListener('click', () => actions._poolSet?.('geom'))
+    list.appendChild(chip)
+  }
   for (const c of details) {
     if (c.name.toLowerCase() === 'geom') continue
     if (!groups.has(c.origin)) groups.set(c.origin, [])

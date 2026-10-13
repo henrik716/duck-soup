@@ -17,8 +17,9 @@ from typing import Callable
 from . import mapping
 from .config import (
     Aggregate, AttributeJoin, Attributes, Buffer, Centroid, CleanCoverage, Clip, CombineLines,
-    Dissolve, Erase, Explode, ExprColumn, Filter, HttpLookup, IntersectOverlay, LineOverlay,
-    MakePoints, Merge, NearestNeighbor, RemoveDuplicates, Simplify, SnapToGrid, SpatialJoin,
+    Dissolve, EliminateSlivers, Erase, Explode, ExprColumn, FillHoles, Filter, HttpLookup,
+    IntersectOverlay, LineOverlay, MakePoints, Merge, NearestNeighbor, RemoveDuplicates,
+    Simplify, SnapToGrid, SpatialJoin, SplitLines,
 )
 from . import http_lookup
 from .sql_util import quote_ident as _ident, quote_literal as _lit, st_transform
@@ -392,6 +393,187 @@ def explode_sql(prev: str, step: Explode, log: Log, ctx: StepContext) -> str:
     ORDER BY __src_row
     """
     log(f"explode{' (part number in ' + step.part_field + ')' if step.part_field else ''}")
+    return sql
+
+
+def fill_holes_sql(prev: str, step: FillHoles, log: Log, ctx: StepContext) -> str:
+    """Each polygon rebuilt from its outer ring, keeping only the holes of at least
+    `max_area` (none without it); a multipolygon part by part. Other rows pass through."""
+    _needs_geom(ctx, "fill_holes")
+
+    def filled(g: str) -> str:
+        if step.max_area is None:
+            return f"ST_MakePolygon(ST_ExteriorRing({g}))"
+        holes = (
+            f"list_filter(list_transform(range(1, ST_NInteriorRings({g}) + 1), "
+            f"lambda n: ST_InteriorRingN({g}, n)), "
+            f"lambda r: ST_Area(ST_MakePolygon(r)) >= {step.max_area})"
+        )
+        return f"ST_MakePolygon(ST_ExteriorRing({g}), {holes})"
+
+    sql = f"""
+    SELECT * EXCLUDE (geom),
+           CASE WHEN geom IS NULL OR ST_IsEmpty(geom) THEN geom
+                WHEN ST_GeometryType(geom) = 'POLYGON' THEN {filled("geom")}
+                WHEN ST_GeometryType(geom) = 'MULTIPOLYGON'
+                    THEN ST_Collect(list_transform(ST_Dump(geom), lambda d: {filled("d.geom")}))
+                ELSE geom
+           END AS geom
+    FROM {_ident(prev)}
+    """
+    log(f"fill_holes{f' under {step.max_area}' if step.max_area is not None else ''}")
+    return sql
+
+
+def eliminate_slivers_sql(prev: str, step: EliminateSlivers, log: Log, ctx: StepContext) -> str:
+    """Each sliver (a polygon under max_area and/or matching `where`) unioned into one
+    neighbour that isn't a sliver: of those sharing a border with it (a line, not just a
+    corner), the one with the longest shared border, or the largest. Ties go to the first
+    in row order. A sliver with no such neighbour stays a row of its own; the others are
+    gone. Rows that aren't polygons pass through."""
+    _needs_geom(ctx, "eliminate_slivers")
+    is_poly = _IS_POLYGON.format(g="geom")
+    picks = [is_poly]
+    if step.max_area is not None:
+        picks.append(f"ST_Area(geom) < {step.max_area}")
+    if step.where:
+        picks.append(f"({step.where})")
+    border = "ST_Length(ST_Intersection(ST_Boundary(s.geom), ST_Boundary(b.geom)))"
+    score = border if step.merge_into == "longest_border" else "ST_Area(b.geom)"
+    sql = f"""
+    WITH p AS MATERIALIZED (
+        SELECT *, row_number() OVER () AS __row, COALESCE({' AND '.join(picks)}, false) AS __sliver
+        FROM {_ident(prev)}
+    ),
+    s AS (SELECT __row, geom FROM p WHERE __sliver),
+    b AS (SELECT __row, geom FROM p WHERE NOT __sliver AND {is_poly}),
+    nb AS (
+        -- each sliver's neighbour; the border is compared after the join, so DuckDB still
+        -- plans the intersects as its R-tree spatial join
+        SELECT __s, arg_max(__b, row(__score, -__b)) AS __b FROM (
+            SELECT s.__row AS __s, b.__row AS __b, {border} AS __border, {score} AS __score
+            FROM s JOIN b ON ST_Intersects(s.geom, b.geom)
+        )
+        WHERE __border > 0
+        GROUP BY __s
+    ),
+    grown AS (
+        SELECT nb.__b AS __row, ST_Union_Agg(s.geom) AS __add
+        FROM nb JOIN s ON s.__row = nb.__s
+        GROUP BY nb.__b
+    )
+    SELECT p.* EXCLUDE (geom, __row, __sliver),
+           CASE WHEN g.__add IS NULL THEN p.geom ELSE ST_Union(p.geom, g.__add) END AS geom
+    FROM p
+    LEFT JOIN grown g ON g.__row = p.__row
+    LEFT JOIN nb ON nb.__s = p.__row
+    WHERE nb.__s IS NULL
+    ORDER BY p.__row
+    """
+    picked = [f"area < {step.max_area}"] if step.max_area is not None else []
+    picked += [step.where] if step.where else []
+    log(f"eliminate_slivers ({' and '.join(picked)}) into the {step.merge_into.replace('_', ' ')}")
+    return sql
+
+
+# split_lines without a `tolerance`: cut positions closer than this (working-CRS units) are
+# one cut.
+_SPLIT_LINES_EXACT = 1e-6
+
+
+def split_lines_sql(prev: str, step: SplitLines, log: Log, ctx: StepContext) -> str:
+    """Each line cut at every point where another line (or, with `source`, a source line or
+    polygon edge) crosses or touches it: the ends of a stretch they share, too.
+
+    The cuts are positions along the line itself (ST_LineLocatePoint) and the pieces are
+    ST_LineSubstrings of it, as in line_overlay, so the pieces keep the line's own
+    vertices (and Z) and neighbours share their end points exactly. The lines are cut part
+    by part, multilines included. Each piece is a row with its line's attributes; the
+    rows are numbered afresh (__src_row) in line, then piece order. Rows that aren't lines
+    pass through. A line isn't cut where it crosses itself.
+
+    With `tolerance`, a cutting line's end within that distance of a line (an undershoot,
+    or a T-junction digitised a few millimetres off) cuts it at the closest point too, and
+    cuts closer together than that are one cut.
+    """
+    _needs_geom(ctx, "split_lines")
+    is_line = "ST_GeometryType(geom) IN ('LINESTRING', 'MULTILINESTRING')"
+    if step.source:
+        cutters = f"""
+        SELECT NULL::BIGINT AS __a_row,
+               CASE WHEN ST_Dimension(geom) = 2 THEN ST_Boundary(geom) ELSE geom END AS geom
+        FROM {_src(step.source)} WHERE geom IS NOT NULL"""
+        other = ""
+    else:
+        cutters = "SELECT __a_row, geom FROM a"
+        other = " AND b.__a_row <> a.__a_row"
+    tol = step.tolerance if step.tolerance is not None else _SPLIT_LINES_EXACT
+    near_ends = ""
+    if step.tolerance is not None:
+        # The cutters' ends near a line, but not on it: cut it at its closest point.
+        near_ends = f"""
+        UNION
+        SELECT a.__a_row, ST_LineLocatePoint(ST_Force2D(a.geom), ST_Force2D(e.__pt))
+        FROM a JOIN (
+            SELECT __a_row, unnest([ST_StartPoint(__p.geom), ST_EndPoint(__p.geom)]) AS __pt
+            FROM (SELECT __a_row, unnest(ST_Dump(geom)) AS __p FROM b)
+            WHERE ST_GeometryType(__p.geom) = 'LINESTRING'
+        ) e ON ST_DWithin(a.geom, e.__pt, {tol}){other.replace("b.", "e.")}"""
+    sql = f"""
+    WITH p AS MATERIALIZED (
+        SELECT * FROM {_ident(prev)}
+    ),
+    a AS MATERIALIZED (
+        -- one row per line part, so positions along it are well defined
+        SELECT * EXCLUDE (__part), __part.geom AS geom, row_number() OVER () AS __a_row
+        FROM (SELECT * EXCLUDE (geom), unnest(ST_Dump(geom)) AS __part FROM p WHERE {is_line})
+    ),
+    b AS MATERIALIZED ({cutters}),
+    hit AS (
+        -- where each line meets the others: points, or the stretches they share. On a 2D
+        -- copy, since ST_LineLocatePoint crashes on lines with Z or M (see line_overlay).
+        SELECT a.__a_row, ST_Force2D(a.geom) AS __a,
+               unnest(ST_Dump(ST_Intersection(ST_Force2D(a.geom), ST_Force2D(b.geom)))).geom AS __x
+        FROM a JOIN b ON ST_Intersects(a.geom, b.geom){other}
+    ),
+    pos AS (
+        SELECT __a_row, ST_LineLocatePoint(__a, __pt) AS f
+        FROM (
+            SELECT __a_row, __a, unnest(CASE
+                WHEN ST_GeometryType(__x) = 'POINT' THEN [__x]
+                WHEN ST_GeometryType(__x) = 'LINESTRING' THEN [ST_StartPoint(__x), ST_EndPoint(__x)]
+                ELSE [] END) AS __pt
+            FROM hit
+        )
+        UNION SELECT __a_row, 0.0 FROM a
+        UNION SELECT __a_row, 1.0 FROM a{near_ends}
+    ),
+    cut AS (
+        SELECT __a_row, f AS lo, lead(f) OVER (PARTITION BY __a_row ORDER BY f) AS hi
+        FROM (
+            SELECT c.__a_row, c.f, lag(c.f) OVER (PARTITION BY c.__a_row ORDER BY c.f) AS prev_f,
+                   {tol} / nullif(ST_Length(a.geom), 0) AS near
+            FROM pos c JOIN a ON a.__a_row = c.__a_row
+        )
+        -- positions next to each other are one cut, and the line's own ends stay put
+        WHERE f = 0 OR f = 1 OR (f - prev_f > near AND f < 1 - near)
+    ),
+    piece AS (
+        SELECT a.* EXCLUDE (__a_row, geom), ST_LineSubstring(a.geom, c.lo, c.hi) AS geom,
+               a.__a_row AS __o1, c.lo AS __o2
+        FROM cut c JOIN a ON a.__a_row = c.__a_row
+        WHERE c.hi > c.lo
+        UNION ALL BY NAME
+        -- anything that isn't a line (or has no geometry) passes through
+        SELECT *, -1 AS __o1, 0.0 AS __o2 FROM p WHERE geom IS NULL OR NOT {is_line}
+    )
+    SELECT * EXCLUDE (__src_row, __o1, __o2),
+           row_number() OVER (ORDER BY __src_row, __o1, __o2) AS __src_row
+    FROM piece
+    ORDER BY __src_row
+    """
+    suffix = f" (tolerance={step.tolerance})" if step.tolerance is not None else ""
+    log(f"split_lines{' at ' + step.source if step.source else ' where they cross'}{suffix}")
     return sql
 
 
@@ -850,9 +1032,12 @@ STEP_SQL: dict[type, Callable[..., str]] = {
     Erase: erase_sql,
     Dissolve: dissolve_sql,
     CombineLines: combine_lines_sql,
+    SplitLines: split_lines_sql,
     Simplify: simplify_sql,
     SnapToGrid: snap_to_grid_sql,
     CleanCoverage: clean_coverage_sql,
+    FillHoles: fill_holes_sql,
+    EliminateSlivers: eliminate_slivers_sql,
     Explode: explode_sql,
     IntersectOverlay: intersect_overlay_sql,
     LineOverlay: line_overlay_sql,

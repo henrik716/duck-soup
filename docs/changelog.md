@@ -7,6 +7,66 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
+## 1.7 — 2026-10-13
+
+**Pipeline YAML**
+
+- Geometry clean-up and generalization steps, shown in the editor's gallery under
+  **Shaping up**:
+    - [`simplify`](reference/steps.md#simplify): fewer vertices within a `tolerance`, one
+      feature at a time, or with `shared_boundaries: true` the polygons together, so the
+      edges neighbours share stay shared and no gaps or slivers open up between them.
+      (1.7.0)
+    - [`snap_to_grid`](reference/steps.md#snap_to_grid): every vertex rounded to a grid,
+      keeping the geometry valid. (1.7.0)
+    - [`clean_coverage`](reference/steps.md#clean_coverage): polygons that should fit edge to
+      edge made to: overlaps removed, nearly matching edges snapped, small gaps filled. (1.7.0)
+    - [`fill_holes`](reference/steps.md#fill_holes): the holes in polygons removed, all of
+      them or those under `max_area`. (1.7.0)
+    - [`eliminate_slivers`](reference/steps.md#eliminate_slivers): polygons under `max_area`
+      (and/or matching `where`) merged into the neighbour they share the longest border with,
+      or the largest. (1.7.0)
+    - [`split_lines`](reference/steps.md#split_lines): lines cut where they cross or touch
+      each other, or with `source` where another source's lines or polygon edges cross them.
+      `tolerance` also cuts where a line ends just short of another. (1.7.0)
+    - [`explode`](reference/steps.md#explode): multipart to singleparts, a row per part, with
+      an optional part number. (1.7.0)
+- [`remove_duplicates`](reference/steps.md#remove_duplicates): the first row of each set
+  with the same `by` values and/or the same geometry, with `rejects` for the duplicates.
+  (1.7.0)
+- [`http_lookup`](reference/steps.md#http_lookup): an HTTP GET per row, e.g. an address
+  search, with values from the JSON response as columns. One request per distinct URL,
+  cached on disk, at a polite rate. (1.7.0)
+- [`make_points`](reference/steps.md#make_points): point geometry from two coordinate
+  columns, so a table without geometry (geocoded with `http_lookup`, say) has it from that
+  step on. (1.7.0)
+
+**Editor**
+
+- The step gallery has a search box. It finds a step by its name, its description, or the
+  FME transformer or QGIS tool it replaces (`Deaggregator`, `DonutHoleExtractor`,
+  `Split with lines`, …); <kbd>Enter</kbd> adds the first match. (1.7.0)
+- Replacing the geometry is easier to find: Update Attributes lists **geom** among the
+  columns reaching it, and clicking it opens the expression builder, whose new
+  **Geometry (new shape)** group has the conversions: outline, hulls, bounding box, point on
+  surface, line midpoint, and more. See [`attributes`](reference/steps.md#attributes). (1.7.0)
+- HTTP Lookup's **Test request** shows the first row's response; click a value in it to add
+  it as a field. (1.7.0)
+
+**Fixes**
+
+- A layer without geometry and without a mapping, such as a rejects layer from a CSV
+  source, failed to write to a GeoPackage. (1.7.0)
+
+**Docs**
+
+- The new steps in the step reference, the editor's steps page and the
+  [FME guide](guides/fme.md), with the FME transformers each one stands in for. (1.7.0)
+- [Steps by example](tutorials/steps.md) has an example for each new step but
+  `http_lookup`, which needs a web API. Two new sample datasets come with them: `reedbeds`,
+  three marsh zones that don't quite fit together, and `sightings`, a CSV with text
+  coordinates. Run `duck-soup tutorial --force` to get them. (1.7.0)
+
 ## 1.6 — 2026-10-13
 
 !!! warning "Upgrading"

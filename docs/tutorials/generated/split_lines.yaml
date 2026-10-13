@@ -1,0 +1,3 @@
+base: paths
+steps:
+- {type: split_lines, tolerance: 0.1}

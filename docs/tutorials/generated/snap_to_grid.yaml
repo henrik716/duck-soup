@@ -1,0 +1,3 @@
+base: places
+steps:
+- {type: snap_to_grid, grid_size: 50}

@@ -1,0 +1,4 @@
+base: districts
+steps:
+- {type: erase, source: parks}
+- {type: fill_holes, max_area: 30000}

@@ -6,8 +6,8 @@ import {
   DatabaseZap, Download, Edit3, Eraser, Eye, File, FileCode, FileSpreadsheet, FileText,
   Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, Grid3x3, GripVertical,
   HardDrive, Hash, History, House, Info, Layers, Link, Loader, Map, MapPin, MapPinned,
-  Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Puzzle, Radar, RefreshCw, Save,
-  Scissors, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
+  Maximize2, Merge, Moon, Network, Package, PaintBucket, Play, Plus, PlusCircle, Puzzle, Radar,
+  RefreshCw, Save, Scissors, ScissorsLineDashed, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
   Trash2, Ungroup, UploadCloud, Waypoints, X,
 } from 'lucide'
 
@@ -28,8 +28,8 @@ export const ICONS: Record<string, IconNode> = {
   DatabaseZap, Download, Edit3, Eraser, Eye, File, FileCode, FileSpreadsheet, FileText,
   Filter, Folder, FolderOpen, FolderOutput, GitBranch, GitMerge, Globe, Grid3x3, GripVertical,
   HardDrive, Hash, History, House, Info, Layers, Link, Loader, Map, MapPin, MapPinned,
-  Maximize2, Moon, Network, Package, Play, Plus, PlusCircle, Puzzle, Radar, RefreshCw, Save,
-  Scissors, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
+  Maximize2, Merge, Moon, Network, Package, PaintBucket, Play, Plus, PlusCircle, Puzzle, Radar,
+  RefreshCw, Save, Scissors, ScissorsLineDashed, Search, Server, Sliders, Sparkles, Spline, Split, Square, Star, Sun, Table, TableProperties, Terminal,
   Trash2, Ungroup, UploadCloud, Waypoints, X,
 }
 

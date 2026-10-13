@@ -170,6 +170,26 @@ Here the footpath network collects attributes from two datasets: the lamp regist
 
 ## Geometry: change the shapes
 
+### `make_points`
+
+**Makes point geometry from two coordinate columns**, so a table without geometry can be
+joined, buffered and mapped like any other layer.
+
+```yaml
+--8<-- "docs/tutorials/generated/make_points.yaml"
+```
+
+--8<-- "docs/tutorials/generated/make_points.md"
+
+- The sightings come from a CSV with `lon` and `lat` as text. `make_points` casts them to
+  numbers and builds the points in `EPSG:4326`, reprojected to the working CRS, so the
+  [`spatial_join`](#spatial_join) after it can find each sighting's district.
+- The Goosander came without coordinates. It gets no point, and with `rejects` it goes to
+  the `unplaced_sightings` layer instead of on down the chain.
+- A CSV whose coordinates are already numbers doesn't need this step: set `x_field` and
+  `y_field` on the source. `make_points` is for coordinates that turn up partway through
+  a pipeline, say from an [`http_lookup`](../reference/steps.md#http_lookup) geocoder.
+
 ### `buffer`
 
 **Grows each geometry by a distance** (or shrinks polygons, with a negative distance).
@@ -288,6 +308,140 @@ values.
 - Lines are joined only where one ends and the next begins, the way they run. Set
   `preserve_direction: false` to let a line be reversed to fit.
 
+### `split_lines`
+
+**Cuts lines where they cross or touch each other**, so every junction becomes an end point:
+the noding a network needs before routing or counting segments.
+
+```yaml
+--8<-- "docs/tutorials/generated/split_lines.yaml"
+```
+
+--8<-- "docs/tutorials/generated/split_lines.svg"
+
+--8<-- "docs/tutorials/generated/split_lines.md"
+
+- Mill Lane ends on Riverside Walk, and Waddle Bridge starts on it, so Riverside Walk
+  is cut in two places and comes out as 3 pieces. The lines that only end there aren't cut.
+- Waddle Bridge was meant to end on Reed Way, but after the trip through longitude and
+  latitude its end misses by millimetres, as separately digitised lines usually do.
+  `tolerance: 0.1` cuts Reed Way there anyway; without it, Reed Way stays in one piece.
+- Each piece keeps its line's attributes, and the pieces are the line's own geometry, so
+  neighbouring pieces share their end points exactly. Give `source` to cut at another
+  layer's lines or polygon edges instead (paths split at district borders, say).
+
+### `clean_coverage`
+
+**Makes polygons that should fit edge to edge actually fit.** The reed beds were surveyed
+zone by zone: Sedge Shallows reaches 1.2 m into Cattail Corner, and Cattail Corner stops up
+to a metre short of Reedy Reach, leaving a thin gap between them.
+
+```yaml
+--8<-- "docs/tutorials/generated/clean_coverage.yaml"
+```
+
+--8<-- "docs/tutorials/generated/clean_coverage.md"
+
+- The overlap is gone (`overlap_m2` is the area each zone shares with the others), and
+  the gap, narrower than `max_gap_width`, is filled. The three zones now cover their
+  57 600 m² exactly once.
+- A gap is a hole enclosed by the polygons; an inlet open to the outside isn't filled.
+  `snap_distance` also snaps edges that are nearly, but not exactly, on top of each other.
+
+### `simplify`
+
+**Removes vertices**, keeping every edge within `tolerance` of the original.
+
+```yaml
+--8<-- "docs/tutorials/generated/simplify.yaml"
+```
+
+--8<-- "docs/tutorials/generated/simplify.svg"
+
+--8<-- "docs/tutorials/generated/simplify.md"
+
+- The reed beds' wiggly edges have a vertex every 5 metres. Simplified with a 6 m
+  tolerance, each zone keeps a fraction of them.
+- `shared_boundaries: true` simplifies the zones together, so an edge two of them share
+  is simplified once and stays shared: the areas still add up to 57 600 m², with no gaps or
+  slivers between the zones. Simplified one at a time, the two sides of a shared edge
+  would come out differently.
+- Shared-boundary simplification needs polygons that don't overlap, which is why
+  [`clean_coverage`](#clean_coverage) runs first. `keep_outer_boundary: true` would leave
+  the outer edge of the reed beds as it is.
+
+### `snap_to_grid`
+
+**Rounds every vertex to a grid**, here a coarse 50 m one so the jump is visible.
+
+```yaml
+--8<-- "docs/tutorials/generated/snap_to_grid.yaml"
+```
+
+--8<-- "docs/tutorials/generated/snap_to_grid.svg"
+
+--8<-- "docs/tutorials/generated/snap_to_grid.md"
+
+- Each place moves to the nearest grid point; the grey dots are where they were. A grid of
+  `0.01` (centimetres) is the usual choice, to drop the spurious decimals a reprojection
+  leaves behind.
+- The geometry stays valid. A polygon narrower than a grid cell collapses to an empty
+  geometry, and its row is kept.
+
+### `fill_holes`
+
+**Removes the holes in polygons**, or with `max_area` only the small ones.
+
+```yaml
+--8<-- "docs/tutorials/generated/fill_holes.yaml"
+```
+
+--8<-- "docs/tutorials/generated/fill_holes.svg"
+
+--8<-- "docs/tutorials/generated/fill_holes.md"
+
+- Erasing the parks punches a hole in three districts (Central Puddle Park, on the
+  corner, only takes a bite out of the edges). With `max_area: 30000`, Willow Wallow's
+  22 400 m² hole in Featherhill is filled; Kingfisher Meadow's and Bulrush Fields' are
+  larger and stay.
+- Without `max_area`, every hole is filled.
+
+### `eliminate_slivers`
+
+**Merges small polygons into a neighbour.** Overlaying the parks with the districts cuts
+Central Puddle Park, which straddles the town centre, into four pieces; the one in
+Featherhill (blue, 5 600 m²) is too small to keep.
+
+```yaml
+--8<-- "docs/tutorials/generated/eliminate_slivers.yaml"
+```
+
+--8<-- "docs/tutorials/generated/eliminate_slivers.svg"
+
+--8<-- "docs/tutorials/generated/eliminate_slivers.md"
+
+- The sliver merges into the neighbour it shares the longest border with: the Old
+  Puddleton piece, which grows from 9 600 to 15 200 m². The sliver's row is gone; the
+  neighbour keeps its attributes. `merge_into: largest` picks the largest neighbour
+  instead.
+- `where` picks the polygons by a condition, alone or together with `max_area`. A sliver
+  with no neighbour to merge into stays as it is.
+
+### `explode`
+
+**Splits multipart features into a row per part.**
+
+```yaml
+--8<-- "docs/tutorials/generated/explode.yaml"
+```
+
+--8<-- "docs/tutorials/generated/explode.md"
+
+- The [`dissolve`](#dissolve) by `kind` makes two multipolygons: the two meadows and the
+  two parks, none of them touching. `explode` turns each into its parts again, with the
+  feature's attributes, and `part_field` numbers them.
+- A feature that is already a single part stays one row.
+
 ## Rows: keep some, add more, or set a copy aside
 
 ### `filter`
@@ -309,6 +463,21 @@ values.
   Duckling Swim School, so `bread_crumbs >= 20000` is NULL rather than false, and the row goes.
 - To split rows into several outputs rather than drop them, keep them all and give each
   [output layer](../editor/output-layers.md) its own `filter`.
+
+### `remove_duplicates`
+
+**Keeps the first row of each set of duplicates.**
+
+```yaml
+--8<-- "docs/tutorials/generated/remove_duplicates.yaml"
+```
+
+--8<-- "docs/tutorials/generated/remove_duplicates.md"
+
+- One place per category: the first in row order. The four others (two more cafés, a
+  second library and the Museum of Rubber Ducks) go to the `second_in_category` layer.
+- `geometry: true` compares the shapes instead of, or as well as, the columns: two
+  features with the same geometry are duplicates whatever vertex they start at.
 
 ### `merge`
 

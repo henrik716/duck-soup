@@ -1,0 +1,6 @@
+base: parks
+steps:
+- type: intersect_overlay
+  source: districts
+  fields: {district: district_name}
+- {type: eliminate_slivers, max_area: 6000}

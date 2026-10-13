@@ -44,7 +44,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -93,7 +98,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: parks
   steps:
   - type: spatial_join
@@ -145,7 +155,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: parks
   steps:
   - type: spatial_join
@@ -194,7 +209,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: attribute_join
@@ -244,7 +264,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: nearest_neighbor
@@ -294,7 +319,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: stops
   steps:
   - {type: buffer, distance: 150}
@@ -340,7 +370,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: parks
   steps:
   - {type: centroid}
@@ -386,7 +421,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   derived_sources:
   - {id: old_puddleton, from: districts, where: "district_name = 'Old Puddleton'"}
   base: parks
@@ -434,7 +474,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: parks
   steps:
   - {type: erase, source: river}
@@ -480,7 +525,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: districts
   steps:
   - type: dissolve
@@ -531,7 +581,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: paths
   steps:
   - type: line_overlay
@@ -552,6 +607,371 @@ pipelines:
   mapping: []
   layers:
   - {layer: combine_lines, crs: 'EPSG:32631'}
+- name: split_lines
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: paths
+  steps:
+  - {type: split_lines, tolerance: 0.1}
+  mapping: []
+  layers:
+  - {layer: split_lines, crs: 'EPSG:32631'}
+- name: snap_to_grid
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: places
+  steps:
+  - {type: snap_to_grid, grid_size: 50}
+  mapping: []
+  layers:
+  - {layer: snap_to_grid, crs: 'EPSG:32631'}
+- name: clean_coverage
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: reedbeds
+  steps:
+  - {type: clean_coverage, max_gap_width: 3}
+  mapping: []
+  layers:
+  - {layer: clean_coverage, crs: 'EPSG:32631'}
+- name: simplify
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: reedbeds
+  steps:
+  - {type: clean_coverage, max_gap_width: 3}
+  - {type: simplify, tolerance: 6, shared_boundaries: true}
+  mapping: []
+  layers:
+  - {layer: simplify, crs: 'EPSG:32631'}
+- name: fill_holes
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: districts
+  steps:
+  - {type: erase, source: parks}
+  - {type: fill_holes, max_area: 30000}
+  mapping: []
+  layers:
+  - {layer: fill_holes, crs: 'EPSG:32631'}
+- name: eliminate_slivers
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: parks
+  steps:
+  - type: intersect_overlay
+    source: districts
+    fields: {district: district_name}
+  - {type: eliminate_slivers, max_area: 6000}
+  mapping: []
+  layers:
+  - {layer: eliminate_slivers, crs: 'EPSG:32631'}
+- name: explode
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: parks
+  steps:
+  - type: dissolve
+    by:
+    - kind
+  - {type: explode, part_field: part}
+  mapping: []
+  layers:
+  - {layer: explode, crs: 'EPSG:32631'}
 - name: intersect_overlay
   working_crs: EPSG:32631
   sources:
@@ -591,7 +1011,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: parks
   steps:
   - type: intersect_overlay
@@ -639,7 +1064,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: paths
   steps:
   - type: line_overlay
@@ -692,7 +1122,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -702,6 +1137,118 @@ pipelines:
   mapping: []
   layers:
   - {layer: filter, crs: 'EPSG:32631'}
+- name: remove_duplicates
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: places
+  steps:
+  - type: remove_duplicates
+    by:
+    - category
+    rejects: second_in_category
+  mapping: []
+  layers:
+  - {layer: remove_duplicates, crs: 'EPSG:32631'}
+- name: make_points
+  working_crs: EPSG:32631
+  sources:
+  - id: places
+    format: geojson
+    uri: data/tutorial/places.geojson
+    crs: EPSG:4326
+  - id: districts
+    format: geojson
+    uri: data/tutorial/districts.geojson
+    crs: EPSG:4326
+  - id: parks
+    format: geojson
+    uri: data/tutorial/parks.geojson
+    crs: EPSG:4326
+  - id: river
+    format: geojson
+    uri: data/tutorial/river.geojson
+    crs: EPSG:4326
+  - id: stops
+    format: geojson
+    uri: data/tutorial/stops.geojson
+    crs: EPSG:4326
+  - id: new_places
+    format: geojson
+    uri: data/tutorial/new_places.geojson
+    crs: EPSG:4326
+  - id: paths
+    format: geojson
+    uri: data/tutorial/paths.geojson
+    crs: EPSG:4326
+  - id: lit_paths
+    format: geojson
+    uri: data/tutorial/lit_paths.geojson
+    crs: EPSG:4326
+  - id: boardwalks
+    format: geojson
+    uri: data/tutorial/boardwalks.geojson
+    crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
+  - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
+  base: sightings
+  steps:
+  - type: make_points
+    x: lon
+    y: lat
+    crs: EPSG:4326
+    rejects: unplaced_sightings
+  - type: spatial_join
+    source: districts
+    fields: {district: district_name}
+  mapping: []
+  layers:
+  - {layer: make_points, crs: 'EPSG:32631'}
 - name: merge
   working_crs: EPSG:32631
   sources:
@@ -741,7 +1288,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - {type: merge, source: new_places}
@@ -787,7 +1339,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - {type: snapshot, id: crumb_hotspots}
@@ -841,7 +1398,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: attributes
@@ -893,7 +1455,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -953,7 +1520,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -1006,7 +1578,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -1060,7 +1637,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -1113,7 +1695,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -1173,7 +1760,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -1230,7 +1822,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: places
   steps:
   - type: spatial_join
@@ -1283,7 +1880,12 @@ pipelines:
     format: geojson
     uri: data/tutorial/boardwalks.geojson
     crs: EPSG:4326
+  - id: reedbeds
+    format: geojson
+    uri: data/tutorial/reedbeds.geojson
+    crs: EPSG:4326
   - {id: categories, format: csv, uri: data/tutorial/categories.csv}
+  - {id: sightings, format: csv, uri: data/tutorial/sightings.csv}
   base: parks
   steps: []
   mapping:

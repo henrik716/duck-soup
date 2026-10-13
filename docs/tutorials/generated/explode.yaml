@@ -1,0 +1,6 @@
+base: parks
+steps:
+- type: dissolve
+  by:
+  - kind
+- {type: explode, part_field: part}

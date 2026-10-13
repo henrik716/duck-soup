@@ -255,7 +255,9 @@ export function openExprDrawer(
 
   const funcList = drawer.querySelector<HTMLElement>('#exprFuncList')!
   funcList.innerHTML = ''
-  ;[...extraSnippets, ...EXPR_SNIPPET_CATEGORIES].forEach(cat => {
+  // An extra category that's also a regular one (Geometry, for a `geom` row) is listed once, first.
+  const extraNames = new Set(extraSnippets.map(cat => cat.category))
+  ;[...extraSnippets, ...EXPR_SNIPPET_CATEGORIES.filter(cat => !extraNames.has(cat.category))].forEach(cat => {
     const details = mkEl('details', { className: 'expr-snippet-category', open: true })
     details.appendChild(mkEl('summary', { textContent: cat.category }))
     cat.snippets.forEach(s => {

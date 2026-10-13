@@ -12,6 +12,35 @@ export interface ExprSnippetCategory {
   snippets: ExprSnippet[]
 }
 
+// Each returns a geometry: in Update Attributes, set it as the `geom` column to replace the
+// features' shapes (or as another column for a second geometry). Listed first in the
+// expression builder of a row that sets `geom`.
+export const GEOMETRY_SNIPPETS: ExprSnippetCategory = {
+  category: 'Geometry (new shape)',
+  snippets: [
+    { name: 'ST_Boundary(geom)', code: 'ST_Boundary(geom)', doc: 'Polygon outline as lines (a line\'s end points)' },
+    { name: 'ST_ExteriorRing(geom)', code: 'ST_ExteriorRing(geom)', doc: 'A polygon\'s outer ring as a line, without its holes' },
+    { name: 'ST_BuildArea(geom)', code: 'ST_BuildArea(geom)', doc: 'Polygons from the closed rings a (multi)line forms' },
+    { name: 'ST_ConvexHull(geom)', code: 'ST_ConvexHull(geom)', doc: 'Smallest convex polygon around the geometry' },
+    { name: 'ST_ConcaveHull(geom, ratio, holes)', code: 'ST_ConcaveHull(geom, 0.5, false)', doc: 'Tighter hull: ratio 1 is the convex hull, lower follows the shape closer' },
+    { name: 'ST_Envelope(geom)', code: 'ST_Envelope(geom)', doc: 'Bounding box as a polygon' },
+    { name: 'ST_MinimumRotatedRectangle(geom)', code: 'ST_MinimumRotatedRectangle(geom)', doc: 'Smallest rectangle around the geometry, at any angle' },
+    { name: 'ST_PointOnSurface(geom)', code: 'ST_PointOnSurface(geom)', doc: 'A point guaranteed to lie inside the polygon (unlike the centroid)' },
+    { name: 'ST_Centroid(geom)', code: 'ST_Centroid(geom)', doc: 'Centre of mass (may fall outside a curved polygon)' },
+    { name: 'ST_LineInterpolatePoint(geom, f)', code: 'ST_LineInterpolatePoint(geom, 0.5)', doc: 'The point a fraction along a line (0.5: the middle)' },
+    { name: 'ST_StartPoint(geom)', code: 'ST_StartPoint(geom)', doc: 'First point of a line' },
+    { name: 'ST_EndPoint(geom)', code: 'ST_EndPoint(geom)', doc: 'Last point of a line' },
+    { name: 'ST_LineMerge(geom)', code: 'ST_LineMerge(geom)', doc: 'A multiline\'s touching parts joined into longer lines' },
+    { name: 'ST_Reverse(geom)', code: 'ST_Reverse(geom)', doc: 'The line drawn the other way' },
+    { name: 'ST_Buffer(geom, d)', code: 'ST_Buffer(geom, 10)', doc: 'Grown (or, negative, shrunk) by a distance in working_crs units' },
+    { name: 'ST_Translate(geom, dx, dy)', code: 'ST_Translate(geom, 10, 0)', doc: 'Moved by dx, dy in working_crs units' },
+    { name: 'ST_MakeValid(geom)', code: 'ST_MakeValid(geom)', doc: 'Repaired: self-intersections and the like fixed' },
+    { name: 'ST_Force2D(geom)', code: 'ST_Force2D(geom)', doc: 'Z and M values dropped' },
+    { name: 'ST_Multi(geom)', code: 'ST_Multi(geom)', doc: 'As a multi-geometry, so every row has the same type' },
+    { name: 'ST_CollectionExtract(geom, 3)', code: 'ST_CollectionExtract(geom, 3)', doc: 'Only the parts of one kind: 1 points, 2 lines, 3 polygons' },
+  ]
+}
+
 export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
   {
     category: 'Conditional',
@@ -83,6 +112,7 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
       { name: 'ST_Transform(geom, crs)', code: "ST_Transform(geom, 'EPSG:25833', 'EPSG:4326')", doc: 'Reproject a geometry' }
     ]
   },
+  GEOMETRY_SNIPPETS,
   {
     category: 'List / JSON',
     snippets: [

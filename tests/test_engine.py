@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from duck_soup import mapping
-from duck_soup.config import MAP_FUNCS, CodeCase, CodeList, load_config, load_config_dict
+from duck_soup.config import MAP_FUNCS, CodeCase, CodeList, load_config, load_config_dict, reject_layer_names
 from duck_soup.engine import Engine, preview_config_pipeline, run_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -613,7 +613,10 @@ def test_tutorial_config_runs(tmp_path, monkeypatch):
 
     layers = _gpkg_layers(Path(run_config(cfg)))
 
-    assert set(layers) == {p.name for p in cfg.pipelines}
+    rejects = {name for p in cfg.pipelines for name in reject_layer_names(p.steps)}
+    assert rejects == {"second_in_category", "unplaced_sightings"}
+    assert set(layers) == {p.name for p in cfg.pipelines} | rejects
+    assert layers["second_in_category"] == 4 and layers["unplaced_sightings"] == 1
     assert layers["spatial_join"] == 11
     assert layers["dissolve"] == 2
     assert layers["spatial_join_all"] == 7

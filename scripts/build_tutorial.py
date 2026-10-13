@@ -3,7 +3,7 @@
     python scripts/build_tutorial.py
 
 Writes:
-  duck_soup/tutorial/*.geojson, categories.csv   the fictional "Pondsworth" sample data
+  duck_soup/tutorial/*.geojson, *.csv            the fictional "Pondsworth" sample data
   duck_soup/tutorial/pondsworth.yaml             one pipeline per tutorial example (runnable config)
   docs/tutorials/generated/<name>.yaml      the YAML shown for each example
   docs/tutorials/generated/<name>.md        result tables (real engine output)
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import re
 import tempfile
@@ -120,6 +121,56 @@ NEW_PLACES = [
     ("Pop-up Duck Gallery", "MUS", 560, 120),
 ]
 
+# Reed beds: three marsh zones north of the river, edge to edge, with wiggly shared edges (a
+# vertex every 5 m). They were surveyed zone by zone, so they don't quite fit: Sedge
+# Shallows reaches 1.2 m into Cattail Corner, and Cattail Corner stops up to a metre short
+# of Reedy Reach along the middle of their shared edge, leaving an enclosed gap.
+REED_X0, REED_X1, REED_Y0, REED_Y1 = 20, 340, 600, 780
+REED_SPLITS = (127, 233)
+REED_STEP = 5
+
+
+def _wiggle(t: float, seed: float) -> float:
+    return 9 * math.sin(t / 13 + seed) + 4 * math.sin(t / 4.1 + 2 * seed)
+
+
+def _reed_edge(x: float, seed: float, shift=lambda y: 0.0) -> list[tuple[float, float]]:
+    """A shared zone edge, bottom to top: x plus a wiggle (plus `shift`), a vertex every 5 m."""
+    ys = range(REED_Y0, REED_Y1 + 1, REED_STEP)
+    return [(round(x + _wiggle(y, seed) + shift(y), 2), y) for y in ys]
+
+
+def _reed_gap(y: float) -> float:
+    """Cattail Corner's east edge pulled back by up to 1 m between y 640 and 740."""
+    if y <= 630 or y >= 750:
+        return 0.0
+    return -min(1.0, (y - 630) / 20, (750 - y) / 20)
+
+
+def reed_zones() -> list[tuple[str, str, list[tuple[float, float]]]]:
+    west = [(REED_X0, REED_Y0), (REED_X0, REED_Y1)]
+    split1 = _reed_edge(REED_SPLITS[0], 0.3)
+    split2 = _reed_edge(REED_SPLITS[1], 1.7)
+    east = [(REED_X1, REED_Y0), (REED_X1, REED_Y1)]
+    over = _reed_edge(REED_SPLITS[0], 0.3, lambda y: 1.2)
+    short = _reed_edge(REED_SPLITS[1], 1.7, _reed_gap)
+    # rings: up the west side, back down the east side
+    return [
+        ("Sedge Shallows", "sedge", west + list(reversed(over))),
+        ("Cattail Corner", "cattail", split1 + list(reversed(short))),
+        ("Reedy Reach", "reed", split2 + list(reversed(east))),
+    ]
+
+
+# Duck sightings phoned in by the public: coordinates as text, one without any.
+SIGHTINGS = [
+    ("Mallard", "2026-04-02", 380, 470),
+    ("Mute swan", "2026-04-03", 610, 300),
+    ("Teal", "2026-04-05", 880, 690),
+    ("Goosander", "2026-04-06", None, None),
+    ("Mallard", "2026-04-09", 140, 330),
+]
+
 CATEGORIES = [
     ("MUS", "Museum"),
     ("CAF", "Café"),
@@ -206,6 +257,16 @@ def write_data() -> None:
         {"type": "Feature", "properties": {"material": m}, "geometry": _line(con, pts, BOARDWALK_OFFSET)}
         for m, pts in BOARDWALKS
     ])
+    dump("reedbeds", [
+        {"type": "Feature", "properties": {"name": n, "vegetation": v}, "geometry": _polygon(con, ring)}
+        for n, v, ring in reed_zones()
+    ])
+    with open(DATA / "sightings.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["species", "seen", "lon", "lat"])
+        for species, seen, x, y in SIGHTINGS:
+            lon, lat = _to_lonlat(con, x, y) if x is not None else ("", "")
+            w.writerow([species, seen, lon, lat])
     with open(DATA / "categories.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["code", "label"])
@@ -222,7 +283,9 @@ SOURCES = [
     {"id": "paths", "format": "geojson", "uri": f"{DATA_REL}/paths.geojson", "crs": "EPSG:4326"},
     {"id": "lit_paths", "format": "geojson", "uri": f"{DATA_REL}/lit_paths.geojson", "crs": "EPSG:4326"},
     {"id": "boardwalks", "format": "geojson", "uri": f"{DATA_REL}/boardwalks.geojson", "crs": "EPSG:4326"},
+    {"id": "reedbeds", "format": "geojson", "uri": f"{DATA_REL}/reedbeds.geojson", "crs": "EPSG:4326"},
     {"id": "categories", "format": "csv", "uri": f"{DATA_REL}/categories.csv"},
+    {"id": "sightings", "format": "csv", "uri": f"{DATA_REL}/sightings.csv"},
 ]
 
 # ---------------------------------------------------------------------------
@@ -362,6 +425,78 @@ EXAMPLES: dict[str, dict] = {
                       ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
         },
     },
+    "split_lines": {
+        "pipeline": {"base": "paths", "steps": [{"type": "split_lines", "tolerance": 0.1}]},
+        "table": [("name", "name"), ("length_m", "round(ST_Length(geom), 1)")],
+        "order": "rowid",
+        "figure": {
+            "before": [BG_DISTRICTS, ("SELECT geom FROM paths", "path")],
+            "after": [BG_DISTRICTS, ("SELECT geom FROM out", "path"),
+                      ("SELECT DISTINCT ST_StartPoint(geom) FROM out UNION SELECT ST_EndPoint(geom) FROM out", "cut")],
+        },
+    },
+    "snap_to_grid": {
+        "pipeline": {"base": "places", "steps": [{"type": "snap_to_grid", "grid_size": 50}]},
+        # the output in local metres, as the tables read it (see _load_out)
+        "table": [("name", "name"), ("x", "round(ST_X(geom), 3)"), ("y", "round(ST_Y(geom), 3)")],
+        "figure": {
+            "before": [BG_DISTRICTS, ("SELECT geom FROM places", "base")],
+            "after": [BG_DISTRICTS, ("SELECT geom FROM places", "ghostpt"), ("SELECT geom FROM out", "out")],
+        },
+    },
+    "clean_coverage": {
+        "pipeline": {"base": "reedbeds", "steps": [{"type": "clean_coverage", "max_gap_width": 3}]},
+        "table": [("name", "name"), ("area_m2", "round(ST_Area(geom))"),
+                  ("overlap_m2", "round(coalesce((SELECT sum(ST_Area(ST_Intersection(out.geom, x.geom))) "
+                                 "FROM out x WHERE x.name <> out.name), 0), 1)")],
+    },
+    "simplify": {
+        "pipeline": {"base": "reedbeds", "steps": [
+            {"type": "clean_coverage", "max_gap_width": 3},
+            {"type": "simplify", "tolerance": 6, "shared_boundaries": True},
+        ]},
+        "table": [("name", "name"), ("vertices", "ST_NPoints(geom)"), ("area_m2", "round(ST_Area(geom))")],
+        "figure": {
+            "before": [("SELECT geom FROM reedbeds", "base")],
+            "after": [("SELECT geom FROM reedbeds", "ghost"), ("SELECT geom FROM out", "out")],
+            "frame": (0, 560, 360, 820),
+        },
+    },
+    "fill_holes": {
+        "pipeline": {"base": "districts", "steps": [
+            {"type": "erase", "source": "parks"},
+            {"type": "fill_holes", "max_area": 30000},
+        ]},
+        "table": [("district_name", "district_name"), ("holes", "ST_NInteriorRings(geom)"),
+                  ("area_ha", "round(ST_Area(geom) / 10000, 2)")],
+        "figure": {
+            "before": [("SELECT geom FROM districts", "base"), ("SELECT geom FROM parks", "ref")],
+            "after": [("SELECT geom FROM parks", "ghost"), ("SELECT geom FROM out", "out")],
+        },
+    },
+    "eliminate_slivers": {
+        "pipeline": {"base": "parks", "steps": [
+            {"type": "intersect_overlay", "source": "districts", "fields": {"district": "district_name"}},
+            {"type": "eliminate_slivers", "max_area": 6000},
+        ]},
+        "table": [("name", "name"), ("district", "district"), ("area_m2", "round(ST_Area(geom), -2)")],
+        "order": "name, district",
+        "figure": {
+            # the pieces the overlay makes, the sliver among them in the other source's colour
+            "before": [BG_DISTRICTS, ("SELECT g, CASE WHEN ST_Area(g) < 6000 THEN 'ref' ELSE 'base' END FROM ("
+                                      "SELECT ST_Intersection(p.geom, d.geom) AS g FROM parks p JOIN districts d "
+                                      "ON ST_Intersects(p.geom, d.geom)) WHERE ST_Area(g) > 0", None)],
+            "after": [BG_DISTRICTS, ("SELECT geom FROM out", "out")],
+        },
+    },
+    "explode": {
+        "pipeline": {"base": "parks", "steps": [
+            {"type": "dissolve", "by": ["kind"]},
+            {"type": "explode", "part_field": "part"},
+        ]},
+        "table": [("kind", "kind"), ("part", "part"), ("area_m2", "round(ST_Area(geom), -2)")],
+        "order": "kind, part",
+    },
     "intersect_overlay": {
         "pipeline": {"base": "parks", "steps": [
             {"type": "intersect_overlay", "source": "districts", "fields": {"district": "district_name"}},
@@ -400,6 +535,19 @@ EXAMPLES: dict[str, dict] = {
             "before": [BG_DISTRICTS, ("SELECT geom FROM places", "base")],
             "after": [BG_DISTRICTS, ("SELECT geom FROM places", "ghostpt"), ("SELECT geom FROM out", "out")],
         },
+    },
+    "remove_duplicates": {
+        "pipeline": {"base": "places", "steps": [
+            {"type": "remove_duplicates", "by": ["category"], "rejects": "second_in_category"},
+        ]},
+        "table": [("name", "name"), ("category", "category")],
+    },
+    "make_points": {
+        "pipeline": {"base": "sightings", "steps": [
+            {"type": "make_points", "x": "lon", "y": "lat", "crs": "EPSG:4326", "rejects": "unplaced_sightings"},
+            {"type": "spatial_join", "source": "districts", "fields": {"district": "district_name"}},
+        ]},
+        "table": [("species", "species"), ("seen", "seen"), ("district", "district")],
     },
     "merge": {
         "pipeline": {"base": "places", "steps": [{"type": "merge", "source": "new_places"}]},
@@ -656,8 +804,17 @@ GAP = 28
 TOP = 22
 
 
+_frame = (FX0, FY0, FX1, FY1)
+
+
 def _xy(x, y, ox):
-    return (ox + (x - FX0) / (FX1 - FX0) * PW, TOP + (FY1 - y) / (FY1 - FY0) * PH)
+    fx0, fy0, fx1, fy1 = _frame
+    return (ox + (x - fx0) / (fx1 - fx0) * PW, TOP + (fy1 - y) / (fy1 - fy0) * _ph())
+
+
+def _ph() -> float:
+    fx0, fy0, fx1, fy1 = _frame
+    return PW * (fy1 - fy0) / (fx1 - fx0)
 
 
 def _svg_geom(con, wkt_geom_sql: str, cls_default: str | None, ox: float) -> list[str]:
@@ -708,10 +865,15 @@ def _svg_labels(con, sql, ox) -> list[str]:
 
 
 def _figure(con, fig: dict, title: str) -> str:
+    """Before/after panels of the whole town, or of `frame` (x0, y0, x1, y1 in local
+    metres) to zoom in."""
+    global _frame
+    _frame = fig.get("frame", (FX0, FY0, FX1, FY1))
     panels = [("Before", fig["before"])]
     if "after" in fig:
         panels.append(("After", fig["after"]))
     width = PW * len(panels) + GAP * (len(panels) - 1)
+    PH = _ph()
     height = TOP + PH + 4
     parts = [f'<svg class="ds-diagram" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-label="{title}">']
     for i, (label, layers) in enumerate(panels):

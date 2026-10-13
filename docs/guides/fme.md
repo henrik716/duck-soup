@@ -59,6 +59,10 @@ set `rejects:` on the join. To drop them, follow the join with a `filter` step.
 | CoordinateRounder | [`snap_to_grid`](../reference/steps.md#snap_to_grid) |
 | Snapper (polygons onto each other), AreaGapAndOverlapCleaner | [`clean_coverage`](../reference/steps.md#clean_coverage) |
 | Deaggregator | [`explode`](../reference/steps.md#explode), with `part_field` for the part number |
+| DonutHoleExtractor (filled outer shapes) | [`fill_holes`](../reference/steps.md#fill_holes), with `max_area` for only the small holes |
+| Intersector, TopologyBuilder (noding lines) | [`split_lines`](../reference/steps.md#split_lines); with `source`, lines cut at another layer's lines or polygon edges |
+| SliverRemover, AreaGapAndOverlapCleaner (small areas) | [`eliminate_slivers`](../reference/steps.md#eliminate_slivers): polygons under an area merged into a neighbour |
+| GeometryCoercer, BoundaryExtractor, BoundingBoxReplacer, HullReplacer, InsidePointReplacer | An [`attributes`](../reference/steps.md#attributes) step setting `geom` with an expression: `ST_Boundary(geom)`, `ST_Envelope(geom)`, `ST_ConvexHull(geom)`, `ST_PointOnSurface(geom)`, … |
 | GeometryValidator (repair) | `make_valid`, on by default for every source |
 | 2DForcer | [`force_2d: true`](../reference/sources.md#3d-geometry) on the source |
 | Reprojector | Automatic: sources are reprojected into the working CRS, and layers into their own `crs` |

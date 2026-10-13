@@ -1078,7 +1078,21 @@ pre { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space:
 .step-gallery-modal {
   max-width: 680px !important;
 }
-.step-gallery-group + .step-gallery-group { margin-top: 18px; }
+.step-gallery-search {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; margin-bottom: 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  background: var(--panel2); color: var(--muted);
+}
+.step-gallery-search:focus-within { border-color: var(--accent); }
+.step-gallery-search input {
+  flex: 1; border: none; background: transparent; box-shadow: none; padding: 9px 0;
+}
+.step-gallery-empty { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+/* The cards and groups are flex/blocks with a display of their own, which [hidden] doesn't beat. */
+.step-gallery-item[hidden], .step-gallery-group[hidden] { display: none; }
+.step-gallery-group:not([hidden]) ~ .step-gallery-group:not([hidden]) { margin-top: 18px; }
 .step-gallery-group-head {
   font-family: var(--display);
   font-size: 12px;

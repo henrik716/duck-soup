@@ -1,0 +1,10 @@
+base: sightings
+steps:
+- type: make_points
+  x: lon
+  y: lat
+  crs: EPSG:4326
+  rejects: unplaced_sightings
+- type: spatial_join
+  source: districts
+  fields: {district: district_name}

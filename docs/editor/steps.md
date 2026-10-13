@@ -14,6 +14,11 @@ step somewhere in the middle, click the **+** on that connection in the
 ![The step gallery](../assets/screenshots/step-gallery-light.png#only-light){ .screenshot .narrow loading=lazy }
 ![The step gallery](../assets/screenshots/step-gallery-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
+Type in the search box at the top to find a step: by its name, by a word from its
+description, or by the FME transformer or QGIS tool it replaces (`Deaggregator`, `Dissolve`,
+`DonutHoleExtractor`, `Split with lines`, …). Words can come in any order. <kbd>Enter</kbd>
+adds the first card that matches, and <kbd>↓</kbd> moves to the cards.
+
 The gallery groups the steps the way the [Step types reference](../reference/steps.md) does,
 each group with a duck name:
 
@@ -32,9 +37,12 @@ each group with a duck name:
 | | Erase / Difference | `erase` | Cut away the part of each feature that overlaps a mask source. |
 | | Dissolve | `dissolve` | Merge features that share the same group-by values, with per-group aggregates. |
 | | Combine Lines | `combine_lines` | Join lines that meet end to end into longer lines, one per connected chain with the same group-by values. |
+| | Split Lines | `split_lines` | Cut lines where they cross or touch, or where another source's lines or polygon edges cross them. |
 | | Simplify / Generalize | `simplify` | Remove vertices within a tolerance, one feature at a time or keeping the boundaries neighbouring polygons share. |
 | | Snap to Grid | `snap_to_grid` | Round every vertex to a grid, keeping the geometry valid. |
 | | Clean Coverage | `clean_coverage` | Make polygons fit edge to edge: snap nearly matching edges, remove overlaps, fill small gaps. |
+| | Fill Holes | `fill_holes` | Remove the holes in polygons, all of them or the ones under an area. |
+| | Eliminate Slivers | `eliminate_slivers` | Merge small polygons into the neighbour they share the longest border with. |
 | | Multipart to Singleparts | `explode` | Split multipolygons, multilines and collections into a row per part. |
 | **Pecking order** (rows: keep some, add more, or set a copy aside) | Filter | `filter` | Drop rows where a SQL condition is false. |
 | | Remove Duplicates | `remove_duplicates` | Keep the first row of each set with the same column values and/or geometry. |
@@ -112,12 +120,19 @@ The body depends on the step type:
   feature's parts.
 - **compare columns**, **compare the geometry**: for remove duplicates, what makes two rows
   duplicates. Give columns, tick the geometry, or both.
+- **max area**, **condition**, **merge into**: for eliminate slivers, which polygons go
+  (smaller than the area, matching the condition, or both) and which neighbour takes each
+  one. **max area** on fill holes fills only the holes smaller than it.
+- **cut by**: for split lines, empty to cut the lines where they cross each other, or a
+  source to cut them at its lines or polygon edges.
 - **Update Attributes** (an attributes step) changes only what you list. Every other column is
   kept as it is and goes on to the next step, as the card says at the top. Its parts:
     - **available here**: the columns that reach this step, grouped by where they come from
       (the base, or an earlier step). Click one to add a row for it, ready to change its value.
       Its **×** adds it to the drop list. Changed columns are outlined, dropped ones struck
-      through.
+      through. **geom**, at the top, replaces the geometry: it adds a row with an expression
+      and opens the expression builder, whose **Geometry (new shape)** group has the
+      conversions (outline, hull, bounding box, point on surface, …).
     - **add or change columns**: rows like the [mapping](mapping.md)'s: a column name, a rule
       (`from`, `const`, `expr`, `func`, `codelist`) and an optional cast. The name is a
       dropdown of the available columns, so changing one is a pick; type a new name to add a

@@ -166,6 +166,32 @@ export interface CleanCoverage {
 }
 
 /** Multipart to singleparts: a row per part. */
+/** Polygons without their holes, or only the small ones (config.FillHoles). */
+export interface FillHoles {
+  type: 'fill_holes'
+  max_area?: number
+  branch?: string
+}
+
+/** Small polygons merged into a neighbour (config.EliminateSlivers). */
+export interface EliminateSlivers {
+  type: 'eliminate_slivers'
+  max_area?: number
+  /** SQL condition picking the polygons; with max_area, both must hold. */
+  where?: string
+  merge_into?: 'longest_border' | 'largest'
+  branch?: string
+}
+
+/** Lines cut where they cross each other, or a source's lines or polygon edges (config.SplitLines). */
+export interface SplitLines {
+  type: 'split_lines'
+  source?: string
+  /** A line ending this close to another cuts it there too. */
+  tolerance?: number
+  branch?: string
+}
+
 export interface Explode {
   type: 'explode'
   /** Column to number the parts in (1, 2, …). */
@@ -253,7 +279,7 @@ export interface MakePoints {
   rejects?: string
 }
 
-export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | Simplify | SnapToGrid | CleanCoverage | Explode | IntersectOverlay | LineOverlay | Filter | RemoveDuplicates | Merge | Snapshot | Attributes | HttpLookup | MakePoints
+export type Step = SpatialJoin | AttributeJoin | NearestNeighbor | Buffer | Centroid | Clip | Erase | Dissolve | CombineLines | SplitLines | Simplify | SnapToGrid | CleanCoverage | FillHoles | EliminateSlivers | Explode | IntersectOverlay | LineOverlay | Filter | RemoveDuplicates | Merge | Snapshot | Attributes | HttpLookup | MakePoints
 
 export interface CodeCase {
   value: string

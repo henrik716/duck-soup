@@ -9,7 +9,7 @@ import { resolveSchemaScoped, collectColumnsBeforeStep } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
 import { exprField, exprValue } from '../expr-field'
 import { fieldPreviewConfig } from '../field-preview'
-import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Simplify, RemoveDuplicates, Attributes, ExprColumn, MapItem, Aggregate } from '../types'
+import type { Step, SpatialJoin, AttributeJoin, NearestNeighbor, IntersectOverlay, LineOverlay, Dissolve, CombineLines, Simplify, EliminateSlivers, RemoveDuplicates, Attributes, ExprColumn, MapItem, Aggregate } from '../types'
 import { renderIcons } from '../icons'
 import { attachConditionBuilder } from '../condition-builder'
 import { howOptionsHtml } from './aggregate-row'
@@ -31,9 +31,12 @@ const STEP_ICONS: Record<string, string> = {
   erase: 'eraser',
   dissolve: 'layers',
   combine_lines: 'spline',
+  split_lines: 'scissors-line-dashed',
   simplify: 'waypoints',
   snap_to_grid: 'grid-3x3',
   clean_coverage: 'puzzle',
+  fill_holes: 'paint-bucket',
+  eliminate_slivers: 'merge',
   explode: 'ungroup',
   intersect_overlay: 'git-merge',
   line_overlay: 'split',
@@ -56,9 +59,12 @@ const STEP_LABELS: Record<string, string> = {
   erase: 'erase',
   dissolve: 'dissolve',
   combine_lines: 'combine lines',
+  split_lines: 'split lines',
   simplify: 'simplify',
   snap_to_grid: 'snap to grid',
   clean_coverage: 'clean coverage',
+  fill_holes: 'fill holes',
+  eliminate_slivers: 'eliminate slivers',
   explode: 'multipart to singleparts',
   intersect_overlay: 'intersect overlay',
   line_overlay: 'line overlay',
@@ -81,6 +87,9 @@ const STEP_HINTS: Record<string, string> = {
   erase: 'Removes the overlap with a mask source from base feature geometry. Non-overlapping features are kept unchanged. Both sources must be spatial.',
   dissolve: 'Merges features that share the same group-by values, combining their geometries via union. Group by columns or SQL expressions. Every other column is dropped unless you keep it, with one value per group (most common, sum, all of them, …).',
   combine_lines: 'Joins lines that meet end to end into longer lines: one feature per connected chain of lines that share the group-by values. A chain stops where three or more lines meet. Every other column is dropped unless you keep it, with one value per line (most common, sum, all of them, …). Features that are not lines are kept one per feature.',
+  split_lines: 'Cuts the lines where they cross or touch each other, so every crossing becomes a shared end point: the noding a network needs. With a source, cuts them where they cross its lines or polygon edges instead. Each piece is a row with its line\'s attributes. Points and polygons pass through.',
+  fill_holes: 'Removes the holes in polygons: every hole, or only those smaller than the max area (working CRS units, e.g. m²). Other features pass through.',
+  eliminate_slivers: 'Merges small polygons (under the max area, and/or matching the condition) into the neighbour they share the longest border with, or the largest one. One pass: a sliver whose neighbours are all slivers stays as it is.',
   simplify: 'Removes vertices, keeping every line and polygon edge within the tolerance of the original (working CRS units). With shared boundaries, the polygons are simplified together so neighbours still fit: no gaps or overlaps open up between them.',
   snap_to_grid: 'Rounds every vertex to a grid of the given size (working CRS units), keeping the geometry valid. A polygon narrower than a grid cell comes out empty.',
   clean_coverage: 'Makes polygons that should fit edge to edge fit: edges within the snap distance are snapped together, overlaps go to one of the polygons, and gaps narrower than the maximum gap width are filled. A polygon lying wholly under another comes out empty. Points and lines pass through.',
@@ -214,6 +223,31 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
     bodyHtml += `<div class="row" style="margin-top:8px">
       <label class="field grow" title="Edges this close to each other are snapped together">snap distance (optional, CRS units)<input data-k="snap_distance" type="number" step="any" min="0" placeholder="tiny, from the data's extent"></label>
       <label class="field grow" title="Gaps between the polygons narrower than this are filled (given to a neighbour)">max gap width (optional, CRS units)<input data-k="max_gap_width" type="number" step="any" min="0" placeholder="none: gaps stay open"></label>
+    </div>`
+  }
+  if (kind === 'fill_holes') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="Only holes smaller than this are filled; empty fills every hole">max area (optional, CRS units², e.g. m²)<input data-k="max_area" type="number" step="any" min="0" placeholder="none: fill every hole"></label>
+    </div>`
+  }
+  if (kind === 'eliminate_slivers') {
+    const into = (st as Partial<EliminateSlivers>).merge_into ?? 'longest_border'
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="Polygons smaller than this are merged into a neighbour">max area (CRS units², e.g. m²)<input data-k="max_area" type="number" step="any" min="0" placeholder="100"></label>
+      <label class="field grow" title="The neighbour that takes a sliver">merge into${comboField('data-k="merge_into"', into, [
+        { value: 'longest_border', label: '<span style="font-family:var(--mono);font-weight:600;">longest_border</span> <span data-tag style="font-size:10px;color:var(--muted);">shares the most edge</span>' },
+        { value: 'largest', label: '<span style="font-family:var(--mono);font-weight:600;">largest</span> <span data-tag style="font-size:10px;color:var(--muted);">the biggest neighbour</span>' },
+      ], 'longest_border')}</label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="field grow">condition (optional; with a max area, both must hold)<input data-k="where" placeholder="landuse = 'unclassified'">
+        <div class="expr-validation-msg" data-where-validation></div></label>
+    </div>`
+  }
+  if (kind === 'split_lines') {
+    bodyHtml += `<div class="row" style="margin-top:8px">
+      <label class="field grow" title="Empty: the lines cut each other. A source: they're cut where its lines, or its polygons' edges, cross them">cut by (optional)${comboField('data-k="source"', '', sourceIds, 'the lines themselves')}</label>
+      <label class="field grow" title="A line ending this close to another (stopping just short, or overshooting by a little) cuts it there too">tolerance (optional, CRS units)<input data-k="tolerance" type="number" step="any" min="0" placeholder="none: lines must meet exactly"></label>
     </div>`
   }
   if (kind === 'explode') {
@@ -413,7 +447,7 @@ export function stepCard(kind: Step['type'], st: Partial<Step> = {}, syncFn: () 
   if (kind === 'http_lookup') wireHttpLookup(c, st as Partial<HttpLookup>, syncFn)
 
   // After hydrating: the builder shows the loaded condition as rows when it can.
-  if (kind === 'filter') {
+  if (kind === 'filter' || kind === 'eliminate_slivers') {
     attachConditionBuilder(c.querySelector<HTMLInputElement>('[data-k="where"]')!, () => {
       const card = c.closest('.pipeline-card')
       return card ? collectColumnsBeforeStep(card, c) : []
@@ -512,7 +546,7 @@ function wireFieldValidation(c: HTMLElement, kind: Step['type']): void {
     srcInp?.addEventListener('input', () => rightCheck.check())
   }
 
-  if (kind === 'filter') {
+  if (kind === 'filter' || kind === 'eliminate_slivers') {
     const whereInp = c.querySelector<HTMLInputElement>('[data-k="where"]')!
     const whereMsg = c.querySelector<HTMLElement>('[data-where-validation]')!
     const whereValidation = attachLiveValidation({
@@ -863,9 +897,13 @@ function wireAttributeLists(c: HTMLElement, syncFn: () => void) {
   actions._poolSet = name => {
     if (has('.st-columns > .map-item [data-to]', name)) { showToast(`${name} is already set in this step`, 'info'); return }
     mutate('set attribute column')
-    addColumn({ to: name, from: name })
+    // The geometry is replaced by an expression (ST_Boundary(geom), …), so its row starts as
+    // one, with the expression builder open on it (its Geometry group lists the options).
+    const geom = name.toLowerCase() === 'geom'
+    const row = addColumn(geom ? { to: name, expr: 'geom' } : { to: name, from: name })
     renderIcons(c)
     sync()
+    if (geom) setTimeout(() => row?.querySelector<HTMLButtonElement>('.expr-edit-btn')?.click(), 50)
   }
   actions._poolDrop = name => {
     if (has('[data-drop-col]', name)) { showToast(`${name} is already dropped`, 'info'); return }
@@ -894,6 +932,12 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
       const v = c.querySelector<HTMLInputElement>(`[data-k="${k}"]`)?.value.trim() ?? ''
       const shared = kind === 'simplify' && c.querySelector<HTMLInputElement>('[data-k="shared_boundaries"]')?.checked
       text = [v ? `(${v})` : '', shared ? 'shared' : ''].filter(Boolean).join(' ')
+    } else if (kind === 'fill_holes' || kind === 'eliminate_slivers') {
+      const max = c.querySelector<HTMLInputElement>('[data-k="max_area"]')?.value.trim() ?? ''
+      const w = kind === 'eliminate_slivers' ? c.querySelector<HTMLInputElement>('[data-k="where"]')?.value.trim() ?? '' : ''
+      text = [max ? `(< ${max})` : kind === 'fill_holes' ? '(all)' : '', w ? `(${w.length > 24 ? w.slice(0, 24) + '…' : w})` : ''].filter(Boolean).join(' ')
+    } else if (kind === 'split_lines') {
+      text = '(where they cross)'
     } else if (kind === 'explode') {
       const pf = c.querySelector<HTMLInputElement>('[data-k="part_field"]')?.value.trim() ?? ''
       text = pf ? `# ${pf}` : ''
@@ -938,7 +982,7 @@ function wireStepTitle(c: HTMLElement, kind: Step['type']): void {
   c.querySelector('[data-k="rejects"]')?.addEventListener('input', updateTitle)
   if (kind === 'snapshot') c.querySelector('[data-k="id"]')?.addEventListener('input', updateTitle)
   // List rows come and go, each with several fields: refresh on any edit or row change.
-  if (['attributes', 'dissolve', 'combine_lines', 'simplify', 'snap_to_grid', 'clean_coverage', 'explode', 'remove_duplicates'].includes(kind)) {
+  if (['attributes', 'dissolve', 'combine_lines', 'simplify', 'snap_to_grid', 'clean_coverage', 'fill_holes', 'eliminate_slivers', 'explode', 'remove_duplicates'].includes(kind)) {
     c.addEventListener('input', updateTitle)
     c.addEventListener('change', updateTitle)
     new MutationObserver(updateTitle).observe(c.querySelector('.card-content')!, { childList: true, subtree: true })

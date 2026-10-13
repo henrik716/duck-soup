@@ -37,8 +37,10 @@ import duckdb
 from . import sources as src_readers
 from . import http_lookup, mapping, steps
 from .config import (
-    Attributes, Buffer, CleanCoverage, CombineLines, Config, Dissolve, HttpLookup, MakePoints,
-    NearestNeighbor, OutputLayer, geometry_before_steps, PipelineDef, Simplify, Snapshot, SnapToGrid, NUMERIC_AGGREGATE_HOWS, is_parquet_path, reject_layer_names,
+    Attributes, Buffer, CleanCoverage, CombineLines, Config, Dissolve, EliminateSlivers,
+    FillHoles, HttpLookup, MakePoints, NearestNeighbor, OutputLayer, geometry_before_steps,
+    PipelineDef, Simplify, Snapshot, SnapToGrid, SplitLines, NUMERIC_AGGREGATE_HOWS, is_parquet_path,
+    reject_layer_names,
 )
 from .derive import DUCKDB_LOCK, init_duckdb
 from .output import (
@@ -546,7 +548,8 @@ class Engine:
     def _check_working_crs_units(self) -> None:
         """Refuse to run distance/area operations in a geographic working CRS.
 
-        Buffer distances, simplify/snap_to_grid/clean_coverage tolerances, nearest_neighbor's
+        Buffer distances, simplify/snap_to_grid/clean_coverage tolerances, the max_area of
+        fill_holes and eliminate_slivers, nearest_neighbor's
         max_distance/distance_field and the area/length mapping funcs are all in working_crs
         units. In a degrees CRS a `buffer: 500` meant as
         metres becomes 500 degrees and Oslo–Bergen measures 5.45 — silently wrong rather
@@ -562,6 +565,10 @@ class Engine:
                 step.snap_distance is not None or step.max_gap_width is not None
             ):
                 uses.append(f"step {i} (clean_coverage distances)")
+            elif isinstance(step, (FillHoles, EliminateSlivers)) and step.max_area is not None:
+                uses.append(f"step {i} ({step.type} max_area)")
+            elif isinstance(step, SplitLines) and step.tolerance is not None:
+                uses.append(f"step {i} (split_lines tolerance)")
             elif isinstance(step, NearestNeighbor) and (
                 step.max_distance is not None or step.distance_field
             ):

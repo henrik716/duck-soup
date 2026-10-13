@@ -150,12 +150,13 @@ let renaming: { value: string } | null = null
 
 const onBranch = (st: Step) => !!st.branch && st.branch !== 'main'
 
-const SPATIAL_STEPS = new Set(['spatial_join', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'nearest_neighbor'])
+const SPATIAL_STEPS = new Set(['spatial_join', 'clip', 'erase', 'intersect_overlay', 'line_overlay', 'nearest_neighbor', 'split_lines'])
 
 const STEP_ICON: Record<string, string> = {
   spatial_join: 'map-pin', attribute_join: 'git-merge', nearest_neighbor: 'crosshair', buffer: 'maximize-2',
-  centroid: 'crosshair', clip: 'scissors', erase: 'eraser', dissolve: 'layers', combine_lines: 'spline', simplify: 'waypoints',
-  snap_to_grid: 'grid-3x3', clean_coverage: 'puzzle', explode: 'ungroup', intersect_overlay: 'crosshair',
+  centroid: 'crosshair', clip: 'scissors', erase: 'eraser', dissolve: 'layers', combine_lines: 'spline', split_lines: 'scissors-line-dashed',
+  simplify: 'waypoints', snap_to_grid: 'grid-3x3', clean_coverage: 'puzzle', fill_holes: 'paint-bucket',
+  eliminate_slivers: 'merge', explode: 'ungroup', intersect_overlay: 'crosshair',
   line_overlay: 'split', filter: 'filter', remove_duplicates: 'copy-minus', snapshot: 'camera', merge: 'git-merge',
   attributes: 'table-properties', http_lookup: 'globe', make_points: 'map-pinned',
 }
@@ -353,7 +354,8 @@ export function updateLineageDiagram(cfg: Config, force = false): void {
     const usedSourceIds = new Set<string>()
     if (pdef.base) usedSourceIds.add(pdef.base)
     ;(pdef.steps || []).forEach(st => {
-      if ('source' in st) {
+      // split_lines' source is optional
+      if ('source' in st && st.source) {
         usedSourceIds.add(st.source)
         const derivedSrc = (pdef.derived_sources || []).find(ds => ds.id === st.source)
         if (derivedSrc) usedSourceIds.add(derivedSrc.from)
@@ -682,7 +684,7 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
     // Step sources -> step nodes, and parent -> derived source (vertical, same column)
     steps.forEach((st, idx) => {
       const stepEl = node(`p${pIdx}::step::${idx}`)
-      if (!stepEl || !('source' in st)) return
+      if (!stepEl || !('source' in st) || !st.source) return
       const col = stepEl.closest('.lineage-column')
       const stepSrcEl = srcNodeIn(st.source, col)
       if (stepSrcEl) {

@@ -65,7 +65,9 @@ Choosing `expr` and clicking the pencil icon opens the expression builder, a sid
   Click a column to insert it.
 - **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date,
   …), such as `LEAST`/`GREATEST`, `CONCAT_WS`, `LPAD`, `REGEXP_EXTRACT` and `DATE_DIFF`. Click
-  one to insert it.
+  one to insert it. **Geometry (new shape)** has the functions that return a geometry
+  (`ST_Boundary`, `ST_ConvexHull`, `ST_PointOnSurface`, …), for replacing `geom` in an
+  [Update Attributes](../reference/steps.md#attributes) step.
 - A **live check** that runs the expression against real sample rows from your pipeline and
   shows either sample results or the SQL error. A syntax error or unknown column shows at
   once. Sample results need the pipeline's steps to run on a few rows, which on a slow
