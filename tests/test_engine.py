@@ -128,6 +128,25 @@ def test_codelist_expr_routes_blank_and_specific_value_to_same_output():
     assert expr.count("THEN 'Unknown'") == 2
 
 
+@pytest.mark.parametrize("text, as_date, as_timestamp", [
+    ("2024-03-14", "2024-03-14", "2024-03-14 00:00:00"),
+    ("2024-03-14 08:30:00", "2024-03-14", "2024-03-14 08:30:00"),
+    ("14.03.2024", "2024-03-14", "2024-03-14 00:00:00"),
+    ("14.03.2024 08:30", "2024-03-14", "2024-03-14 08:30:00"),
+    ("14.03.2024 08:30:15", "2024-03-14", "2024-03-14 08:30:15"),
+    ("March 2024", None, None),
+])
+def test_date_casts_read_iso_and_day_month_year(text, as_date, as_timestamp):
+    import duckdb
+    con = duckdb.connect()
+    value = mapping._lit(text)
+    got = con.execute(
+        f"SELECT CAST({mapping.cast_expr(value, 'date')} AS VARCHAR), "
+        f"CAST({mapping.cast_expr(value, 'TIMESTAMP')} AS VARCHAR)"
+    ).fetchone()
+    assert got == (as_date, as_timestamp)
+
+
 def test_every_mapping_func_has_sql():
     # config.MAP_FUNCS validates `func:`; mapping.FUNC_SQL compiles it. A func added to one
     # and not the other would pass validation and then fail to compile, or the reverse.

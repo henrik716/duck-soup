@@ -220,7 +220,10 @@ How it works:
   instead of stopping the run. Breadcrumb Hill's `unknown` and the Duckling Swim School's
   `March 2024` show this. Check for unexpected NULLs after adding a cast.
 - `DATE` and `TIMESTAMP` accept ISO dates (`2024-03-14`) and also day.month.year
-  (`14.03.2024`), which is common in European data.
+  (`14.03.2024`, optionally with a time: `14.03.2024 08:30`), which is common in European
+  data.
+- Numbers need a decimal point: `cast: DOUBLE` turns `12,5` into NULL. For a decimal comma,
+  use the expression builder's **Convert** snippet instead of a cast.
 - `cast` works with every value source. It's applied last, to the finished value of a `from`,
   `const`, `expr`, `func` or `codelist`.
 

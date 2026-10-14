@@ -1287,6 +1287,8 @@ input.field-invalid, .combo input.field-invalid { border-color: var(--warn) !imp
   font-family: var(--mono);
   font-size: 11px;
 }
+/* The last column of the mapping table: the described types open leftwards, inside the card. */
+.combo:has(> [data-cast]) .combo-list { left: auto; right: 0; }
 
 /* ---- Highlight Flash Animation for Node Navigation ---- */
 @keyframes highlightFlash {

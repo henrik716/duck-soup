@@ -95,6 +95,9 @@ def map_expr(item: MapItem) -> str:
     return f"{expr} AS {_ident(item.to)}"
 
 
+DMY_FORMATS = "['%d.%m.%Y', '%d.%m.%Y %H:%M', '%d.%m.%Y %H:%M:%S']"
+
+
 def cast_expr(expr: str, cast_type: str) -> str:
     normalized = cast_type.strip().upper()
     if normalized in ("DATE", "TIMESTAMP"):
@@ -106,10 +109,11 @@ def cast_expr(expr: str, cast_type: str) -> str:
         # parsing that format explicitly before giving up; a value that fails
         # both is still NULL. (DATE specifically also can't hold a pre-1970 value
         # when written to GeoPackage — a DuckDB/GDAL limitation, not this parsing
-        # — which is why some mappings use `cast: TIMESTAMP` instead.)
+        # — which is why some mappings use `cast: TIMESTAMP` instead.) The time of day may
+        # follow, with or without seconds.
         return (
             f"COALESCE(TRY_CAST({expr} AS {normalized}), "
-            f"TRY_CAST(TRY_STRPTIME(CAST({expr} AS VARCHAR), '%d.%m.%Y') AS {normalized}))"
+            f"TRY_CAST(TRY_STRPTIME(CAST({expr} AS VARCHAR), {DMY_FORMATS}) AS {normalized}))"
         )
     return f"TRY_CAST({expr} AS {cast_type})"
 

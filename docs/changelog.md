@@ -7,7 +7,11 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
-## 1.7 — 2026-10-13
+## 1.7 — 2026-10-13 to 2026-10-14
+
+!!! warning "Upgrading"
+    - `cast: DATE` and `cast: TIMESTAMP` also read a day.month.year date followed by a time
+      (`14.03.2024 08:30`, with or without seconds). Before, such values became NULL. (1.7.6)
 
 **Pipeline YAML**
 
@@ -60,6 +64,12 @@ next to the editor's name show the version you're running.
   files are downloaded again, and the rest have their columns and layers read again, for a
   local file that has been replaced. Then the preview re-runs. See
   [Refreshing all sources](editor/sources.md#refreshing-all-sources). (1.7.4)
+- A mapping column's cast can be cleared by picking **— no cast —** at the top of its list,
+  and the list offers `BIGINT` for whole numbers over about 2.1 billion. Each type says what
+  it's for. (1.7.6)
+- The expression builder's new **Convert** snippets do what a cast can't: numbers with a
+  decimal comma (`1 234,5`), `ja`/`nei` as true/false, and ArcGIS REST dates (milliseconds since 1970). `CAST` and `TRY_CAST` moved there from
+  **Numeric**. (1.7.6)
 
 **Fixes**
 

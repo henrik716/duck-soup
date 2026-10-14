@@ -81,9 +81,7 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
       { name: 'GREATEST(a, b, …)', code: 'GREATEST(col1, col2)', doc: 'Largest of the values (NULLs ignored)' },
       { name: 'ABS(val)', code: 'ABS(column)', doc: 'Absolute value' },
       { name: 'FLOOR(val)', code: 'FLOOR(column)', doc: 'Round down to a whole number' },
-      { name: 'CEIL(val)', code: 'CEIL(column)', doc: 'Round up to a whole number' },
-      { name: 'CAST(val AS type)', code: 'CAST(column AS DOUBLE)', doc: 'Convert a value to another type' },
-      { name: 'TRY_CAST(val AS type)', code: 'TRY_CAST(column AS DOUBLE)', doc: 'Convert, or NULL on failure' }
+      { name: 'CEIL(val)', code: 'CEIL(column)', doc: 'Round up to a whole number' }
     ]
   },
   {
@@ -95,6 +93,18 @@ export const EXPR_SNIPPET_CATEGORIES: ExprSnippetCategory[] = [
       { name: 'DATE_DIFF(part, a, b)', code: "DATE_DIFF('day', start_col, end_col)", doc: 'Units between two dates' },
       { name: 'EXTRACT(part FROM date)', code: 'EXTRACT(year FROM column)', doc: 'Pull one field out of a date' },
       { name: 'CURRENT_DATE', code: 'CURRENT_DATE', doc: "Today's date" }
+    ]
+  },
+  {
+    // What a mapping's `cast` can't do on its own. A snippet's name starts with its function,
+    // since that first word feeds the highlighting (EXPR_FUNCTION_NAMES).
+    category: 'Convert',
+    snippets: [
+      { name: 'CAST(val AS type)', code: 'CAST(column AS DOUBLE)', doc: 'Convert a value to another type' },
+      { name: 'TRY_CAST(val AS type)', code: 'TRY_CAST(column AS DOUBLE)', doc: 'Convert, or NULL on failure' },
+      { name: 'TRY_CAST decimal comma', code: "TRY_CAST(REPLACE(REGEXP_REPLACE(column, '[\\s\\x{00A0}\\x{202F}]', '', 'g'), ',', '.') AS DOUBLE)", doc: 'Text like 1 234,5 as a number: spaces dropped, decimal comma to point' },
+      { name: 'CASE ja/nei', code: "CASE LOWER(TRIM(column)) WHEN 'ja' THEN true WHEN 'nei' THEN false END", doc: 'Yes/no words as true/false (other values NULL)' },
+      { name: 'epoch_ms(ms)', code: 'epoch_ms(CAST(column AS BIGINT))', doc: 'Milliseconds since 1970 as a timestamp, e.g. ArcGIS REST dates' }
     ]
   },
   {

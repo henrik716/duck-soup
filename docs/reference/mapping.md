@@ -42,6 +42,19 @@ Any item can add `cast: <SQL type>` (`INTEGER`, `DOUBLE`, `VARCHAR`, `BOOLEAN`, 
 `TIMESTAMP`, …). It's applied as `TRY_CAST`, so a value that can't be converted becomes NULL
 instead of failing the run.
 
+`DATE` and `TIMESTAMP` read ISO dates (`2024-03-14`, `2024-03-14 08:30:00`) and also
+day.month.year, optionally followed by a time (`14.03.2024`, `14.03.2024 08:30`,
+`14.03.2024 08:30:15`).
+
+Numbers need a decimal point: `cast: DOUBLE` turns `1 234,5` into NULL. Use an `expr`
+instead, which drops the spaces and replaces the comma with a point (it's also among the
+expression builder's **Convert** snippets):
+
+```yaml
+- to: length_m
+  expr: TRY_CAST(REPLACE(REGEXP_REPLACE(lengde, '[\s\x{00A0}\x{202F}]', '', 'g'), ',', '.') AS DOUBLE)
+```
+
 !!! warning "Dates before 1970 in GeoPackage"
     GeoPackage output can't store `DATE` values before 1970. Cast older dates to `TIMESTAMP`
     instead. See [`cast`](../tutorials/mapping.md#cast-set-the-column-type) in the mapping

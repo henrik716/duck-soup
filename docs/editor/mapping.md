@@ -49,9 +49,12 @@ per output column:
 | `func` | pick a built-in | `uuid`, `seq`, `now`, `today`, `lon`, `lat`, `x`, `y`, `mgrs`, `geohash`, `wkb`, `wkt`, `geom_type`, `area`, `length` |
 | `codelist` | opens the codelist panel | see below |
 
-**cast** wraps the value in `TRY_CAST(… AS type)`. The list offers `INTEGER`, `DOUBLE`,
-`VARCHAR`, `BOOLEAN`, `DATE` and `TIMESTAMP`, and you can type any other DuckDB type. Values
-that can't be cast become NULL rather than failing the run.
+**cast** wraps the value in `TRY_CAST(… AS type)`. The list offers `INTEGER`, `BIGINT`,
+`DOUBLE`, `VARCHAR`, `BOOLEAN`, `DATE` and `TIMESTAMP`, and you can type any other DuckDB type.
+Values that can't be cast become NULL rather than failing the run: `cast: DOUBLE` on
+`1 234,5` gives NULL, so use the expression builder's **Convert** snippet for numbers with a
+decimal comma. **— no cast —** at the top
+of the list removes the cast.
 
 ## Expression builder
 
@@ -65,8 +68,10 @@ Choosing `expr` and clicking the pencil icon opens the expression builder, a sid
   Click a column to insert it.
 - **SQL Snippets**: common DuckDB functions by category (conditional, string, numeric, date,
   …), such as `LEAST`/`GREATEST`, `CONCAT_WS`, `LPAD`, `REGEXP_EXTRACT` and `DATE_DIFF`. Click
-  one to insert it. **Geometry (new shape)** has the functions that return a geometry
-  (`ST_Boundary`, `ST_ConvexHull`, `ST_PointOnSurface`, …), for replacing `geom` in an
+  one to insert it. **Convert** has what a cast can't do on its own: numbers written with a
+  decimal comma (`1 234,5`), `ja`/`nei` as true/false, and dates in milliseconds since 1970,
+  as ArcGIS REST services send them. **Geometry (new shape)** has the functions that return a
+  geometry (`ST_Boundary`, `ST_ConvexHull`, `ST_PointOnSurface`, …), for replacing `geom` in an
   [Update Attributes](../reference/steps.md#attributes) step.
 - A **live check** that runs the expression against real sample rows from your pipeline and
   shows either sample results or the SQL error. A syntax error or unknown column shows at

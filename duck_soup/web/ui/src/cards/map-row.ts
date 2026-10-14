@@ -66,12 +66,31 @@ export function mapRow(m: Partial<MapItem> = {}, syncFn: () => void, _plId = '0'
     label: `<span style="font-family:var(--mono);font-weight:600;">${k}</span> <span data-tag style="font-size:10px;color:var(--muted);">${esc(KIND_DESCRIPTIONS[k] || '')}</span>`,
   }))
 
+  const CAST_DESCRIPTIONS: Record<string, string> = {
+    INTEGER: 'whole numbers up to about 2.1 billion',
+    BIGINT: 'larger whole numbers (64-bit)',
+    DOUBLE: 'decimal numbers (1.5, not 1,5)',
+    VARCHAR: 'text, e.g. codes with leading zeros',
+    BOOLEAN: 'true/false, yes/no, 1/0',
+    DATE: '2024-03-14 or 14.03.2024',
+    TIMESTAMP: 'date and time',
+  }
+  // The empty option clears the cast: the field accepts free text, but emptying it by hand
+  // was the only way back to no cast.
+  const CAST_OPTIONS: ComboOptionDef[] = [
+    { value: '', label: '<span style="color:var(--muted);">— no cast —</span>', search: 'none no cast' },
+    ...Object.entries(CAST_DESCRIPTIONS).map(([t, d]) => ({
+      value: t,
+      label: `<span style="font-family:var(--mono);font-weight:600;">${t}</span> <span data-tag style="font-size:10px;color:var(--muted);">${esc(d)}</span>`,
+    })),
+  ]
+
   row.innerHTML = `
     <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
     ${opts.toCombo ? comboField('data-to data-from-list="1"', m.to ?? '', [], 'column') : `<input data-to placeholder="column" value="${esc(m.to)}">`}
     ${comboField('data-kind', kind, KIND_OPTIONS)}
     <span data-valwrap></span>
-    ${comboField('data-cast', m.cast ? m.cast.toUpperCase() : '', ['INTEGER', 'DOUBLE', 'VARCHAR', 'BOOLEAN', 'DATE', 'TIMESTAMP'], '— cast —')}
+    ${comboField('data-cast', m.cast ? m.cast.toUpperCase() : '', CAST_OPTIONS, '— cast —')}
     <button class="mini danger ghost" data-del aria-label="Remove this output column"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`
 
   const KIND_VALUES = ['from', 'const', 'expr', 'func', 'codelist'] as const
