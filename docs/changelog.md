@@ -110,6 +110,9 @@ next to the editor's name show the version you're running.
   replaces the sample data and `pipelines/pondsworth.yaml`. See
   [After upgrading](getting-started/install.md#after-upgrading). `duck-soup tutorial`'s
   `--force` help and its message when the files already exist say so too. (1.7.5)
+- Each pipeline in the tutorial's `pipelines/pondsworth.yaml` declares only the sources it
+  uses, instead of all twelve, so the editor shows only those. Run `duck-soup tutorial --force`
+  to get the new file. (1.7.7)
 
 ## 1.6 — 2026-10-13
 

@@ -86,7 +86,7 @@ Every source is GeoJSON in EPSG:4326, like most data you'll download. The exampl
 `working_crs: EPSG:32631` (UTM zone 31N), so distances and areas are in metres. Pondsworth
 floats in the North Sea in that zone, so it can't be mistaken for a real town.
 
-All examples share the same source list:
+These are all the sources the examples use. Each example declares only the ones it reads:
 
 ```yaml
 sources:
@@ -99,7 +99,9 @@ sources:
   - {id: paths,      format: geojson, uri: data/tutorial/paths.geojson,      crs: EPSG:4326}
   - {id: lit_paths,  format: geojson, uri: data/tutorial/lit_paths.geojson,  crs: EPSG:4326}
   - {id: boardwalks, format: geojson, uri: data/tutorial/boardwalks.geojson, crs: EPSG:4326}
+  - {id: reedbeds,   format: geojson, uri: data/tutorial/reedbeds.geojson,   crs: EPSG:4326}
   - {id: categories, format: csv,     uri: data/tutorial/categories.csv}
+  - {id: sightings,  format: csv,     uri: data/tutorial/sightings.csv}
 ```
 
 ## Run every example yourself

@@ -740,7 +740,11 @@ OUTPUT = "output/pondsworth_tutorial.gpkg"
 
 
 def _pipeline(name: str, part: dict) -> dict:
-    p = {"name": name, "working_crs": UTM, "sources": SOURCES}
+    # Only the sources this example reads: its base, a derived source's `from`, a step's `source`
+    # (which may also name a derived source or snapshot, not in SOURCES).
+    used = {part["base"]} | {d["from"] for d in part.get("derived_sources", [])}
+    used |= {st["source"] for st in part.get("steps", []) if "source" in st}
+    p = {"name": name, "working_crs": UTM, "sources": [s for s in SOURCES if s["id"] in used]}
     if "derived_sources" in part:
         p["derived_sources"] = part["derived_sources"]
     p["base"] = part["base"]
@@ -769,7 +773,7 @@ def build_config() -> dict:
 # ---------------------------------------------------------------------------
 
 class _Dumper(yaml.SafeDumper):
-    def ignore_aliases(self, data):  # write the shared source list out in full every time
+    def ignore_aliases(self, data):  # write repeated sources out in full, no &anchors
         return True
 
 

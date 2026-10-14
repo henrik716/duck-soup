@@ -18,7 +18,7 @@ It drives an installed browser (Edge by default), not Playwright's bundled Chrom
 renders MapLibre with software WebGL so slowly that clicks take a minute or more and the
 capture times out. So no `playwright install` is needed.
 
-Retake the shots whenever the UI they show changes. The top bar is in editor-overview,
+Retake the shots whenever the UI they show changes. The top bar is in overview,
 resized-panels and flow-editor.
 """
 from __future__ import annotations
