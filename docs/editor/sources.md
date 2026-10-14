@@ -103,7 +103,9 @@ Tabular sources get extra controls:
   `data.items`. Leave it empty when the file is the array itself.
 - **geometry**: *none (tabular only)*, *point from X / Y columns*, or *WKT / WKB / GeoJSON
   column*. When a column has an obvious name (`wkt`, `geom`, `geometry`, `lon`/`lat`, `x`/`y`
-  …) the editor pre-selects it and marks it *detected*.
+  …) the editor pre-selects it and marks it *detected*. It does that only for a source you're
+  adding and until you pick a mode yourself; a source loaded from a config keeps the geometry
+  the config gives it, *none* included.
 
 A dropped `.json` file is set up as GeoJSON. Switch the format to **json** if it holds plain
 records instead. See [JSON](../reference/sources.md#json).

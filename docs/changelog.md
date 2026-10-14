@@ -89,6 +89,12 @@ next to the editor's name show the version you're running.
 - On narrow screens the top bar jumped about while a config loaded, as the status pill's
   text changed width. Its width now comes from the room in the bar, not from its text: a
   long message is cut short, and hovering the pill shows all of it. (1.7.2)
+- A CSV or Excel source loaded from a config with no geometry got one in the editor anyway,
+  when it had columns such as `lon`/`lat`, and those columns were gone from its rows. In the
+  tutorial, previewing or counting the `make_points` pipeline failed with *Referenced column
+  "lon" not found*. The editor now only suggests geometry columns for a source you're adding.
+  If you saved the tutorial config in the editor, set `sightings`' geometry back to *none*
+  in the `make_points` pipeline, or run `duck-soup tutorial --force`. (1.7.8)
 
 **Docs**
 

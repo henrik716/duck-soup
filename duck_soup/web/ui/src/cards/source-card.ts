@@ -146,7 +146,12 @@ function buildSourceCardMarkup(s: Partial<Source>): string {
 }
 
 // ---- source card ----
-export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLElement {
+// `guessGeometry`: a source the user is adding now, rather than one loaded from a config, where
+// no geometry is a choice already made (the tutorial's sightings.csv is left tabular for its
+// make_points step), so the guess on an xlsx/csv's first inspect only runs for a new card.
+export function sourceCard(
+  s: Partial<Source> = {}, syncFn: () => void, { guessGeometry = false } = {},
+): HTMLElement {
   const c = mkEl('div', { className: 'card collapsed' })
   c.innerHTML = buildSourceCardMarkup(s)
 
@@ -204,7 +209,7 @@ export function sourceCard(s: Partial<Source> = {}, syncFn: () => void): HTMLEle
   const { autoDetectFormat, autoDetectOapifCollection, autoDetectArcgisLayer } =
     createAutoDetectors(c, fmt, toggles)
 
-  const { doInspect, doInspectFile, refresh } = createInspectors(c, syncFn, geomModeSel, toggleTabularGeomSub)
+  const { doInspect, doInspectFile, refresh } = createInspectors(c, syncFn, geomModeSel, toggleTabularGeomSub, guessGeometry)
   ;(c as any)._refresh = refresh
 
   c.querySelectorAll('[data-k="uri"],[data-k="format"],[data-k="layer"],[data-k="crs"],[data-k="header_row"],[data-k="records"],[data-k="x_field"],[data-k="y_field"],[data-k="geom_field"]').forEach(i => {
@@ -336,8 +341,11 @@ function createInspectors(
   syncFn: () => void,
   geomModeSel: HTMLSelectElement,
   toggleTabularGeomSub: () => void,
+  guessGeometry: boolean,
 ) {
   let inspectTimer = 0
+  // Picking a geometry mode yourself, "none" included, ends the guessing (see below).
+  geomModeSel.addEventListener('change', () => { guessGeometry = false })
   let inspectSeq = 0
   let pendingText: string | null = null
   let lastSource: Source | null = null  // what the last inspect sent, for "refresh"
@@ -445,8 +453,9 @@ function createInspectors(
             // instead of leaving the user to go find the right column name themselves —
             // same "auto-fill + say so" treatment as the auto-detected format/CRS chips
             // above. Never fires again once something's actually picked (including
-            // "none"), so it won't clobber a deliberate choice on a later re-inspect.
-            if (!xField && !yField && !geomField && geomModeSel.value === '') {
+            // "none"), so it won't clobber a deliberate choice on a later re-inspect, and
+            // never for a source loaded from a config (guessGeometry, see sourceCard).
+            if (guessGeometry && !xField && !yField && !geomField && geomModeSel.value === '') {
               const suggestion = detectTabularGeometryColumns(colOptions)
               if (suggestion?.mode === 'wkt') {
                 geomModeSel.value = 'wkt'

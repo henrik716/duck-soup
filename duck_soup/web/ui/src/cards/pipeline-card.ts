@@ -232,7 +232,7 @@ export function pipelineCard(pdef: Partial<PipelineDef> = {}, syncFn: () => void
   const addSource = (src: Partial<Source> = {}, action = 'add source'): HTMLElement => {
     mutate(action)
     activateSection('sources')
-    const newCard = sourceCard(src, fullSync)
+    const newCard = sourceCard(src, fullSync, { guessGeometry: true })
     newCard.classList.remove('collapsed')
     sourcesEl.appendChild(newCard)
     refreshIcons()
