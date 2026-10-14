@@ -29,7 +29,7 @@ import duckdb
 from ..config import Source
 from ..sql_util import quote_ident as _sql_ident, quote_literal as _sql_str
 from . import settings
-from .crs import GEOGRAPHIC_CRS, crs_extent_warning
+from .crs import GEOGRAPHIC_CRS, crs_extent_warning, probe_crs
 from .formats import (
     GDAL_FILE,
     GDAL_TABULAR,
@@ -78,7 +78,7 @@ from .tabular import (
 )
 
 __all__ = [
-    "GEOGRAPHIC_CRS", "attach_postgres", "cached_read_note", "crs_extent_warning",
+    "GEOGRAPHIC_CRS", "attach_postgres", "cached_read_note", "crs_extent_warning", "probe_crs",
     "download_info", "download_remote_sources", "download_time", "fetch_arcgis_rest",
     "fetch_oapif", "fetch_remote_file", "fetch_wfs", "fresh_downloads", "is_remote_uri",
     "large_file_reader_note", "latest_download", "list_arcgis_rest_layers",

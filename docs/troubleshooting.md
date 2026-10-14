@@ -94,6 +94,11 @@
     EPSG:327xx in the southern, e.g. EPSG:32633), your national grid, or EPSG:3857 as a
     rough fallback (its distances are only accurate near the equator).
 
+??? question "\"unknown CRS\" error"
+    The code isn't in the PROJ database, often a typo (`EPSG:25383` for `EPSG:25833`) or a
+    wrong authority. The second line of the error names the field. Look the code up on
+    [epsg.io](https://epsg.io) and write it as `AUTHORITY:CODE`.
+
 ??? question "My output has more rows than the base source"
     A step is fanning out: `spatial_join` with `match: all`, `intersect_overlay`, `line_overlay` (one row per piece), or `merge`.
     Preview step by step to find which.

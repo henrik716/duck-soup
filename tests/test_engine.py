@@ -498,6 +498,30 @@ def test_metric_operations_refused_in_geographic_working_crs(tmp_path, steps, ma
     assert len(preview_config_pipeline(plain, limit=10)) == 1
 
 
+def test_metric_operations_refused_in_any_geographic_crs_proj_knows(tmp_path):
+    # SWEREF99 (EPSG:4619) and IGNF's WGS84G aren't in GEOGRAPHIC_CRS: probe_crs asks PROJ.
+    base = [("p", _point(10.75, 59.91))]
+    for crs in ("EPSG:4619", "IGNF:WGS84G"):
+        cfg = _config(tmp_path, base, [{"type": "buffer", "distance": 500}], [], base_crs=crs)
+        with pytest.raises(ValueError, match=f"working CRS {crs} .*is in degrees"):
+            preview_config_pipeline(cfg, limit=10)
+    # A projected CRS with a non-numeric code works.
+    lamb93 = _config(tmp_path, [("p", _point(650000, 6860000))], [{"type": "buffer", "distance": 5}], [],
+                     base_crs="IGNF:LAMB93")
+    assert len(preview_config_pipeline(lamb93, limit=10)) == 1
+
+
+def test_unknown_crs_refused_with_its_config_path(tmp_path):
+    base = [("p", _point(10.75, 59.91))]
+    cfg = _config(tmp_path, base, [], [], base_crs="EPSG:4326", working_crs="EPSG:999999")
+    with pytest.raises(ValueError, match=r"unknown CRS 'EPSG:999999'\npipelines\.0\.working_crs\n"):
+        preview_config_pipeline(cfg, limit=10)
+    cfg = _config(tmp_path, base, [], [], base_crs="EPSG:4326")
+    cfg.pipelines[0].layers[0].crs = "IGNF:NOPE"
+    with pytest.raises(ValueError, match=r"pipelines\.0\.layers\.0\.crs"):
+        run_config(cfg)
+
+
 def test_lon_lat_use_centroid_taken_in_working_crs(tmp_path):
     # A long diagonal line: its centroid in EPSG:25833 and its centroid computed on lon/lat
     # degrees are ~108 km apart, so this tells the two apart.

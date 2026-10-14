@@ -570,6 +570,23 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
   const gpkgNode = outer.querySelector('.lineage-gpkg') as HTMLElement | null
   const rows = Array.from(outer.querySelectorAll('.lineage-row')) as HTMLElement[]
 
+  // A connection is two paths: a wide faint glow under the line itself.
+  const addPath = (d: string, color: string, markerId: string | null, source: string, target: string) => {
+    for (const [cls, width, opacity] of [['lineage-path-glow', '5', '0.12'], ['lineage-path-main', '1.5', '0.75']]) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      path.setAttribute('d', d)
+      path.setAttribute('stroke', color)
+      path.setAttribute('stroke-width', width)
+      path.setAttribute('fill', 'none')
+      path.setAttribute('opacity', opacity)
+      path.setAttribute('class', cls)
+      if (cls === 'lineage-path-main' && markerId) path.setAttribute('marker-end', `url(#${markerId})`)
+      path.dataset['source'] = source
+      path.dataset['target'] = target
+      svg.appendChild(path)
+    }
+  }
+
   const connect = (
     srcEl: HTMLElement,
     targetEl: HTMLElement,
@@ -601,19 +618,7 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
 
     const source = srcEl.dataset['node'] ?? ''
     const target = targetEl.dataset['node'] ?? ''
-    for (const [cls, width, opacity] of [['lineage-path-glow', '5', '0.12'], ['lineage-path-main', '1.5', '0.75']]) {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      path.setAttribute('d', d)
-      path.setAttribute('stroke', color)
-      path.setAttribute('stroke-width', width)
-      path.setAttribute('fill', 'none')
-      path.setAttribute('opacity', opacity)
-      path.setAttribute('class', cls)
-      if (cls === 'lineage-path-main') path.setAttribute('marker-end', `url(#${markerId})`)
-      path.dataset['source'] = source
-      path.dataset['target'] = target
-      svg.appendChild(path)
-    }
+    addPath(d, color, markerId, source, target)
 
     if (opts.count === undefined && !opts.insert) return
     const ctl = document.createElement('div')
@@ -735,9 +740,34 @@ function drawPaths(outer: HTMLElement, cfg: Config): void {
           ...(li === 0 ? { insert: { pIdx, index: steps.length } } : {}),
         })
       }
-      if (gpkgNode) connect(layerNode, gpkgNode, 'var(--ok)', 'arrow-ok', 'horizontal')
     })
   })
+
+  // Layers -> output file. One layer: a plain connection. Several: a bus, each layer running
+  // into one trunk just left of the file, and one arrow from it into the file; a curve per
+  // layer would stack (dozens in a config like the tutorial's) into one thick smear.
+  const allLayers = [...outer.querySelectorAll<HTMLElement>('.lineage-layer-node')]
+  if (gpkgNode && allLayers.length === 1) connect(allLayers[0]!, gpkgNode, 'var(--ok)', 'arrow-ok', 'horizontal')
+  else if (gpkgNode && allLayers.length > 1) {
+    const out = getCoords(gpkgNode)
+    const tx = out.left - 20
+    // Where each layer's line meets the trunk: the trunk spans those and the file's height.
+    const joins = allLayers.map(layerNode => {
+      const from = getCoords(layerNode)
+      const dy = out.y - from.y
+      const r = Math.min(8, Math.abs(dy))
+      const joinY = from.y + Math.sign(dy) * r
+      // Along to the trunk, bending (a quarter turn of radius r) toward the file's height.
+      const d = r < 1
+        ? `M ${from.right} ${from.y} H ${tx}`
+        : `M ${from.right} ${from.y} H ${tx - r} Q ${tx} ${from.y}, ${tx} ${joinY}`
+      addPath(d, 'var(--ok)', null, layerNode.dataset['node'] ?? '', 'gpkg')
+      return joinY
+    })
+    const top = Math.min(out.y, ...joins)
+    const bottom = Math.max(out.y, ...joins)
+    addPath(`M ${tx} ${top} V ${bottom} M ${tx} ${out.y} H ${out.left - 3}`, 'var(--ok)', 'arrow-ok', 'gpkg', 'gpkg')
+  }
 
   renderIcons(outer)
 }

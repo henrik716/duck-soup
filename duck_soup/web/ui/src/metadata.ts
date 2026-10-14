@@ -49,14 +49,14 @@ export function buildMetadataSection(
       <div class="cfg-metadata-collapse-inner">
         <div class="cfg-metadata-body">
           <label class="field grow">name
-            <input data-mk="name" placeholder="Norwegian Embassies" value="${esc(meta.name)}">
+            <input data-mk="name" placeholder="Ducks of Pondsworth" value="${esc(meta.name)}">
           </label>
           <label class="field" style="grid-column:1 / -1;">abstract
             <textarea data-mk="abstract" rows="2" placeholder="Dataset description / abstract"
                       style="resize:vertical;font-family:inherit;">${esc(meta.abstract)}</textarea>
           </label>
           <label class="field grow">origin
-            <input data-mk="origin" placeholder="Ministry of Foreign Affairs" value="${esc(meta.origin)}">
+            <input data-mk="origin" placeholder="Pondsworth Pond Authority" value="${esc(meta.origin)}">
           </label>
           <label class="field grow">access method / source
             <input data-mk="access_method_source" placeholder="GeoPackage file, WFS, …" value="${esc(meta.access_method_source)}">

@@ -64,12 +64,14 @@ NUMERIC_AGGREGATE_HOWS = ["sum", "average"]
 
 CASE_MATCH_TYPES = ["match", "like", "regex"]
 
-_CRS_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*:[0-9]+$")
+# AUTHORITY:CODE, as PROJ's database names a CRS: EPSG:25833, ESRI:54009, IGNF:LAMB93.
+# Only the form is checked here; whether PROJ knows the code is Engine._check_crs_known.
+_CRS_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*:[A-Za-z0-9_.]+$")
 
 
 def _check_crs_format(v: Optional[str]) -> Optional[str]:
     if v is not None and not _CRS_RE.match(v):
-        raise ValueError(f"invalid CRS '{v}'; expected format like 'EPSG:4326'")
+        raise ValueError(f"invalid CRS '{v}'; expected AUTHORITY:CODE like 'EPSG:4326'")
     return v
 
 

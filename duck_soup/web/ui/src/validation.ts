@@ -134,10 +134,12 @@ export function attachMembershipCheck(
   return { check }
 }
 
-const CRS_RE = /^EPSG:\d+$/
+// config.py's _CRS_RE: AUTHORITY:CODE, e.g. EPSG:25833, ESRI:54009, IGNF:LAMB93.
+const CRS_RE = /^[A-Za-z][A-Za-z0-9_]*:[A-Za-z0-9_.]+$/
 
 /** Cheap client-side format check for CRS fields — catches the common typo classes
- *  (missing "EPSG:" prefix, stray characters) without needing a full EPSG code list. */
+ *  (missing "EPSG:" prefix, stray characters). Whether PROJ knows the code is checked
+ *  when the pipeline runs or previews (Engine._check_crs_known). */
 export function attachCrsFormatCheck(input: HTMLInputElement): { check: () => void } {
   const check = () => {
     const v = input.value.trim()
@@ -146,7 +148,7 @@ export function attachCrsFormatCheck(input: HTMLInputElement): { check: () => vo
       input.title = ''
     } else {
       input.classList.add('field-invalid')
-      input.title = `Expected the form "EPSG:<code>", e.g. EPSG:25833`
+      input.title = `Expected the form "AUTHORITY:CODE", e.g. EPSG:25833`
     }
   }
   input.addEventListener('input', check)

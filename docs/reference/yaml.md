@@ -86,7 +86,9 @@ They're stored in the config file, where the editor's **Dataset Metadata** secti
 | `mapping` | list | **required** (may be `[]`) | See [Mapping](mapping.md). Empty = write every column. |
 | `layers` | list | **required** | At least one output layer, see below. |
 
-A CRS is always written as `AUTHORITY:CODE`, e.g. `EPSG:25833`.
+A CRS is always written as `AUTHORITY:CODE`: any code in the PROJ database, e.g. `EPSG:25833`,
+`ESRI:54009` or `IGNF:LAMB93`. PROJ strings (`+proj=…`) and WKT aren't accepted. A code PROJ
+doesn't know stops the preview or run before anything is read.
 
 ### `derived_sources`
 

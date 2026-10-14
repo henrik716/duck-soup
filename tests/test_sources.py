@@ -1170,3 +1170,14 @@ def test_crs_extent_warning_accepts_geographic_crs_other_than_4326():
     assert "EPSG:4326" in warn("EPSG:25833", 9.0, 22.1, 59.1, 69.8)
     assert "too large" in warn("EPSG:4258", 250000, 260000, 6640000, 6650000)
     assert warn("EPSG:25833", 250000, 260000, 6640000, 6650000) is None
+
+
+@pytest.mark.parametrize("crs,expected", [
+    ("EPSG:4326", True), ("EPSG:4619", True), ("EPSG:4807", True), ("IGNF:WGS84G", True),
+    ("OGC:CRS84", True), ("EPSG:25833", False), ("EPSG:2263", False), ("EPSG:3413", False),
+    ("EPSG:3031", False), ("IGNF:LAMB93", False), ("ESRI:54009", False),
+    ("EPSG:999999", None), ("FOO:1", None),
+])
+def test_probe_crs_tells_geographic_projected_and_unknown(spatial_con, crs, expected):
+    # 4807 is in grads, 2263 in feet, 3413/3031 polar stereographic (their origin is a pole).
+    assert sources_mod.probe_crs(spatial_con, crs) is expected

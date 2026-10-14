@@ -545,7 +545,24 @@ class Engine:
             base=self.p.base,
         )
 
-    def _check_working_crs_units(self) -> None:
+    def _check_crs_known(self, con: duckdb.DuckDBPyConnection) -> None:
+        """Refuse a CRS PROJ doesn't know (config.py only checks its AUTHORITY:CODE form),
+        before anything is read: otherwise a typo surfaces as ST_Transform's "Could not
+        create projection" somewhere mid-chain. The message has a validation error's shape
+        (see MappingError), so the editor's Problems tab links it to the field's card."""
+        p = self.p
+        fields = [("working_crs", p.working_crs)]
+        fields += [(f"sources.{j}.crs", s.crs) for j, s in enumerate(p.sources)]
+        fields += [(f"steps.{j}.crs", s.crs) for j, s in enumerate(p.steps) if isinstance(s, MakePoints)]
+        fields += [(f"layers.{j}.crs", layer.crs) for j, layer in enumerate(p.layers)]
+        for path, crs in fields:
+            if crs and src_readers.probe_crs(con, crs) is None:
+                detail = f"PROJ has no CRS '{crs}'; check the authority and code, e.g. EPSG:25833"
+                raise ValueError("\n".join(
+                    [f"unknown CRS '{crs}'", f"pipelines.{self.pipeline_index}.{path}", f"  {detail}"]
+                ))
+
+    def _check_working_crs_units(self, con: duckdb.DuckDBPyConnection) -> None:
         """Refuse to run distance/area operations in a geographic working CRS.
 
         Buffer distances, simplify/snap_to_grid/clean_coverage tolerances, the max_area of
@@ -555,7 +572,7 @@ class Engine:
         metres becomes 500 degrees and Oslo–Bergen measures 5.45 — silently wrong rather
         than an error, which is why this is checked up front.
         """
-        if self.working_crs.upper() not in src_readers.GEOGRAPHIC_CRS:
+        if not src_readers.probe_crs(con, self.working_crs):
             return
         uses: list[str] = []
         for i, step in enumerate(self.p.steps, start=1):
@@ -631,7 +648,8 @@ class Engine:
         self._materialize = materialize
         self._workdir = workdir
         if con is not None:
-            self._check_working_crs_units()
+            self._check_crs_known(con)
+            self._check_working_crs_units(con)
         self._create_source_views(con, workdir, bbox=bbox, max_features=max_features)
         self._create_derived_source_views(con)
         where = self._bbox_filter(bbox, self.working_crs) if self.p.base_source.has_geometry else ""

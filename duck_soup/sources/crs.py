@@ -2,6 +2,11 @@
 against its coordinates."""
 from __future__ import annotations
 
+import math
+
+import duckdb
+
+from ..sql_util import quote_literal
 # config.py's CRSStr format (AUTHORITY:NUMERIC_CODE, e.g. "EPSG:4326"): a CRS string this
 # module hands back must pass that validation, never surfaced as a raw pydantic error in the
 # editor.
@@ -30,9 +35,8 @@ def _normalize_crs(crs: str | None) -> str | None:
 
 # Geographic CRSs (coordinates in degrees) common enough to expect as a working_crs — mostly
 # because working_crs defaults to the base source's CRS, and GeoJSON / ArcGIS REST / OGC API
-# sources are lon/lat. There's no CRS database in this codebase to ask "is this geographic?"
-# in general, so this is a list, not a lookup. Used by engine.py (working_crs) and
-# crs_extent_warning.
+# sources are lon/lat. crs_extent_warning uses this list as is (it has no connection);
+# with one, probe_crs answers for any CRS PROJ knows.
 GEOGRAPHIC_CRS = {
     "EPSG:4326",  # WGS 84
     "EPSG:4258",  # ETRS89
@@ -43,6 +47,35 @@ GEOGRAPHIC_CRS = {
     "EPSG:4167",  # NZGD2000
     "EPSG:4674",  # SIRGAS 2000
 }
+
+
+# probe_crs's answers, by CRS string: PROJ's database doesn't change while the process runs.
+_PROBED: dict[str, bool | None] = {}
+
+
+def probe_crs(con: duckdb.DuckDBPyConnection, crs: str) -> bool | None:
+    """True if `crs` is geographic (degrees), False if projected, None if PROJ (DuckDB
+    spatial's bundled database) doesn't know it.
+
+    There's no "is this geographic?" function in DuckDB, so this measures one: a 0.001°
+    step east of 10°E 45°N, reprojected into `crs`, is ~0.001 units long in a lon/lat CRS
+    (0.0011 in grads) and ~80 in metres, ~260 in feet. A point PROJ can't reproject into
+    `crs` (outside a projection's domain) counts as projected: any lon/lat is valid in a
+    geographic CRS."""
+    key = crs.upper()
+    if key in GEOGRAPHIC_CRS:
+        return True
+    if key not in _PROBED:
+        to = f"ST_Transform(ST_Point({{}}, 45), 'EPSG:4326', {quote_literal(crs)}, always_xy := true)"
+        try:
+            step = con.execute(f"SELECT ST_Distance({to.format(10)}, {to.format(10.001)})").fetchone()[0]
+        except duckdb.Error as e:
+            if "Could not create projection" in str(e):
+                _PROBED[key] = None
+                return None
+            step = None
+        _PROBED[key] = step is not None and math.isfinite(step) and step < 0.01
+    return _PROBED[key]
 
 
 # Loose bounds for "this looks like WGS84 lon/lat degrees" — a bit past the true [-180,180]

@@ -48,7 +48,7 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, available
   const panel = mkEl('div', { className: 'codelist-panel' })
   panel.innerHTML = `
     <div class="row">
-      <label class="field grow">source column<input data-cl-source value="${esc(cl.source)}" placeholder="raw_category"></label>
+      <label class="field grow">source column<input data-cl-source value="${esc(cl.source)}" placeholder="category"></label>
       <label class="field-check"><input type="checkbox" data-cl-ci ${cl.case_insensitive !== false ? 'checked' : ''}> case-insensitive</label>
     </div>
     <div class="codelist-toggle">
@@ -63,7 +63,7 @@ function codelistPanel(cl: Partial<CodeList> = {}, syncFn: () => void, available
       <div class="file-fields">
         <label class="field">csv path
           <div style="display:flex;gap:6px">
-            <input data-cl-file value="${esc(cl.file)}" placeholder="codelists/produce.csv" style="flex:1">
+            <input data-cl-file value="${esc(cl.file)}" placeholder="codelists/categories.csv" style="flex:1">
             <button type="button" class="mini ghost cl-browse-btn" title="Browse CSV" style="padding:10px;flex-shrink:0"><i data-lucide="folder"></i></button>
           </div>
         </label>

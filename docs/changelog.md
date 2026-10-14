@@ -44,6 +44,10 @@ next to the editor's name show the version you're running.
 - [`make_points`](reference/steps.md#make_points): point geometry from two coordinate
   columns, so a table without geometry (geocoded with `http_lookup`, say) has it from that
   step on. (1.7.0)
+- A CRS can be any `AUTHORITY:CODE` in the PROJ database, including codes with letters such
+  as `IGNF:LAMB93`. Before, the code had to be a number. A code PROJ doesn't know now stops
+  the preview or run before anything is read, naming the field (*unknown CRS*). Before, it
+  failed partway with *Could not create projection*. See [YAML](reference/yaml.md). (1.7.9)
 
 **Editor**
 
@@ -70,6 +74,11 @@ next to the editor's name show the version you're running.
 - The expression builder's new **Convert** snippets do what a cast can't: numbers with a
   decimal comma (`1 234,5`), `ja`/`nei` as true/false, and ArcGIS REST dates (milliseconds since 1970). `CAST` and `TRY_CAST` moved there from
   **Numeric**. (1.7.6)
+- With several output layers, the flow diagram runs their lines into one trunk with a single
+  arrow into the output file, instead of a curve per layer piling up in front of it. (1.7.9)
+- Placeholder text in empty fields comes from the tutorial's town of Pondsworth
+  (`district_name = 'Old Puddleton'`, `vegetation = 'sedge'`, …) instead of unrelated
+  examples. (1.7.9)
 
 **Fixes**
 
@@ -95,6 +104,9 @@ next to the editor's name show the version you're running.
   "lon" not found*. The editor now only suggests geometry columns for a source you're adding.
   If you saved the tutorial config in the editor, set `sightings`' geometry back to *none*
   in the `make_points` pipeline, or run `duck-soup tutorial --force`. (1.7.8)
+- Buffers, distances and areas in a geographic working CRS that isn't one of a few common
+  ones, such as SWEREF99 (EPSG:4619), ran in degrees instead of being refused. Any lon/lat
+  CRS is now recognized. (1.7.9)
 
 **Docs**
 
@@ -119,6 +131,7 @@ next to the editor's name show the version you're running.
 - Each pipeline in the tutorial's `pipelines/pondsworth.yaml` declares only the sources it
   uses, instead of all twelve, so the editor shows only those. Run `duck-soup tutorial --force`
   to get the new file. (1.7.7)
+- [Troubleshooting](troubleshooting.md) has an entry for the *unknown CRS* error. (1.7.9)
 
 ## 1.6 — 2026-10-13
 

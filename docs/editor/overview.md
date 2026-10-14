@@ -38,7 +38,8 @@ order, and that's what a pipeline is: an ordered chain your features waddle thro
 after another, before they file into the output. Each row starts with its base source (marked
 **base**). The steps run left to right,
 each with the source it joins against above it, and the pipeline's output layers converge on
-the shared output file. A step with a [`rejects`](../reference/steps.md#rejects) layer has a
+the shared output file: with several layers, their lines join one trunk with a single arrow into
+the file. A step with a [`rejects`](../reference/steps.md#rejects) layer has a
 red side branch for it: below the step, or above it for a step on a snapshot branch. The
 diagram redraws as you edit. Click the header to collapse it.
 

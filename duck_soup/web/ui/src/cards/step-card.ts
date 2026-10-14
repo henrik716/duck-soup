@@ -171,14 +171,14 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
   }
   if (kind === 'filter') {
     bodyHtml += `<div class="row" style="margin-top:8px">
-      <label class="field grow">condition<input data-k="where" placeholder="matched_name IS NOT NULL">
+      <label class="field grow">condition<input data-k="where" placeholder="species = 'Mallard'">
         <div class="expr-validation-msg" data-where-validation></div></label>
     </div>`
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['filter']}</p>`
   }
   if (kind === 'snapshot') {
     bodyHtml += `<div class="row" style="margin-top:8px">
-      <label class="field grow">snapshot id (name this step's output; usable as "source" in a later step)<input data-k="id" placeholder="matched_ports"></label>
+      <label class="field grow">snapshot id (name this step's output; usable as "source" in a later step)<input data-k="id" placeholder="ponds_with_ducks"></label>
     </div>`
     bodyHtml += `<p class="hint" style="margin-top:8px">${STEP_HINTS['snapshot']}</p>`
   }
@@ -240,7 +240,7 @@ function buildStepBodyHtml(kind: Step['type'], st: Partial<Step>, sourceIds: str
       ], 'longest_border')}</label>
     </div>
     <div class="row" style="margin-top:8px">
-      <label class="field grow">condition (optional; with a max area, both must hold)<input data-k="where" placeholder="landuse = 'unclassified'">
+      <label class="field grow">condition (optional; with a max area, both must hold)<input data-k="where" placeholder="vegetation = 'sedge'">
         <div class="expr-validation-msg" data-where-validation></div></label>
     </div>`
   }

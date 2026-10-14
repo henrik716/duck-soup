@@ -120,6 +120,11 @@ def test_invalid_crs_format_rejected():
         Source(id="a", format="geojson", uri="x.geojson", crs="not-a-crs")
 
 
+@pytest.mark.parametrize("crs", ["EPSG:25833", "ESRI:54009", "IGNF:LAMB93", "OGC:CRS84"])
+def test_crs_codes_with_letters_accepted(crs):
+    assert Source(id="a", format="geojson", uri="x.geojson", crs=crs).crs == crs
+
+
 def test_oapif_source_accepted():
     src = Source(id="fylker", format="oapif", uri="https://host/ogcapi", layer="fylker")
     assert src.has_geometry

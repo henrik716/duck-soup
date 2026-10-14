@@ -24,11 +24,11 @@ export function derivedSourceCard(ds: Partial<DerivedSource> = {}, syncFn: () =>
     </div>
     <div class="card-content" style="margin-top:12px;">
       <div class="row">
-        <label class="field grow">id<input data-k="id" placeholder="fylke_buffered"></label>
+        <label class="field grow">id<input data-k="id" placeholder="ponds_buffered"></label>
         <label class="field grow">from${comboField('data-k="from"', ds.from ?? '', sourceIds)}</label>
       </div>
       <label class="field" style="margin-top:8px">where (optional: only the rows that match)
-        <input data-k="where" placeholder="facility_type = 'ISPS'">
+        <input data-k="where" placeholder="district_name = 'Old Puddleton'">
         <div class="expr-validation-msg" data-where-validation></div>
       </label>
       <div class="row" style="margin-top:8px">

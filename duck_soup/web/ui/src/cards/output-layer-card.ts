@@ -28,11 +28,11 @@ export function outputLayerCard(ol: Partial<OutputLayer> = {}, syncFn: () => voi
     </div>
     <div class="card-content" style="margin-top:12px;">
       <div class="row">
-        <label class="field grow">layer name<input data-k="layer" placeholder="MyLayer"></label>
+        <label class="field grow">layer name<input data-k="layer" placeholder="duck_ponds"></label>
         <label class="field grow">CRS${comboField('data-k="crs"', '', CRS_COMBO_OPTIONS, 'EPSG:25833')}</label>
       </div>
       <label class="field" style="margin-top:8px">filter (optional: only the rows that match go into this layer)
-        <input data-k="filter" placeholder="county IS NOT NULL">
+        <input data-k="filter" placeholder="district_name IS NOT NULL">
         <div class="expr-validation-msg" data-filter-validation></div>
       </label>
       <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
