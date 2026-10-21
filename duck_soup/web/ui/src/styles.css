@@ -166,8 +166,8 @@ header.top {
 /* The wordmark's 。, drawn as a ring: Space Grotesk has no glyph for it, and a fallback CJK font's
    sits in a full-width box. */
 .brand .dot {
-  display: inline-block; width: .3em; height: .3em; margin-left: .08em; box-sizing: border-box;
-  border: .075em solid var(--accent); border-radius: 50%; vertical-align: baseline;
+  display: inline-block; width: .24em; height: .24em; margin-left: .07em; box-sizing: border-box;
+  border: max(1.5px, .065em) solid var(--accent); border-radius: 50%; vertical-align: baseline;
 }
 .version-badge { font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; color: var(--muted); background: transparent; border: 1px solid var(--line-glow); cursor: pointer; }
 .version-badge.update { color: var(--accent); border-color: rgb(var(--accent-rgb) / 0.4); background: var(--accent-soft); }

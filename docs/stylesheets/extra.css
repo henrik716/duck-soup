@@ -98,12 +98,20 @@
   margin: 0.3rem 0 0.4rem;
 }
 
+/* The wordmark's ring, as in the editor's top bar (.brand .dot in styles.css). */
 .ds-hero h1 .ds-dot {
-  color: var(--ds-accent);
+  display: inline-block;
+  width: 0.3em;
+  height: 0.3em;
+  margin-left: 0.08em;
+  box-sizing: border-box;
+  border: 0.075em solid var(--ds-accent);
+  border-radius: 50%;
+  vertical-align: baseline;
 }
 
 [data-md-color-scheme="default"] .ds-hero h1 .ds-dot {
-  color: #5b3fd6;
+  border-color: #5b3fd6;
 }
 
 .ds-hero img {

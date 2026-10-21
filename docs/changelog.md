@@ -81,6 +81,8 @@ next to the editor's name show the version you're running.
   examples. (1.7.9)
 - The name in the top bar ends in a violet ring, a 。, instead of a full stop: "duck soup。".
   (1.7.10)
+- The ring after the name in the top bar is smaller, closer to the size of a full stop.
+  (1.7.11)
 
 **Fixes**
 
@@ -136,6 +138,7 @@ next to the editor's name show the version you're running.
 - [Troubleshooting](troubleshooting.md) has an entry for the *unknown CRS* error. (1.7.9)
 - The docs site's header and the preview image shown when a docs link is shared end the name
   in the same ring as the editor. (1.7.10)
+- The title on the docs home page ends in the ring too, instead of a full stop. (1.7.11)
 
 ## 1.6 — 2026-10-13
 
