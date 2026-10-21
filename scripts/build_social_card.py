@@ -44,7 +44,7 @@ def main() -> None:
     tag_font = _font(["SpaceGrotesk-Regular.ttf", "segoeui.ttf", "DejaVuSans.ttf"], 34)
     # The editor's wordmark: the name plus a ring (a 。) in the accent colour, centred together,
     # sized like the editor's (.brand .dot in styles.css) and sitting on the baseline.
-    ring, gap, stroke = round(0.3 * 86), round(0.08 * 86), round(0.075 * 86)
+    ring, gap, stroke = round(0.24 * 86), round(0.07 * 86), round(0.065 * 86)
     title_w = draw.textlength(TITLE, font=title_font) + gap + ring
     x = (W - title_w) / 2
     baseline = 500

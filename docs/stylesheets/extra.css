@@ -48,8 +48,8 @@
   content: "";
   /* Sized like the editor's (.brand .dot in styles.css); the header's text is small, so keep
      the stroke from thinning to a hairline. */
-  width: 0.26em;
-  height: 0.26em;
+  width: 0.24em;
+  height: 0.24em;
   margin-left: 0.07em;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -101,11 +101,11 @@
 /* The wordmark's ring, as in the editor's top bar (.brand .dot in styles.css). */
 .ds-hero h1 .ds-dot {
   display: inline-block;
-  width: 0.3em;
-  height: 0.3em;
-  margin-left: 0.08em;
+  width: 0.24em;
+  height: 0.24em;
+  margin-left: 0.07em;
   box-sizing: border-box;
-  border: 0.075em solid var(--ds-accent);
+  border: max(1.5px, 0.065em) solid var(--ds-accent);
   border-radius: 50%;
   vertical-align: baseline;
 }
