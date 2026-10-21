@@ -42,11 +42,15 @@ def main() -> None:
     draw = ImageDraw.Draw(card)
     title_font = _font(["SpaceGrotesk-Bold.ttf", "segoeuib.ttf", "DejaVuSans-Bold.ttf"], 86)
     tag_font = _font(["SpaceGrotesk-Regular.ttf", "segoeui.ttf", "DejaVuSans.ttf"], 34)
-    # The editor's wordmark: the name plus a full stop in the accent colour, centred together.
-    title_w = draw.textlength(TITLE + ".", font=title_font)
+    # The editor's wordmark: the name plus a ring (a 。) in the accent colour, centred together,
+    # sized like the editor's (.brand .dot in styles.css) and sitting on the baseline.
+    ring, gap, stroke = round(0.3 * 86), round(0.08 * 86), round(0.075 * 86)
+    title_w = draw.textlength(TITLE, font=title_font) + gap + ring
     x = (W - title_w) / 2
-    draw.text((x, 470), TITLE, font=title_font, fill=(255, 255, 255), anchor="lm")
-    draw.text((x + draw.textlength(TITLE, font=title_font), 470), ".", font=title_font, fill=ACCENT, anchor="lm")
+    baseline = 500
+    draw.text((x, baseline), TITLE, font=title_font, fill=(255, 255, 255), anchor="ls")
+    rx = x + draw.textlength(TITLE, font=title_font) + gap
+    draw.ellipse((rx, baseline - ring, rx + ring, baseline), outline=ACCENT, width=stroke)
     draw.text((W // 2, 548), TAGLINE, font=tag_font, fill=(196, 176, 255), anchor="mm")
 
     card.save(OUT, optimize=True)

@@ -7,7 +7,7 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
-## 1.7 — 2026-10-13 to 2026-10-14
+## 1.7 — 2026-10-13 to 2026-10-21
 
 !!! warning "Upgrading"
     - `cast: DATE` and `cast: TIMESTAMP` also read a day.month.year date followed by a time
@@ -79,6 +79,8 @@ next to the editor's name show the version you're running.
 - Placeholder text in empty fields comes from the tutorial's town of Pondsworth
   (`district_name = 'Old Puddleton'`, `vegetation = 'sedge'`, …) instead of unrelated
   examples. (1.7.9)
+- The name in the top bar ends in a violet ring, a 。, instead of a full stop: "duck soup。".
+  (1.7.10)
 
 **Fixes**
 
@@ -132,6 +134,8 @@ next to the editor's name show the version you're running.
   uses, instead of all twelve, so the editor shows only those. Run `duck-soup tutorial --force`
   to get the new file. (1.7.7)
 - [Troubleshooting](troubleshooting.md) has an entry for the *unknown CRS* error. (1.7.9)
+- The docs site's header and the preview image shown when a docs link is shared end the name
+  in the same ring as the editor. (1.7.10)
 
 ## 1.6 — 2026-10-13
 
