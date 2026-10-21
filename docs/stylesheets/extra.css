@@ -46,10 +46,10 @@
 
 .md-header__topic:first-child::after {
   content: "";
-  /* Sized like the editor's (.brand .dot in styles.css); the header's text is small, so keep
-     the stroke from thinning to a hairline. */
-  width: 0.24em;
-  height: 0.24em;
+  /* The editor's ring (.brand .dot in styles.css), a little larger: the header's text is
+     small, and at .24em the minimum stroke leaves almost no hole, so it reads as a dot. */
+  width: 0.3em;
+  height: 0.3em;
   margin-left: 0.07em;
   box-sizing: border-box;
   flex-shrink: 0;
