@@ -46,14 +46,15 @@
 
 .md-header__topic:first-child::after {
   content: "";
-  /* The editor's ring (.brand .dot in styles.css), a little larger: the header's text is
-     small, and at .24em the minimum stroke leaves almost no hole, so it reads as a dot. */
-  width: 0.3em;
-  height: 0.3em;
+  /* The editor's ring (.brand .dot in styles.css), a little larger, with a stroke that scales
+     down to 1px: the header's text is small, and the editor's 1.5px minimum stroke fills in
+     a ring this size, so it reads as a dot. */
+  width: 0.28em;
+  height: 0.28em;
   margin-left: 0.07em;
   box-sizing: border-box;
   flex-shrink: 0;
-  border: max(1.5px, 0.065em) solid var(--ds-accent);
+  border: max(1px, 0.065em) solid var(--ds-accent);
   border-radius: 50%;
 }
 
