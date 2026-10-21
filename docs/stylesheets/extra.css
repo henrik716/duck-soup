@@ -46,14 +46,14 @@
 
 .md-header__topic:first-child::after {
   content: "";
-  /* The header's text is small: a larger, heavier ring than the editor's, so it reads as a
-     mark rather than a degree sign. */
-  width: 0.4em;
-  height: 0.4em;
-  margin-left: 0.1em;
+  /* Sized like the editor's (.brand .dot in styles.css); the header's text is small, so keep
+     the stroke from thinning to a hairline. */
+  width: 0.26em;
+  height: 0.26em;
+  margin-left: 0.07em;
   box-sizing: border-box;
   flex-shrink: 0;
-  border: max(2px, 0.09em) solid var(--ds-accent);
+  border: max(1.5px, 0.065em) solid var(--ds-accent);
   border-radius: 50%;
 }
 
