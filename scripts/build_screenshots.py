@@ -379,11 +379,12 @@ def capture(url: str, channel: str, only: set[str]) -> None:
                     aside(page, f"run-history-{theme}.png")
 
             if want("problems-tab"):
-                # Point the first step at a source that doesn't exist.
+                # Misspell the column the nearest_stop mapping row reads.
                 page.evaluate("""() => {
-                  const i = document.querySelector('.pipeline-card .pl-steps > .card [data-k="source"]')
-                  i.value = 'district'; i.dispatchEvent(new Event('input', { bubbles: true })) }""")
-                page.wait_for_selector("#status.bad", state="attached", timeout=20000)
+                  const row = document.querySelectorAll('.pipeline-card .pl-mapping > .map-item')[3]
+                  const i = row.querySelector('[data-valwrap] input')
+                  i.value = 'nearest_stp'; i.dispatchEvent(new Event('input', { bubbles: true })) }""")
+                page.wait_for_selector(".problem-locator", timeout=30000)
                 page.add_style_tag(content="#status { display: none !important }")  # as above
                 page.click("#tab-btn-problems")
                 page.wait_for_timeout(500)

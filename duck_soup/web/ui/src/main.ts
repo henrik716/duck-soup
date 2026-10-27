@@ -25,6 +25,7 @@ import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
 import type { Config, CountsResponse, PreviewResponse, SourceProgress, WrittenLayer } from './types'
 import { formatPendingSources, PENDING_RETRY_MS } from './schema'
 import { renderIcons } from './icons'
+import { describeProblemPath, parseProblems, type Problem } from './problem-path'
 
 const LAST_CONFIG_KEY = 'ducksoup.lastConfig'
 
@@ -320,27 +321,7 @@ function userSwitchTab(tabId: string): void {
 }
 
 // ---- problems panel ----
-// Pydantic flattens its ValidationError to a string before it reaches us, but the loc
-// paths survive in the text ("pipelines.0.steps.3.source" on its own line, followed by an
-// indented message). Recovering them lets a problem link back to the card that caused it.
-const LOC_RE = /^([A-Za-z_][\w]*(?:\.[\w]+)+)$/
-
-interface Problem { path: string; msg: string }
-
-function parseProblems(detail: string): Problem[] {
-  const lines = detail.split('\n')
-  const out: Problem[] = []
-  lines.forEach((line, i) => {
-    const m = line.trim().match(LOC_RE)
-    if (!m) return
-    const next = (lines[i + 1] ?? '').trim()
-    // Skip the trailing "For further information visit ..." noise.
-    const msg = next.startsWith('For further information') ? '' : next.replace(/\s*\[type=.*$/, '')
-    out.push({ path: m[1], msg })
-  })
-  return out
-}
-
+// A problem's config path (see problem-path.ts) links it to the card or row it's about.
 const SECTION_FOR_FIELD: Record<string, string> = {
   sources: 'sources',
   derived_sources: 'derived_sources',
@@ -365,32 +346,51 @@ function flash(el: HTMLElement): void {
   setTimeout(() => el.classList.remove('highlight-flash'), 1500)
 }
 
-/** Navigate to whatever a Pydantic loc path like `pipelines.0.steps.3.source` points at. */
-function gotoProblem(path: string): void {
+interface ProblemTarget {
+  plCard: HTMLElement
+  sec?: string
+  /** The card or mapping row the path points into, when it points into one. */
+  card?: HTMLElement
+}
+
+/** Where a loc path like `pipelines.0.steps.3.source` points, without opening anything. */
+function findProblemTarget(path: string): ProblemTarget | null {
   const parts = path.split('.')
-  if (parts[0] !== 'pipelines') return
-
+  if (parts[0] !== 'pipelines') return null
   const plCard = Array.from(document.querySelectorAll<HTMLElement>('.pipeline-card'))[Number(parts[1])]
-  if (!plCard) return
-  plCard.classList.remove('collapsed')
-
+  if (!plCard) return null
   const sec = SECTION_FOR_FIELD[parts[2] ?? '']
+  if (!sec) return { plCard }
+  const idx = Number(parts[3])
+  const selector = CARDS_SELECTOR[sec]
+  const card = selector && Number.isInteger(idx)
+    ? Array.from(plCard.querySelectorAll<HTMLElement>(selector))[idx]
+    : undefined
+  return { plCard, sec, card }
+}
+
+/** Open whatever a problem's path points at, and flash it. */
+function gotoProblem(path: string): void {
+  const target = findProblemTarget(path)
+  if (!target) return
+  const { plCard, sec, card } = target
+  plCard.classList.remove('collapsed')
   if (!sec) { flash(plCard); return }
 
   ;(plCard as HTMLElement & { _activateSection?: (sec: string) => void })._activateSection?.(sec)
-  const block = plCard.querySelector<HTMLElement>(`.pl-panel[data-sec="${sec}"]`)
-
-  const idx = Number(parts[3])
-  const selector = CARDS_SELECTOR[sec]
-  if (block && selector && Number.isInteger(idx)) {
-    const card = Array.from(plCard.querySelectorAll<HTMLElement>(selector))[idx]
-    if (card) {
-      card.classList.remove('collapsed')
-      flash(card)
-      return
-    }
+  if (card) {
+    card.classList.remove('collapsed')
+    flash(card)
+    return
   }
+  const block = plCard.querySelector<HTMLElement>(`.pl-panel[data-sec="${sec}"]`)
   if (block) flash(block)
+}
+
+/** Outline the cards and rows the current problems are about, until they're fixed. */
+function markProblemTargets(problems: Problem[]): void {
+  document.querySelectorAll('.has-problem').forEach(el => el.classList.remove('has-problem'))
+  problems.forEach(p => findProblemTarget(p.path)?.card?.classList.add('has-problem'))
 }
 
 function renderProblems(): void {
@@ -403,6 +403,7 @@ function renderProblems(): void {
     detailEl.textContent = 'No problems — the config is valid.'
     locEl.innerHTML = ''
     if (badge) badge.hidden = true
+    markProblemTargets([])
     return
   }
 
@@ -414,16 +415,20 @@ function renderProblems(): void {
     badge.textContent = String(problems.length)
   }
 
+  const severalPipelines = document.querySelectorAll('.pipeline-card').length > 1
   locEl.innerHTML = problems.map(p =>
-    `<button type="button" class="problem-locator" data-path="${esc(p.path)}">` +
-    `<span class="loc-path">${esc(p.path)}</span>` +
+    `<button type="button" class="problem-locator" data-path="${esc(p.path)}" title="Go to ${esc(p.path)}">` +
+    `<span class="loc-path">${esc(describeProblemPath(p.path, severalPipelines))}</span>` +
     (p.msg ? `<span class="loc-msg">${esc(p.msg)}</span>` : '') +
+    `<span class="loc-go">click to go to error <i data-lucide="arrow-right"></i></span>` +
     `</button>`
   ).join('')
+  renderIcons(locEl)
 
   locEl.querySelectorAll<HTMLButtonElement>('.problem-locator').forEach(btn => {
     btn.addEventListener('click', () => gotoProblem(btn.dataset['path'] ?? ''))
   })
+  markProblemTargets(problems)
 }
 
 // ---- preview ----

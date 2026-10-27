@@ -141,7 +141,8 @@ Most panels have a small **?** icon that opens the matching page of these docs i
 - **Run Logs**: output from every run, so you can compare runs.
 - **History**: the config's past runs, from the editor and from `duck-soup run` (scheduled
   runs too), with the rows each layer got.
-- **Problems**: validation errors, each with a link that jumps to the card causing it.
+- **Problems**: validation and mapping errors. Click one to go to the card or mapping row
+  causing it.
 
 See [Preview, validate & run](preview-and-run.md) for details.
 

@@ -25,7 +25,9 @@ the editor's SQL tab) and counts() (tables, so each step is computed once and co
 """
 from __future__ import annotations
 
+import difflib
 import json
+import re
 import tempfile
 import textwrap
 from contextlib import contextmanager
@@ -118,6 +120,11 @@ def _parse_error_in_expr(con: duckdb.DuckDBPyConnection, item, error: Exception)
     return error
 
 
+# The binder errors _explain_binder_error puts in words.
+_MISSING_COLUMN = re.compile(r'Referenced column "(.+?)" not found')
+_MISSING_TABLE = re.compile(r'Referenced table "(.+?)" not found')
+
+
 class Engine:
     def __init__(
         self,
@@ -148,6 +155,9 @@ class Engine:
         self.plan: list[dict] = []
         self.step_views: dict[int, str] = {}
         self.reject_views: dict[int, str] = {}
+        # Each step view's input view and step number, to follow a column back up the
+        # chain (see _missing_column).
+        self._step_inputs: dict[str, tuple[str, int]] = {}
         # Filled by run(): one {"layer", "rows", "kind", "path"} per layer written.
         self.written: list[dict] = []
         # Set by _prepare for the chain it builds: steps as tables, each computed once, for a
@@ -320,6 +330,7 @@ class Engine:
                     # reads a snapshot needs all of its rows, so a preview's LIMIT couldn't cut
                     # it short anyway. (Runs and counts() store every step already.)
                     view = f"step_{i}"
+                    self._step_inputs[view] = (chains[source_branch], i)
                     self._emit(
                         con, view, f"SELECT * FROM {_ident(chains[source_branch])}", "step",
                         table=True, step=i,
@@ -350,6 +361,7 @@ class Engine:
             if con is not None and isinstance(step, (Attributes, Dissolve, CombineLines)):
                 self._check_step(con, i, step, cur)
             new_view = f"step_{i}"
+            self._step_inputs[new_view] = (chains[target], i)
             self._emit_step(con, step, i, sql, new_view)
             chains[target] = new_view
             self.step_views[i] = new_view
@@ -468,9 +480,10 @@ class Engine:
             error = plan_error(variant)
             if error is None:
                 continue
+            error = self._explain_binder_error(con, _parse_error_in_expr(con, item, error), prev, item, "at this step")
             raise MappingError(
                 f"pipelines.{self.pipeline_index}.steps.{i - 1}.{field}.{j}", item,
-                _parse_error_in_expr(con, item, error), label=f"step {i} {what}",
+                error, label=f"step {i} {what}",
             )
         raise failure
 
@@ -492,7 +505,7 @@ class Engine:
             if agg.how == "from_largest" and "geom" not in types:
                 problem = "from the largest needs geometry, and these rows have none"
             elif agg.from_ is not None and agg.from_.lower() not in types:
-                problem = f"there's no column '{agg.from_}' {where}"
+                problem = self._missing_column(con, view, agg.from_, where)
             elif agg.from_ is not None and agg.how in NUMERIC_AGGREGATE_HOWS:
                 name, typ = types[agg.from_.lower()]
                 if not _is_numeric(typ):
@@ -528,10 +541,58 @@ class Engine:
                 continue
             except (duckdb.ParserException, duckdb.BinderException) as e:
                 error = e
-            error = _parse_error_in_expr(con, item, error)
+            error = self._explain_binder_error(
+                con, _parse_error_in_expr(con, item, error), prev, item, "after the last step",
+            )
             where = f"layers.{layer_idx}.mapping.{j}" if own else f"mapping.{j}"
             raise MappingError(f"pipelines.{self.pipeline_index}.{where}", item, error)
         raise failure
+
+    def _explain_binder_error(self, con: duckdb.DuckDBPyConnection, error: Exception, view: str, item, where: str) -> Exception:
+        """A binder error of `item` over the rows of `view`, in words, when it's about a column
+        that isn't there (see _missing_column; `where` says where it was looked for) or a
+        column name with a dot in it written without quotes (`NET.TYPEVEG` reads as column
+        TYPEVEG of a table NET). Any other error is returned as it is."""
+        if not isinstance(error, duckdb.BinderException):
+            return error
+        text = str(error)
+        if m := _MISSING_TABLE.search(text):
+            prefix = m[1].lower() + "."
+            dotted = [c for c in self._columns(con, view) if c.lower().startswith(prefix)]
+            if not dotted:
+                return error
+            written = str(getattr(item, "expr", None) or "").lower()
+            col = next((c for c in dotted if c.lower() in written), dotted[0])
+            return ValueError(f'a column name with a dot in it needs double quotes in SQL: write "{col}", not {col}')
+        if m := _MISSING_COLUMN.search(text):
+            return ValueError(self._missing_column(con, view, m[1], where))
+        return error
+
+    def _missing_column(self, con: duckdb.DuckDBPyConnection, view: str, name: str, where: str) -> str:
+        """Why the rows of `view` have no column `name`, in words: the step on their way there
+        that dropped it, or else that there's no such column `where` (and the closest name
+        there is). Only plans the views (DESCRIBE): nothing is read."""
+        key = name.lower()
+        at = view
+        while at in self._step_inputs:
+            src, i = self._step_inputs[at]
+            if key in (c.lower() for c in self._columns(con, src)):
+                step = self.p.steps[i - 1]
+                if isinstance(step, (Dissolve, CombineLines)):
+                    return (
+                        f"step {i} ({step.type}) drops '{name}': it keeps only the columns it groups "
+                        f"by and its aggregates. Add '{name}' to its aggregates, or use a column it keeps"
+                    )
+                return f"step {i} ({step.type}) drops '{name}', so it isn't there {where}"
+            at = src
+        cols = {c.lower(): c for c in self._columns(con, view) if not c.startswith("__")}
+        close = difflib.get_close_matches(key, list(cols), n=1, cutoff=0.75)
+        hint = f". Did you mean '{cols[close[0]]}'?" if close else ""
+        return f"there's no column '{name}' {where}{hint}"
+
+    @staticmethod
+    def _columns(con: duckdb.DuckDBPyConnection, view: str) -> list[str]:
+        return [r[0] for r in con.execute(f"DESCRIBE SELECT * FROM {_ident(view)}").fetchall()]
 
     def _final_select(self, prev: str, layer: OutputLayer, raw: bool = False, has_geom: bool | None = None) -> str:
         """The SELECT written for `layer` (see mapping.final_select). `raw` skips the mapping
@@ -645,6 +706,7 @@ class Engine:
         nothing is read or executed.
         """
         self.plan, self.step_views, self.reject_views = [], {}, {}
+        self._step_inputs = {}
         self._materialize = materialize
         self._workdir = workdir
         if con is not None:

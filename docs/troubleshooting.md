@@ -104,11 +104,18 @@
     Preview step by step to find which.
 
 ??? question "Columns disappeared after a step"
+    The mapping, or a later step, then fails with *step 8 (combine_lines) drops 'width'*.
     `dissolve` and `combine_lines` keep only their `by` keys and their `aggregates`. Keep a
     value per group with an aggregate (`{from: name, how: most_common}`, or **+ keep all** on
     the card), group by more columns, or join the attributes back in afterwards. See
     [Keeping other columns](reference/steps.md#keeping-other-columns). An `attributes` step's `drop`
     also removes columns.
+
+??? question "\"a column name with a dot in it needs double quotes\" error"
+    In SQL, `NET.TYPEVEG` reads as the column `TYPEVEG` of a table `NET`. Column names with
+    dots, spaces or other punctuation, common in NVDB and other exports, need double quotes in
+    an `expr`, `where` or condition: `"NET.TYPEVEG"`. Single quotes make a text value instead,
+    so `'NET.TYPEVEG' = 'Fortau'` compares two fixed strings and is always false.
 
 ??? question "A column I cast is full of NULLs"
     `cast` uses `TRY_CAST`, so values that can't be converted become NULL instead of failing

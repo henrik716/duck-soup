@@ -7,7 +7,7 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
-## 1.7 — 2026-10-13 to 2026-10-21
+## 1.7 — 2026-10-13 to 2026-10-27
 
 !!! warning "Upgrading"
     - `cast: DATE` and `cast: TIMESTAMP` also read a day.month.year date followed by a time
@@ -83,6 +83,14 @@ next to the editor's name show the version you're running.
   (1.7.10)
 - The ring after the name in the top bar is smaller, closer to the size of a full stop.
   (1.7.11)
+- Mapping and step errors about a missing column say what's wrong in words, instead of
+  DuckDB's *Referenced column "width" not found in FROM clause!*: the step that dropped the
+  column (*step 8 (combine_lines) drops 'width': it keeps only the columns it groups by and
+  its aggregates*), the closest column name there is (*Did you mean 'nearest_stop'?*), or
+  that a column name with a dot in it, such as `NET.TYPEVEG`, needs double quotes. (1.7.12)
+- The **Problems** tab names each problem in the editor's words (*step 8 · aggregate 1*,
+  *mapping row 2*) instead of by its config path, and says *click to go to error*. The card
+  or mapping row a problem is about stays outlined in red until it's fixed. (1.7.12)
 
 **Fixes**
 
@@ -139,6 +147,8 @@ next to the editor's name show the version you're running.
 - The docs site's header and the preview image shown when a docs link is shared end the name
   in the same ring as the editor. (1.7.10)
 - The title on the docs home page ends in the ring too, instead of a full stop. (1.7.11)
+- [Troubleshooting](troubleshooting.md) has an entry for column names with dots in them,
+  which need double quotes in SQL. (1.7.12)
 
 ## 1.6 — 2026-10-13
 

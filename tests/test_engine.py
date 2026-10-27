@@ -737,13 +737,14 @@ def test_mapping_errors_name_the_row_and_its_path(tmp_path):
     assert path == "pipelines.0.mapping.2"  # the shape the Problems tab links to the row
 
     head, path, _ = _mapping_error(tmp_path, ok + [{"to": "c", "from": "nmae"}])
-    assert head.startswith("mapping 'c' (from): Binder Error") and '"nmae"' in head
+    assert head == "mapping 'c' (from): there's no column 'nmae' after the last step. Did you mean 'name'?"
     assert path == "pipelines.0.mapping.2"  # not the valid `SELECT upper(name)` before it
 
 
 def test_run_reports_a_mapping_error_before_writing(tmp_path):
     head, path, _ = _mapping_error(tmp_path, [{"to": "x", "expr": "nope + 1"}], run=True)
-    assert head.startswith("mapping 'x' (expr): Binder Error") and path == "pipelines.0.mapping.0"
+    assert head == "mapping 'x' (expr): there's no column 'nope' after the last step"
+    assert path == "pipelines.0.mapping.0"
     assert not (tmp_path / "out.gpkg").exists()
 
 
@@ -895,9 +896,10 @@ def test_combine_lines_errors_name_the_aggregate(tmp_path):
     assert path == "pipelines.0.steps.0.aggregates.0"
 
 
-def _roads(tmp_path, step: dict) -> list[dict]:
-    """`step` (a dissolve or combine_lines) over four road segments with a few attributes:
-    a, b and c join end to end on Main St (b is the longest), d is a side road."""
+def _roads(tmp_path, step: dict | list[dict], mapping: list[dict] | None = None) -> list[dict]:
+    """`step` (a dissolve or combine_lines, or a list of steps) over four road segments with
+    a few attributes: a, b and c join end to end on Main St (b is the longest), d is a side
+    road."""
     import json
 
     feats = [
@@ -915,10 +917,43 @@ def _roads(tmp_path, step: dict) -> list[dict]:
     cfg = load_config_dict({
         "name": "t", "working_crs": "EPSG:25833", "base": "roads",
         "sources": [{"id": "roads", "format": "geojson", "uri": str(path), "crs": "EPSG:25833"}],
-        "steps": [step], "mapping": [],
+        "steps": step if isinstance(step, list) else [step], "mapping": mapping or [],
         "output": {"path": str(tmp_path / "out.gpkg"), "layer": "out", "crs": "EPSG:25833"},
     })
     return sorted(preview_config_pipeline(cfg, limit=50), key=lambda r: r["street"])
+
+
+def _roads_mapping_error(tmp_path, steps: list[dict], mapping: list[dict]) -> list[str]:
+    from duck_soup.engine import MappingError
+
+    with pytest.raises(MappingError) as info:
+        _roads(tmp_path, steps, mapping)
+    return str(info.value).split("\n")
+
+
+def test_mapping_error_names_the_step_that_dropped_its_column(tmp_path):
+    # The column is set by one step and grouped away by a later one.
+    steps = [
+        {"type": "attributes", "columns": [{"to": "kmh", "expr": "speed * 1.0"}]},
+        {"type": "combine_lines", "by": ["street"], "aggregates": [{"from": "speed", "how": "max"}]},
+    ]
+    head, path, _ = _roads_mapping_error(tmp_path, steps, [{"to": "s", "from": "street"}, {"to": "k", "expr": "kmh + 1"}])
+    assert head == (
+        "mapping 'k' (expr): step 2 (combine_lines) drops 'kmh': it keeps only the columns it "
+        "groups by and its aggregates. Add 'kmh' to its aggregates, or use a column it keeps"
+    )
+    assert path == "pipelines.0.mapping.1"
+
+    head, _, _ = _roads_mapping_error(
+        tmp_path, [{"type": "attributes", "columns": [], "drop": ["speed"]}], [{"to": "k", "from": "speed"}],
+    )
+    assert head == "mapping 'k' (from): step 1 (attributes) drops 'speed', so it isn't there after the last step"
+
+
+def test_mapping_error_says_a_dotted_column_name_needs_quotes(tmp_path):
+    steps = [{"type": "attributes", "columns": [{"to": "NET.TYPEVEG", "from": "street"}]}]
+    head, _, _ = _roads_mapping_error(tmp_path, steps, [{"to": "t", "expr": "upper(NET.TYPEVEG)"}])
+    assert head == """mapping 't' (expr): a column name with a dot in it needs double quotes in SQL: write "NET.TYPEVEG", not NET.TYPEVEG"""
 
 
 @pytest.mark.parametrize("kind", ["dissolve", "combine_lines"])
@@ -1026,12 +1061,13 @@ def test_step_column_errors_name_the_column_and_its_path(tmp_path):
     head, path, _ = _step_error(tmp_path, [{"type": "attributes", "columns": [
         good, {"to": "c", "from": "nmae"},
     ]}])
-    assert head.startswith("step 1 column 'c' (from): Binder Error") and path == "pipelines.0.steps.0.columns.1"
+    assert head == "step 1 column 'c' (from): there's no column 'nmae' at this step. Did you mean 'name'?"
+    assert path == "pipelines.0.steps.0.columns.1"
 
 
 def test_dissolve_errors_name_the_key_or_aggregate(tmp_path):
     head, path, _ = _step_error(tmp_path, [{"type": "dissolve", "by": ["name", "nmae"]}])
-    assert head.startswith("step 1 group key 'nmae' (column): Binder Error")
+    assert head == "step 1 group key 'nmae' (column): there's no column 'nmae' at this step. Did you mean 'name'?"
     assert path == "pipelines.0.steps.0.by.1"
 
     head, path, _ = _step_error(tmp_path, [{"type": "dissolve", "by": ["name"], "aggregates": [

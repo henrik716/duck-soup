@@ -73,17 +73,22 @@ selects the focused row.
 ## Problems
 
 When the config is invalid, the **Problems** tab opens and its badge shows the number of
-errors. Each problem shows the location (`pipelines.0.steps.2.source`) and the message. Click
-one to jump to the card it refers to: the editor expands it, scrolls to it and flashes it.
-Mapping errors from the preview link to their mapping row the same way
-(`pipelines.0.mapping.1`).
+errors. Each problem says where it is (*step 3 · source*, *mapping row 2*) and what's wrong.
+Click it to go to the error: the editor opens the section, expands the card, scrolls to it and
+flashes it. The card or mapping row stays outlined in red until the problem is fixed. Hover a
+problem to see its config path (`pipelines.0.steps.2.source`).
+
+Mapping errors from the preview link to their mapping row the same way, and say what's wrong
+in words: a column that isn't there names the step that dropped it
+(*step 8 (combine_lines) drops 'width'*), or the closest column name there is
+(*Did you mean 'nearest_stop'?*).
 
 The tab opens by itself only when a problem first appears while you're on **Data Table**, and
 once the preview works again it switches back there. If you move to another tab in between,
 or open **Problems** yourself, the editor leaves the tabs alone.
 
-![The Problems tab with one validation error](../assets/screenshots/problems-tab-light.png#only-light){ .screenshot .narrow loading=lazy }
-![The Problems tab with one validation error](../assets/screenshots/problems-tab-dark.png#only-dark){ .screenshot .narrow loading=lazy }
+![The Problems tab with a mapping row that names a column that isn't there](../assets/screenshots/problems-tab-light.png#only-light){ .screenshot .narrow loading=lazy }
+![The Problems tab with a mapping row that names a column that isn't there](../assets/screenshots/problems-tab-dark.png#only-dark){ .screenshot .narrow loading=lazy }
 
 Errors come from the same validation as `duck-soup check`, so a config that's valid in the
 editor is valid on the command line.
