@@ -18,7 +18,9 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install duck_soup with test extras
-        run: pip install -e ".[test]"
+        # The annotations plugin puts each failing test on the run's summary page, which
+        # (unlike the log) shows without signing in.
+        run: pip install -e ".[test]" pytest-github-actions-annotate-failures
 
       # DuckDB downloads the spatial extension binary on first LOAD; cache it
       # so repeat CI runs don't refetch it from extensions.duckdb.org.
