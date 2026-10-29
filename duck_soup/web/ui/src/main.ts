@@ -3,6 +3,7 @@ import './styles.css'
 import {
   fetchMeta, fetchVersion, fetchPipelineNames, fetchPipeline, savePipeline,
   abortInspects, validateConfig, previewConfig, runConfig, cancelRun, exportScript, fetchPlan, fetchCounts,
+  fetchProgress,
 } from './api'
 import { initMap, updateMap, getMapBounds, onViewChange, onFeatureSelect, selectFeature, hoverFeature } from './map'
 import { initLayout } from './layout'
@@ -18,12 +19,12 @@ import { collectConfig, hydrate } from './config-io'
 import { showToast } from './toast'
 import { closeFileExplorer, openFileExplorer } from './file-explorer'
 import { updateTable, showTableError, onRowSelect, onRowHover, selectTableRow } from './table'
-import { setPreviewBusy, resetPreviewBusy, setRunBusy } from './busy'
+import { setPreviewBusy, resetPreviewBusy, setRunBusy, setPreviewProgress, setRunProgress } from './busy'
 import { initHistory, wireHistoryShortcuts, pushSnapshot, clearHistory } from './history'
 import { openPasteYamlModal } from './paste-yaml'
 import { initTheme, toggleTheme, getTheme, onThemeChange } from './theme'
 import type { Config, CountsResponse, PreviewResponse, SourceProgress, WrittenLayer } from './types'
-import { formatPendingSources, PENDING_RETRY_MS } from './schema'
+import { formatPendingSources, pendingPercent, PENDING_RETRY_MS } from './schema'
 import { renderIcons } from './icons'
 import { describeProblemPath, parseProblems, type Problem } from './problem-path'
 
@@ -288,9 +289,12 @@ function setStatus(kind: 'idle' | 'ok' | 'bad' | 'busy', msg: string, detail?: s
   s.textContent = msg
 
   lastErrorDetail = kind === 'bad' ? (detail ?? msg) : ''
+  // The pill has a fixed width, so a long text is cut short: the title has it in full. Not
+  // while busy: a counter rewriting the title every second makes the tooltip flicker under
+  // the mouse, and the progress shows in full over the preview panel (busy.ts) anyway.
   s.title = lastErrorDetail
     ? `${lastErrorDetail}\n\n(click to open the problems panel)`
-    : msg  // the pill has a fixed width: a long progress text is cut short
+    : kind === 'busy' ? 'working on it: the progress shows over the preview panel' : msg
 
   renderProblems()
 
@@ -438,13 +442,14 @@ function renderProblems(): void {
  * over), so callers just return. */
 async function awaitPrepared<T extends { pending?: boolean; progress?: SourceProgress; pending_sources?: SourceProgress[] }>(
   request: () => Promise<T>,
-  onProgress: (text: string) => void,
+  onProgress: (text: string, pct: number | null) => void,
   stale: () => boolean,
 ): Promise<T | null> {
   let d = await request()
   while (d.pending && d.progress) {
     if (stale()) return null
-    onProgress(formatPendingSources(d.pending_sources?.length ? d.pending_sources : [d.progress]))
+    const list = d.pending_sources?.length ? d.pending_sources : [d.progress]
+    onProgress(formatPendingSources(list), pendingPercent(list))
     await new Promise(resolve => setTimeout(resolve, PENDING_RETRY_MS))
     if (stale()) return null
     d = await request()
@@ -504,26 +509,36 @@ async function showPreview(request: () => Promise<PreviewResponse>, activeStep?:
   const seq = ++previewSeq
   setPreviewBusy(true)
   // A slow preview takes seconds: count them in the status rather than leave it on "valid"
-  // while nothing seems to happen. Not while it shows a source's download or conversion
-  // progress (awaitPrepared), which says more.
+  // while nothing seems to happen, with DuckDB's percentage once it reports one (it does
+  // after a query has run for a moment). Not while it shows a source's download or
+  // conversion progress (awaitPrepared), which says more.
   const started = Date.now()
   let ticking = false
   let progressAt = 0
+  let pct: number | null = null
   const ticker = window.setInterval(() => {
     const secs = Math.floor((Date.now() - started) / 1000)
     if (seq !== previewSeq || secs < 1 || Date.now() - progressAt < 2500) return
     ticking = true
-    setStatus('busy', `previewing… ${secs}s`)
+    const text = `previewing… ${pct != null ? `${pct}% · ` : ''}${secs}s`
+    setStatus('busy', text)
+    setPreviewProgress(text, pct)
+    void fetchProgress().then(p => { pct = p.preview }, () => {})
   }, 1000)
   try {
     let waited = false
     const d = await awaitPrepared(
       request,
-      text => { waited = true; progressAt = Date.now(); setStatus('busy', text) },
+      (text, known) => {
+        waited = true; progressAt = Date.now()
+        setStatus('busy', text)
+        setPreviewProgress(text, known)
+      },
       () => seq !== previewSeq, // a newer edit superseded this request
     )
     clearInterval(ticker)
     if (!d || d.stale) return
+    setPreviewProgress(null)
     if (waited || ticking) setStatus('ok', 'valid')
     if (d.ok && d.rows) {
       updateMap(d.rows, activeStep, { fitBounds: !bboxMode })
@@ -628,15 +643,25 @@ function appendLogLine(log: HTMLElement, text: string, cls = '', id = ''): void 
   log.scrollTop = log.scrollHeight
 }
 
-// Swaps the run button for a live "running… Ns" counter; returns the stop function.
+// Swaps the run button for a live "running… Ns" counter, and shows how far the query the
+// run is on is (DuckDB's percentage, which starts over for each step and layer) next to the
+// preview tabs and on the Run Logs tab's pulse line; returns the stop function.
 function startRunButtonTicker(runBtn: HTMLButtonElement, startedAt: number): () => void {
+  let pct: number | null = null
   const renderBtn = () => {
     const secs = Math.floor((Date.now() - startedAt) / 1000)
     runBtn.innerHTML = `<i data-lucide="loader" class="spin-animation" style="width:14px;height:14px"></i> <span>running… ${secs}s</span>`
     renderIcons(runBtn)
+    const text = `running… ${pct != null ? `query ${pct}% · ` : ''}${secs}s`
+    setRunProgress(text, pct)
+    const pulse = document.getElementById('log-pulse-line')
+    if (pulse) pulse.textContent = pct != null ? `running… query ${pct}%` : 'running…'
   }
   renderBtn()
-  const ticker = window.setInterval(renderBtn, 1000)
+  const ticker = window.setInterval(() => {
+    renderBtn()
+    void fetchProgress().then(p => { pct = p.run }, () => {})
+  }, 1000)
   return () => clearInterval(ticker)
 }
 

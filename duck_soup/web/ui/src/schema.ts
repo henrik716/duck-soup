@@ -44,6 +44,16 @@ export function formatPendingSources(list: SourceProgress[]): string {
   return `${list.length} sources: ${list.map(p => `${p.source ?? '?'} ${shortSourceProgress(p)}`).join(' · ')}`
 }
 
+/** How far the sources being prepared are, in percent, when that's known: one download of
+ *  a known size, or an http_lookup step's requests. Null for anything else. */
+export function pendingPercent(list: SourceProgress[]): number | null {
+  if (list.length !== 1) return null
+  const p = list[0]
+  if (p.stage === 'download' && p.total) return Math.round((100 * (p.bytes ?? 0)) / p.total)
+  if (p.stage === 'http' && p.total) return Math.round((100 * (p.done ?? 0)) / p.total)
+  return null
+}
+
 /** How long to wait before asking again about a source that's still being prepared. */
 export const PENDING_RETRY_MS = 700
 

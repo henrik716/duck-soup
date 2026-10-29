@@ -66,6 +66,11 @@ the last log lines, and the next request starts a new worker.
 - Converting a large CSV/Excel file to Parquet gets a **one-off worker** per file, since it
   can take a minute and would otherwise hold up `ENGINE`.
 
+While a call runs, the worker reads how far its query is (`derive.query_progress`, DuckDB's
+own progress bar) every half second and sends it to the server whenever it moves.
+`EngineWorker.progress(tag)` returns the latest value, and `/api/progress?client=…` hands the
+editor that tab's preview and the run in progress.
+
 The server keeps everything that reports progress: it downloads remote files (for a run too,
 before handing it over) and tracks conversions, and the workers read the results from the
 shared cache folders. A worker exits by itself when the server process goes away. The CLI

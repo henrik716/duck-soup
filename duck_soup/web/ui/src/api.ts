@@ -13,6 +13,7 @@ import type {
   PipelineLoadResponse,
   PlanResponse,
   PreviewResponse,
+  ProgressResponse,
   RunRecord,
   RunResponse,
   Source,
@@ -121,6 +122,13 @@ export async function previewConfig(
     // step's requests: it goes without responses that aren't cached yet.
     body: JSON.stringify({ config, pipeline_idx, limit, preview_until_step, bbox, rejects, client, sample, cached_http: sample !== undefined }),
   })
+  return r.json()
+}
+
+/** How far this tab's preview and the run in progress are: DuckDB's percentage for the query
+ *  each is running now (null: nothing to report yet). See /api/progress. */
+export async function fetchProgress(): Promise<ProgressResponse> {
+  const r = await fetch(`/api/progress?client=${encodeURIComponent(CLIENT_ID)}`)
   return r.json()
 }
 

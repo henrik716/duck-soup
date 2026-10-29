@@ -13,8 +13,8 @@ csv/xlsx to Parquet gets a worker of its own per file (sources.prepare._prepare_
 takes long enough that it would hold up ENGINE too, and starting a process is cheap next to it.
 
 Calls go over a pipe as (task, payload, context, kwargs); the worker answers with any
-number of ("log", line) messages and then ("ok", result) or ("error", message, trace,
-partial). `context` carries the server's working folder and cache settings, so the worker
+number of ("log", line) and ("progress", call id, percent) messages and then ("ok", result)
+or ("error", message, trace, partial). `context` carries the server's working folder and cache settings, so the worker
 reads the same downloads and Parquet copies the server prepared (see sources.settings).
 """
 from __future__ import annotations
@@ -24,6 +24,7 @@ import io
 import multiprocessing as mp
 import os
 import threading
+import time
 import traceback
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
@@ -34,6 +35,8 @@ _CRASH_LOG_LINES = 3
 # How often a waiting call checks that the worker is still alive (seconds). A dead worker
 # normally shows as a closed pipe at once, but not always (one that dies while starting up).
 _POLL_INTERVAL = 0.5
+# How often a worker checks how far its running query is (seconds), see EngineWorker.progress.
+_PROGRESS_INTERVAL = 0.5
 # How long a new worker may take to start (import the engine, load nothing yet).
 _START_TIMEOUT = 60.0
 
@@ -254,11 +257,20 @@ def _serve(conn, interrupt_event, interrupt_target) -> None:
     EngineWorker.interrupt sets `interrupt_target` to the id of the call to stop and then
     `interrupt_event`; a watcher thread interrupts the running DuckDB query if that call is
     still the current one (derive.interrupt_all). By id, so an interrupt that arrives late
-    can't hit the next call instead."""
-    from .derive import interrupt_all
+    can't hit the next call instead.
+
+    Another thread reports the running query's progress (derive.query_progress) whenever it
+    moves, tagged with the call's id: one sent just as a call ends reaches the server during
+    the next call, which ignores it."""
+    from .derive import interrupt_all, query_progress
 
     faulthandler.enable()  # a native crash prints a Python traceback to the server's console
     current = [0]
+    sending = threading.Lock()  # the pipe takes one message at a time
+
+    def send(msg) -> None:
+        with sending:
+            conn.send(msg)
 
     def watch_interrupts() -> None:
         while True:
@@ -267,13 +279,24 @@ def _serve(conn, interrupt_event, interrupt_target) -> None:
             if interrupt_target.value == current[0] != 0:
                 interrupt_all()
 
+    def watch_progress() -> None:
+        last = None
+        while True:
+            time.sleep(_PROGRESS_INTERVAL)
+            call_id = current[0]
+            pct = query_progress() if call_id else None
+            if pct is not None and (call_id, pct) != last:
+                last = (call_id, pct)
+                send(("progress", call_id, pct))
+
     threading.Thread(target=watch_interrupts, daemon=True).start()
+    threading.Thread(target=watch_progress, daemon=True).start()
     # A worker busy in a long query only notices a closed pipe once it's done: when the
     # server is gone (killed, crashed), stop at once rather than keep computing for nobody.
     server = mp.parent_process()
     if server is not None:
         threading.Thread(target=lambda: (server.join(), os._exit(1)), daemon=True).start()
-    conn.send(("ready",))
+    send(("ready",))
     while True:
         try:
             call_id, task, payload, ctx, kwargs = conn.recv()
@@ -283,10 +306,10 @@ def _serve(conn, interrupt_event, interrupt_target) -> None:
         current[0] = call_id
         try:
             _apply_context(ctx)
-            result = _TASKS[task](payload, lambda line: conn.send(("log", line)), partial, **kwargs)
-            conn.send(("ok", result))
+            result = _TASKS[task](payload, lambda line: send(("log", line)), partial, **kwargs)
+            send(("ok", result))
         except Exception as e:
-            conn.send(("error", str(e), traceback.format_exc(), partial))
+            send(("error", str(e), traceback.format_exc(), partial))
         finally:
             current[0] = 0
 
@@ -323,6 +346,7 @@ class EngineWorker:
         self._cancelled = False
         self._call_id = 0
         self._tag: Any = None  # the running call's tag, see interrupt
+        self._progress: int | None = None  # how far its query is, see progress
         self._interrupted = False
         self._interrupt_event = None
         self._interrupt_target = None
@@ -416,6 +440,7 @@ class EngineWorker:
             with self._state:
                 self._call_id += 1
                 self._tag = tag
+                self._progress = None
                 self._busy = True
             try:
                 self._conn.send((self._call_id, task, payload, _context(), kwargs))
@@ -425,6 +450,9 @@ class EngineWorker:
                         lines.append(msg[1])
                         if log:
                             log(msg[1])
+                    elif msg[0] == "progress":
+                        if msg[1] == self._call_id:
+                            self._progress = msg[2]
                     elif msg[0] == "ok":
                         return msg[1]
                     elif self._interrupted:
@@ -440,6 +468,7 @@ class EngineWorker:
                 with self._state:
                     self._busy = False
                     self._tag = None
+                    self._progress = None
 
     def interrupt(self, tag: Any) -> bool:
         """Interrupt the running call if it was made with `tag` (e.g. an editor tab's previous
@@ -452,6 +481,16 @@ class EngineWorker:
             self._interrupt_target.value = self._call_id
             self._interrupt_event.set()
             return True
+
+    def progress(self, tag: Any = None) -> int | None:
+        """How far the running call's current query is, in percent: DuckDB's progress bar,
+        which starts over for each query the call runs (a run's steps and layers each have
+        their own) and only reports once a query has taken a moment. None when no call is
+        running (with `tag`, if given) or its query hasn't reported yet."""
+        with self._state:
+            if not self._busy or (tag is not None and self._tag != tag):
+                return None
+            return self._progress
 
     def cancel(self) -> bool:
         """Stop the call in progress by killing the worker (the next call starts a new one).

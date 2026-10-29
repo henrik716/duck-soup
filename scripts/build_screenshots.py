@@ -5,7 +5,7 @@
     python scripts/build_screenshots.py overview steps-tab    # just these
     python scripts/build_screenshots.py --browser chrome      # installed Chrome instead of Edge
 
-Shot names: lineage overview map-preview map-popup sources-tab mapping-tab output-layers
+Shot names: lineage overview map-preview preview-progress map-popup sources-tab mapping-tab output-layers
 step-gallery codelist-drawer expr-drawer steps-tab resized-panels flow-editor sql-tab yaml-tab
 step-preview run-logs run-history problems-tab.
 
@@ -216,6 +216,24 @@ def aside(page, name):
     page.locator("aside.side").screenshot(path=str(OUT / name))
 
 
+def preview_progress(page, name):
+    """A slow preview in progress. The showcase previews in a moment, too fast for DuckDB to
+    report a percentage, so the preview request is held back and /api/progress answers 42%;
+    the request then goes through as usual."""
+    held = []
+    page.route("**/api/progress*", lambda route: route.fulfill(json={"preview": 42, "run": None}))
+    page.route("**/api/preview", lambda route: held.append(route))
+    page.evaluate("document.querySelector('#previewLimit').dispatchEvent(new Event('change'))")
+    page.wait_for_function("document.querySelector('#busyLabel').textContent.includes('%')", timeout=15000)
+    page.wait_for_timeout(1200)  # the bar's width transition, the seconds past "1s"
+    aside(page, name)
+    for route in held:  # before unrouting, which would otherwise cancel them
+        route.continue_()
+    page.unroute("**/api/progress*")
+    page.unroute("**/api/preview")
+    settled(page)
+
+
 # --- the shots -----------------------------------------------------------------------------
 
 def capture(url: str, channel: str, only: set[str]) -> None:
@@ -242,6 +260,8 @@ def capture(url: str, channel: str, only: set[str]) -> None:
                 page.screenshot(path=str(OUT / f"editor-overview-{theme}.png"))
             if want("map-preview"):
                 aside(page, f"map-preview-{theme}.png")
+            if want("preview-progress"):
+                preview_progress(page, f"preview-progress-{theme}.png")
 
             tabs = [t for t in (("sources", "sources-tab", True), ("mapping", "mapping-tab", False),
                                 ("output", "output-layers", True)) if want(t[1])]

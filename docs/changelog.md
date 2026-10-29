@@ -7,6 +7,21 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
+## 1.8 — 2026-10-29
+
+**Editor**
+
+- A slow preview says how far it is: `previewing… 42% · 8s`, in a chip at the top of the
+  preview panel, and the bar above the tabs fills up to match instead of sweeping. The
+  percentage is DuckDB's, for the query running now, and shows once the query has run for a
+  couple of seconds. A download of known size and an `http_lookup` step's requests fill the
+  bar the same way. See [Preview & run](editor/preview-and-run.md). (1.8.0)
+- A run shows the same (`running… query 42% · 63s`), also on the **Run Logs** tab's
+  `running…` line. Each step and each layer is a query of its own, and the percentage starts
+  over for each. (1.8.0)
+- The status pill's tooltip no longer flickers under the mouse during a slow preview. It was
+  rewritten every second (`previewing… 3s`, `4s`, …). (1.8.0)
+
 ## 1.7 — 2026-10-13 to 2026-10-27
 
 !!! warning "Upgrading"

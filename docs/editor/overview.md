@@ -28,7 +28,7 @@ The left side is where you **build**. The right side is where you **see** the re
 | **cancel** | Shown while a run is going. Stops it at once; see [Running](preview-and-run.md#running). |
 | **docs** | Opens these docs in a new browser tab. |
 | **☀ / ☾** | Switches the editor between dark and light mode. It follows your OS setting until you click it, and then remembers your choice. The map's basemap switches with it. |
-| **status** | Shows `valid`, `validating…`, `previewing… 8s` on a slow preview, `running…`, what a preview is waiting on (e.g. `roads: downloading… 23.4 MB`), or the first line of an error. Click it to open the **Problems** tab. |
+| **status** | Shows `valid`, `validating…`, `previewing… 42% · 8s` on a slow preview (in full at the top of the preview panel), `running…`, what a preview is waiting on (e.g. `roads: downloading… 23.4 MB`), or the first line of an error. Click it to open the **Problems** tab. |
 
 ## Ducks in a row: the pipeline flow
 

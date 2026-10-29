@@ -233,6 +233,27 @@ def test_a_newer_preview_from_the_same_tab_drops_the_older_ones(tmp_path):
     assert time.monotonic() - started < 15
 
 
+def test_a_slow_preview_reports_its_progress(tmp_path):
+    from duck_soup.worker import ENGINE
+
+    client = TestClient(app)
+    thread, body = _post_in_background(
+        client, "/api/preview", {"config": _config(tmp_path, _ENDLESS), "limit": 5, "client": "tab-p"},
+    )
+    try:
+        # DuckDB only reports a query's progress once it has run for a moment (2 s).
+        _wait_until(lambda: client.get("/api/progress", params={"client": "tab-p"}).json()["preview"] is not None, 20)
+        got = client.get("/api/progress", params={"client": "tab-p"}).json()
+        assert 0 <= got["preview"] <= 100 and got["run"] is None
+        # Another tab's preview isn't this one.
+        assert client.get("/api/progress", params={"client": "tab-q"}).json()["preview"] is None
+    finally:
+        ENGINE.interrupt(("preview", "tab-p"))
+        thread.join(10)
+    assert body["stale"] is True
+    assert client.get("/api/progress", params={"client": "tab-p"}).json()["preview"] is None
+
+
 def test_an_urgent_call_goes_before_the_waiting_ones():
     # A preview mustn't queue behind a just-loaded config's inspects (EngineWorker._turn).
     import threading

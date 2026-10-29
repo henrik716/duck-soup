@@ -465,6 +465,13 @@ export interface PreviewResponse {
   error?: string
 }
 
+// /api/progress: how far the query running now is, in percent, for this tab's preview and
+// for the run in progress (EngineWorker.progress); null when there's nothing to report.
+export interface ProgressResponse {
+  preview: number | null
+  run: number | null
+}
+
 // One layer written by a run (run_config's `written` in engine.py).
 export interface WrittenLayer {
   pipeline: string

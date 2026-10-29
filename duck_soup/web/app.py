@@ -543,6 +543,17 @@ def preview(req: PreviewRequest) -> dict:
         }
 
 
+@app.get("/api/progress")
+def progress(client: str | None = None) -> dict:
+    """How far along the client's preview and the run in progress are, in percent of their
+    current query (EngineWorker.progress); null where there's nothing to report. The editor
+    polls this while a preview or run takes more than a moment."""
+    return {
+        "preview": ENGINE.progress(("preview", client)) if client else None,
+        "run": RUNNER.progress(),
+    }
+
+
 class HttpSampleRequest(BaseModel):
     config: dict
     pipeline_idx: int = 0

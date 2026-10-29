@@ -14,9 +14,17 @@ change, the editor:
    current pipeline's output.
 
 On a slow pipeline a preview can take a while. After a second the status shows
-`previewing… 8s`, counting up, until the preview is done. A change made in the meantime
-replaces it: the running preview is stopped and only the newest one is computed, so a burst of
+`previewing… 8s`, counting up, until the preview is done. Once the query has run for a couple
+of seconds it also says how far it is: `previewing… 42% · 8s`, in full at the top of the
+preview panel, with the bar above the tabs filling up. A change made in the meantime replaces
+the preview: the running one is stopped and only the newest one is computed, so a burst of
 edits costs one preview, not one per edit.
+
+![A slow preview, 42% done](../assets/screenshots/preview-progress-light.png#only-light){ .screenshot .narrow loading=lazy }
+![A slow preview, 42% done](../assets/screenshots/preview-progress-dark.png#only-dark){ .screenshot .narrow loading=lazy }
+
+A run shows the same while it's going (`running… query 42% · 63s`). It computes each step and
+writes each layer in a query of its own, and the percentage starts over for each.
 
 Validation checks the config's structure, not the SQL inside it. A mapping expression that
 doesn't parse, or a column that doesn't exist, shows up when the preview runs, as an error

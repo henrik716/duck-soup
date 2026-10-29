@@ -99,6 +99,20 @@ def interrupt_all() -> None:
             pass  # closed meanwhile
 
 
+def query_progress() -> int | None:
+    """How far along the running query is, in percent (DuckDB's own progress bar, the one it
+    prints to the console), or None when no connection has a query reporting one."""
+    best = None
+    for con in list(_CONNECTIONS):
+        try:
+            pct = con.query_progress()
+        except Exception:
+            continue  # closed meanwhile
+        if pct >= 0:
+            best = max(best or 0, int(pct))
+    return best
+
+
 def init_duckdb(con) -> None:
     """Full setup for a connection that will evaluate mapping expressions."""
     load_extensions(con)
