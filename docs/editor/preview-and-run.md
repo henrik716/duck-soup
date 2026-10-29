@@ -26,6 +26,9 @@ edits costs one preview, not one per edit.
 A run shows the same while it's going (`running… query 42% · 63s`). It computes each step and
 writes each layer in a query of its own, and the percentage starts over for each.
 
+The percentage is DuckDB's, and DuckDB doesn't track every query: whether it does is settled
+as the query starts, and now and then it doesn't. For such a query only the seconds show.
+
 Validation checks the config's structure, not the SQL inside it. A mapping expression that
 doesn't parse, or a column that doesn't exist, shows up when the preview runs, as an error
 naming the mapping row, e.g. `mapping 'width' (expr): Parser Error: syntax error at end of

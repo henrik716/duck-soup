@@ -259,22 +259,38 @@ def test_progress_is_tracked_where_duckdb_starts_with_it_off():
 def test_a_slow_preview_reports_its_progress(tmp_path):
     from duck_soup.worker import ENGINE
 
+    import time
+
     client = TestClient(app)
-    thread, body = _post_in_background(
-        client, "/api/preview", {"config": _config(tmp_path, _ENDLESS), "limit": 5, "client": "tab-p"},
-    )
-    try:
-        # DuckDB only reports a query's progress once it has run for a moment (2 s).
-        _wait_until(lambda: client.get("/api/progress", params={"client": "tab-p"}).json()["preview"] is not None, 20)
-        got = client.get("/api/progress", params={"client": "tab-p"}).json()
-        assert 0 <= got["preview"] <= 100 and got["run"] is None
-        # Another tab's preview isn't this one.
-        assert client.get("/api/progress", params={"client": "tab-q"}).json()["preview"] is None
-    finally:
-        ENGINE.interrupt(("preview", "tab-p"))
-        thread.join(10)
-    assert body["stale"] is True
-    assert client.get("/api/progress", params={"client": "tab-p"}).json()["preview"] is None
+
+    def progress(tab="tab-p"):
+        return client.get("/api/progress", params={"client": tab}).json()
+
+    # Whether DuckDB tracks a query is settled as the query starts, and with several threads
+    # often it isn't: that query reports nothing at all, while a tracked one reports within a
+    # fraction of a second. So a preview that hasn't reported in 3 s is stopped and tried again.
+    tries = 15
+    for _ in range(tries):
+        thread, body = _post_in_background(
+            client, "/api/preview", {"config": _config(tmp_path, _ENDLESS), "limit": 5, "client": "tab-p"},
+        )
+        try:
+            _wait_until(lambda: ENGINE._busy and ENGINE._tag == ("preview", "tab-p"), 60)
+            end = time.monotonic() + 3
+            while (got := progress())["preview"] is None and time.monotonic() < end:
+                time.sleep(0.05)
+            if got["preview"] is not None:
+                assert 0 <= got["preview"] <= 100 and got["run"] is None
+                # Another tab's preview isn't this one.
+                assert progress("tab-q")["preview"] is None
+        finally:
+            ENGINE.interrupt(("preview", "tab-p"))
+            thread.join(10)
+        assert body["stale"] is True
+        assert progress()["preview"] is None
+        if got["preview"] is not None:
+            return
+    pytest.fail(f"no progress from {tries} previews in a row")
 
 
 def test_an_urgent_call_goes_before_the_waiting_ones():

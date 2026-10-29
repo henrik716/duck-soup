@@ -25,7 +25,8 @@ next to the editor's name show the version you're running.
   the Docker image or as a service. Before, only the seconds showed there. (1.8.1)
 - A dissolve or combine lines key renamed in **as** shows as grouped by in **columns reaching
   this step**. Before, the column showed as dropped, and its **by** (or **keep all**) added it
-  a second time. (1.8.2)
+  a second time. (1.8.2; released as 1.8.3, since 1.8.2's tests failed on a check of the
+  percentage that relied on DuckDB tracking every query)
 
 ## 1.7 — 2026-10-13 to 2026-10-27
 
