@@ -21,6 +21,8 @@ next to the editor's name show the version you're running.
   over for each. (1.8.0)
 - The status pill's tooltip no longer flickers under the mouse during a slow preview. It was
   rewritten every second (`previewing… 3s`, `4s`, …). (1.8.0)
+- The percentage also shows when the editor's server runs on Linux without a terminal, as in
+  the Docker image or as a service. Before, only the seconds showed there. (1.8.1)
 
 ## 1.7 — 2026-10-13 to 2026-10-27
 
