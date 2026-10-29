@@ -86,6 +86,11 @@ def load_extensions(con) -> None:
     """
     con.execute("INSTALL spatial; LOAD spatial;")
     con.execute("INSTALL postgres; LOAD postgres;")
+    # query_progress needs DuckDB's progress bar on, and whether it is depends on where
+    # DuckDB runs (off on Linux without a terminal, e.g. a server started as a service).
+    # Where it's off, turn it on without printing it: tracked, but not drawn into a log.
+    if not con.execute("SELECT current_setting('enable_progress_bar')").fetchone()[0]:
+        con.execute("SET enable_progress_bar = true; SET enable_progress_bar_print = false")
     _CONNECTIONS.add(con)
 
 

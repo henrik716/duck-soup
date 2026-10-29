@@ -233,6 +233,29 @@ def test_a_newer_preview_from_the_same_tab_drops_the_older_ones(tmp_path):
     assert time.monotonic() - started < 15
 
 
+def test_progress_is_tracked_where_duckdb_starts_with_it_off():
+    """Linux without a terminal (CI, a server run as a service) starts DuckDB with its
+    progress bar off, and query_progress then never reports. load_extensions turns it on,
+    without printing it."""
+    import duckdb
+
+    from duck_soup.derive import load_extensions
+
+    class StartsOff:  # a connection as DuckDB opens it there
+        def __init__(self):
+            self.con = duckdb.connect()
+            self.con.execute("SET enable_progress_bar = false")
+
+        def execute(self, sql):
+            return self.con.execute(sql)
+
+    off = StartsOff()
+    load_extensions(off)
+    assert off.con.execute(
+        "SELECT current_setting('enable_progress_bar'), current_setting('enable_progress_bar_print')"
+    ).fetchone() == (True, False)
+
+
 def test_a_slow_preview_reports_its_progress(tmp_path):
     from duck_soup.worker import ENGINE
 
