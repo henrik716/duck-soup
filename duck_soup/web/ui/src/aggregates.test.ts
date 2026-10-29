@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exprMentions, howFits, howLabel, howSql, parseHowSql, quoteIdent } from './aggregates'
+import { exprColumn, exprMentions, howFits, howLabel, howSql, parseHowSql, quoteIdent } from './aggregates'
 
 // As /api/meta sends them (steps.AGGREGATE_SQL).
 const TEMPLATES: Record<string, string> = {
@@ -68,6 +68,22 @@ describe('exprMentions', () => {
   })
   it("doesn't count a column named in a string", () => {
     expect(exprMentions("string_agg(name, 'material')", 'material')).toBe(false)
+  })
+})
+
+describe('exprColumn', () => {
+  const columns = ['vegtype', 'NET.TYPEVEG']
+  it('names the column an expression is, by itself', () => {
+    expect(exprColumn('vegtype', columns)).toBe('vegtype')
+    expect(exprColumn(' VegType ', columns)).toBe('vegtype')
+    expect(exprColumn('"vegtype"', columns)).toBe('vegtype')
+    expect(exprColumn('"NET.TYPEVEG"', columns)).toBe('NET.TYPEVEG')
+  })
+  it('gives null for anything more than a column', () => {
+    expect(exprColumn('upper(vegtype)', columns)).toBeNull()
+    expect(exprColumn('NET.TYPEVEG', columns)).toBeNull()
+    expect(exprColumn('"VegType"', columns)).toBeNull()
+    expect(exprColumn('other', columns)).toBeNull()
   })
 })
 

@@ -6,7 +6,7 @@ import { showToast } from './toast'
 import type { SourceProgress } from './types'
 import { renderIcons } from './icons'
 import { exprValue } from './expr-field'
-import { exprMentions } from './aggregates'
+import { exprColumn, exprMentions } from './aggregates'
 
 // ---- slow-source progress (download / Parquet conversion) ----
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`
@@ -309,14 +309,19 @@ function renderAttributesPool(scope: Element, card: HTMLElement): void {
 }
 
 /** Of `columns` (the ones reaching a dissolve or combine_lines card), the lower-cased names
- *  of its group keys (plain columns), and of the columns its aggregates keep: by name, by
- *  their `from` column, or used in their SQL. */
-export function aggregateColumnStates(card: Element, columns: string[]): { keys: Set<string>; kept: Set<string> } {
+ *  of its group keys (plain columns, or a column renamed with "as": `renamed` has the new
+ *  name), and of the columns its aggregates keep: by name, by their `from` column, or used
+ *  in their SQL. */
+export function aggregateColumnStates(card: Element, columns: string[]): { keys: Set<string>; renamed: Map<string, string>; kept: Set<string> } {
   const keys = new Set<string>()
+  const renamed = new Map<string, string>()
   card.querySelectorAll('[data-by-row]').forEach(r => {
     const as = r.querySelector<HTMLInputElement>('[data-by-as]')?.value.trim()
     const col = exprValue(r.querySelector<HTMLInputElement>('[data-by-col]')!).trim()
-    if (!as && col) keys.add(col.toLowerCase())
+    const grouped = as ? exprColumn(col, columns) : col
+    if (!grouped) return
+    keys.add(grouped.toLowerCase())
+    if (as) renamed.set(grouped.toLowerCase(), as)
   })
   const kept = new Set([...card.querySelectorAll<HTMLInputElement>('[data-agg-to], [data-agg-from]')]
     .map(i => i.value.trim().toLowerCase()).filter(Boolean))
@@ -324,7 +329,7 @@ export function aggregateColumnStates(card: Element, columns: string[]): { keys:
     const expr = exprValue(i)
     columns.filter(n => exprMentions(expr, n)).forEach(n => kept.add(n.toLowerCase()))
   })
-  return { keys, kept }
+  return { keys, renamed, kept }
 }
 
 /** A dissolve or combine_lines card's "columns reaching this step" list, marked as group
@@ -334,7 +339,7 @@ function renderAggregatePool(scope: Element, card: HTMLElement): void {
   const list = card.querySelector<HTMLElement>('.st-pool-list')
   if (!list) return
   const columns = collectColumnsBeforeStep(scope, card)
-  const { keys, kept } = aggregateColumnStates(card, columns.map(c => c.name))
+  const { keys, renamed, kept } = aggregateColumnStates(card, columns.map(c => c.name))
   const actions = card as HTMLElement & { _aggKeep?: (name: string) => void; _aggGroup?: (name: string) => void }
   list.innerHTML = ''
   for (const c of columns) {
@@ -343,7 +348,8 @@ function renderAggregatePool(scope: Element, card: HTMLElement): void {
     const chip = mkEl('span', { className: 'st-pool-chip' })
     const state = keys.has(key) ? 'is-key' : kept.has(key) ? 'is-set' : 'is-dropped'
     chip.classList.add(state)
-    const tip = state === 'is-key' ? 'grouped by' : state === 'is-set' ? 'kept' : 'dropped: click to keep it'
+    const as = renamed.get(key)
+    const tip = state === 'is-key' ? (as ? `grouped by, as ${esc(as)}` : 'grouped by') :state === 'is-set' ? 'kept' : 'dropped: click to keep it'
     chip.innerHTML = `<button type="button" class="st-pool-set" title="${esc(c.name)}${c.type ? ` (${esc(c.type)})` : ''}: ${tip}">${esc(c.name)}${c.type ? `<span class="pool-field-type">${esc(c.type)}</span>` : ''}</button>`
     if (state === 'is-dropped') chip.querySelector('.st-pool-set')!.addEventListener('click', () => actions._aggKeep?.(c.name))
     if (state !== 'is-key') {

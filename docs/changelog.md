@@ -23,6 +23,9 @@ next to the editor's name show the version you're running.
   rewritten every second (`previewing… 3s`, `4s`, …). (1.8.0)
 - The percentage also shows when the editor's server runs on Linux without a terminal, as in
   the Docker image or as a service. Before, only the seconds showed there. (1.8.1)
+- A dissolve or combine lines key renamed in **as** shows as grouped by in **columns reaching
+  this step**. Before, the column showed as dropped, and its **by** (or **keep all**) added it
+  a second time. (1.8.2)
 
 ## 1.7 — 2026-10-13 to 2026-10-27
 

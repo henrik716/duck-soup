@@ -5,7 +5,7 @@ import { CRS_COMBO_OPTIONS } from '../crs-list'
 import { mutate } from '../history'
 import { wireDragReorder } from './pipeline-card'
 import { mapRow, type MapRowElement } from './map-row'
-import { resolveSchemaScoped, collectColumnsBeforeStep } from '../schema'
+import { resolveSchemaScoped, collectColumnsBeforeStep, aggregateColumnStates } from '../schema'
 import { attachLiveValidation, attachMembershipCheck, renderValidationMsg } from '../validation'
 import { exprField, exprValue } from '../expr-field'
 import { fieldPreviewConfig } from '../field-preview'
@@ -755,7 +755,7 @@ function wireDissolveLists(c: HTMLElement, kind: Step['type'], syncFn: () => voi
   const actions = c as HTMLElement & { _aggKeep?: (name: string) => void; _aggGroup?: (name: string) => void }
   actions._aggGroup = name => {
     const lower = name.toLowerCase()
-    if (readByKeys(c).some(k => typeof k === 'string' && k.toLowerCase() === lower)) { showToast(`Already grouped by ${name}`, 'info'); return }
+    if (aggregateColumnStates(c, columns().map(col => col.name)).keys.has(lower)) { showToast(`Already grouped by ${name}`, 'info'); return }
     mutate('group by column')
     // A key is kept as it is: a row keeping the same column goes.
     c.querySelectorAll<HTMLElement>('[data-agg-row][data-mode="easy"]').forEach(r => {

@@ -97,7 +97,8 @@ The body depends on the step type:
   Group keys are highlighted, kept columns outlined, and the ones the step would drop struck
   through. Click a struck-through column to keep it, or its **by** to group by it.
 - **group by**: for dissolve and combine lines, the keys features are grouped on. A key is a
-  column, or a SQL expression with a name in **as**, to group by a computed value. Leave the
+  column, or a SQL expression with a name in **as**, to group by a computed value. A column
+  with a name in **as** is written under that name, and still counts as grouped by. Leave the
   list empty to dissolve everything into one feature (or, for combine lines, to join any lines
   that meet).
 - **other columns**: for dissolve and combine lines, the columns kept besides the keys, with

@@ -62,6 +62,14 @@ export function exprMentions(expr: string, name: string): boolean {
     && new RegExp(`(^|[^A-Za-z0-9_."])${escapeRe(name)}($|[^A-Za-z0-9_"])`, 'i').test(code)
 }
 
+/** Which of `columns` SQL `expr` is, all by itself (quoted exactly, or bare in any case), or
+ *  null: a group key renamed with "as" still groups by that column. */
+export function exprColumn(expr: string, columns: string[]): string | null {
+  const sql = expr.trim()
+  return columns.find(n => sql === quoteIdent(n)
+    || (/^[A-Za-z_][A-Za-z0-9_]*$/.test(n) && sql.toLowerCase() === n.toLowerCase())) ?? null
+}
+
 /** The `{how, from}` a SQL aggregate was written by, if it's exactly one of the templates
  *  (as howSql writes it, or with the column unquoted), else null. */
 export function parseHowSql(
