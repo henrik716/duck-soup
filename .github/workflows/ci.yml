@@ -57,9 +57,26 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+  # A release tag must name the version the commit carries: a v1.8.4 tag pushed on a commit
+  # still at 1.8.3 would otherwise push the old code to Docker under the new tag.
+  release-check:
+    name: Tag matches the package version
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare the tag with pyproject.toml
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME is on a commit whose pyproject.toml says $version"
+            exit 1
+          fi
+
   release-docker:
     name: Build and push Docker image
-    needs: [backend, frontend]
+    needs: [backend, frontend, release-check]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -86,7 +103,7 @@ jobs:
 
   release-pypi:
     name: Build and publish to PyPI
-    needs: [backend, frontend]
+    needs: [backend, frontend, release-check]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

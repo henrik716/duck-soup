@@ -31,13 +31,21 @@ next to the editor's name show the version you're running.
   from downloading its remote files again: a file downloaded less than an hour ago, for the
   previews or by the last run, is read as it is, and the log says so (*Using the download of
   … from 12 min ago*). Off by default, and remembered in the browser. See
-  [Preview & run](editor/preview-and-run.md). (1.8.4)
+  [Preview & run](editor/preview-and-run.md). (1.8.4; released as 1.8.5, since the 1.8.4
+  tag went out on the 1.8.3 commit)
 
 **CLI**
 
 - `duck-soup run --reuse-downloads [MINUTES]` does the same: a remote file downloaded at most
   `MINUTES` ago (60 when left out) is read as it is. Without it, a run downloads its remote
-  files fresh, as before. See [CLI](reference/cli.md#duck-soup-run). (1.8.4)
+  files fresh, as before. See [CLI](reference/cli.md#duck-soup-run). (1.8.4; released as
+  1.8.5)
+
+**Releases**
+
+- A release tag whose version differs from the package's (`v1.8.4` on a commit still at
+  1.8.3) now fails CI before anything is published, instead of releasing the older code
+  under the new tag. (1.8.5)
 
 ## 1.7 — 2026-10-13 to 2026-10-27
 
