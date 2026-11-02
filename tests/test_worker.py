@@ -97,6 +97,15 @@ def test_run_downloads_in_the_server_and_the_worker_reuses_them(tmp_path, monkey
     assert calls == ["https://example.com/r.csv"]
     assert [layer["rows"] for layer in body["layers"]] == [1]
 
+    # "reuse downloads": the one just made is read again rather than fetched a second time.
+    body = TestClient(app).post(
+        "/api/run", json={"config": cfg, "name": "t", "reuse_downloads": 60}
+    ).json()
+    assert body["ok"] is True, body.get("error")
+    assert calls == ["https://example.com/r.csv"]
+    assert any(line.startswith("Using the download of https://example.com/r.csv") for line in body["log"])
+    assert [layer["rows"] for layer in body["layers"]] == [1]
+
 
 def _post_in_background(client, url, body):
     import threading

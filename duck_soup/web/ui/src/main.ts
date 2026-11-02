@@ -706,7 +706,7 @@ async function run(): Promise<void> {
   add('running…', 'log-pulse', 'log-pulse-line')
 
   try {
-    const d = await runConfig(cfg, historyName())
+    const d = await runConfig(cfg, historyName(), reuseDownloadsMinutes())
     document.getElementById('log-pulse-line')?.remove()
     ;(d.log || []).forEach(l => add(l))
     const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
@@ -932,6 +932,24 @@ const LINEAGE_COLLAPSED_KEY = 'ducksoup.lineageCollapsed'
 // MutationObserver on the class attribute — rather than a click listener alongside
 // wireCollapse's own — means it stays correct regardless of whether the toggle came from
 // clicking the header or the chevron button (which stops the click from bubbling to the header).
+// The Run Logs tab's "reuse downloads from the last hour": remembered per browser, off by
+// default (a run then downloads its remote files fresh).
+const REUSE_DOWNLOADS_KEY = 'ducksoup.reuseDownloads'
+const REUSE_DOWNLOADS_MINUTES = 60
+
+function wireReuseDownloads(): void {
+  const box = qs<HTMLInputElement>('#reuseDownloads')
+  if (!box) return
+  try { box.checked = localStorage.getItem(REUSE_DOWNLOADS_KEY) === '1' } catch { /* private mode */ }
+  box.addEventListener('change', () => {
+    try { localStorage.setItem(REUSE_DOWNLOADS_KEY, box.checked ? '1' : '0') } catch { /* private mode */ }
+  })
+}
+
+function reuseDownloadsMinutes(): number | undefined {
+  return qs<HTMLInputElement>('#reuseDownloads')?.checked ? REUSE_DOWNLOADS_MINUTES : undefined
+}
+
 function wireLineageCollapse(): void {
   const container = document.getElementById('lineage-diagram-container')
   if (!container) return
@@ -1188,6 +1206,7 @@ function wireHeaderActions(): void {
   qs('#countSampleBtn')?.addEventListener('click', () => countRows(previewLimit))
   qs('#countAllBtn')?.addEventListener('click', () => countRows(null))
 
+  wireReuseDownloads()
   qs('#clearLogBtn')?.addEventListener('click', () => {
     qs<HTMLElement>('#log')!.innerHTML = '<span class="log-line">log cleared</span>'
     showToast('Logs cleared', 'info')

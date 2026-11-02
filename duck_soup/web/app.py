@@ -283,6 +283,9 @@ class RunRequest(BaseModel):
     config: dict
     # The saved config's name, which keys its run history; defaults to the config's own name.
     name: str | None = None
+    # Minutes: a remote file downloaded at most this long ago is used as it is instead of
+    # being downloaded again (the Run Logs tab's "reuse downloads"). None: always download.
+    reuse_downloads: float | None = None
 
 
 @app.post("/api/run")
@@ -310,12 +313,16 @@ async def run(req: RunRequest) -> dict:
         # Remote files are downloaded here rather than in the engine worker, so their progress
         # shows and a download the editor already has in progress is shared; the worker then
         # reads those files instead of fetching them again (see run_config).
-        with fresh_downloads() as done:
+        max_age = req.reuse_downloads * 60 if req.reuse_downloads else None
+        with fresh_downloads(max_age=max_age) as done:
             download_remote_sources([s for p in cfg.pipelines for s in p.sources], log_lines.append)
         if cancel.is_set():
             raise EngineCancelled()
         writing.set()
-        return RUNNER.call("run", req.config, log=log_lines.append, downloads=done)
+        return RUNNER.call(
+            "run", req.config, log=log_lines.append, downloads=done,
+            reuse_downloads=req.reuse_downloads,
+        )
 
     _ACTIVE_RUNS.add(cancel)
     try:

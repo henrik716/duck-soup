@@ -890,6 +890,25 @@ def test_fresh_downloads_fetches_once_per_run(monkeypatch, _remote_cache):
     assert len(calls) == 2 and first == second
 
 
+def test_fresh_downloads_max_age_reuses_a_recent_download(monkeypatch, _remote_cache):
+    calls = []
+    monkeypatch.setattr(
+        "requests.get",
+        lambda url, **kw: calls.append(url) or _FakeStreamResponse(b"a\n1\n"),
+    )
+    url = "https://example.com/x.csv"
+    earlier = Path(sources_mod.fetch_remote_file(url, "csv"))  # a preview's download
+    os.utime(earlier, (earlier.stat().st_atime - 600, earlier.stat().st_mtime - 600))  # 10 min ago
+    log: list[str] = []
+    with sources_mod.fresh_downloads(max_age=3600):
+        assert sources_mod.fetch_remote_file(url, "csv", log.append) == str(earlier)
+    assert len(calls) == 1
+    assert log == [f"Using the download of {url} from 10 min ago"]
+    with sources_mod.fresh_downloads(max_age=300):  # older than 5 min: fetched again
+        assert sources_mod.fetch_remote_file(url, "csv") != str(earlier)
+    assert len(calls) == 2
+
+
 def test_fetch_remote_file_adds_format_extension(monkeypatch, _remote_cache):
     monkeypatch.setattr(
         "requests.get", lambda url, **kw: _FakeStreamResponse(b"[]")

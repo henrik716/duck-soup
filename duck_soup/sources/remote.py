@@ -32,7 +32,8 @@ from .formats import DOWNLOADED
 # source card's "refresh" link): a dataset rarely changes between two previews, and fetching
 # it again costs as long as the download takes. A run (run_config: `duck-soup run`, the
 # editor's Run) downloads fresh instead, see fresh_downloads, so its output reflects the
-# current data. Where they go: settings.REMOTE_CACHE_DIR.
+# current data, unless asked to reuse a recent download (its max_age). Where they go:
+# settings.REMOTE_CACHE_DIR.
 
 # One lock per URL: two reads of the same URL share one download (the second waits for the
 # first, then finds it), while different URLs download in parallel. A single lock for all of
@@ -57,17 +58,21 @@ _RUN_DOWNLOADS: ContextVar[dict[str, str] | None] = ContextVar("duck_soup_run_do
 
 
 @contextmanager
-def fresh_downloads(reuse: dict[str, str] | None = None):
+def fresh_downloads(reuse: dict[str, str] | None = None, max_age: float | None = None):
     """Within this block (a run), remote file sources are downloaded again instead of reusing
     an earlier download, once per URL: a download made inside the block is reused, so a URL
     read by several pipelines is still only fetched once.
+
+    `max_age` (seconds) relaxes that: a download that finished at most that long before the
+    block started is used as it is (the editor's "reuse downloads", `duck-soup run
+    --reuse-downloads`), since fetching a file again minutes after the last time is wasted.
 
     Yields the block's downloads, {uri: path}. `reuse` seeds it with downloads made for this
     run elsewhere: the editor downloads a run's files itself, then hands them to its engine
     worker (worker.py). Kept by path rather than compared by time, since Windows' clock
     ticks too coarsely to order a download against the start of a run."""
     done = dict(reuse or {})
-    tokens = (_FRESH_AFTER.set(time.time()), _RUN_DOWNLOADS.set(done))
+    tokens = (_FRESH_AFTER.set(time.time() - max(max_age or 0.0, 0.0)), _RUN_DOWNLOADS.set(done))
     try:
         yield done
     finally:
@@ -189,6 +194,16 @@ def download_time(path: Path) -> float:
     return Path(path).stat().st_mtime
 
 
+def _age(t: float) -> str:
+    """How long ago Unix time `t` was, for the run log: "40 s", "12 min", "3 h"."""
+    secs = max(time.time() - t, 0.0)
+    if secs < 90:
+        return f"{secs:.0f} s"
+    if secs < 90 * 60:
+        return f"{secs / 60:.0f} min"
+    return f"{secs / 3600:.0f} h"
+
+
 def fetch_remote_file(
     uri: str,
     fmt: str,
@@ -221,6 +236,8 @@ def fetch_remote_file(
         if latest and not fresh and (fresh_after is None or download_time(latest) > fresh_after):
             if run is not None:
                 run[uri] = str(latest)
+                if log:
+                    log(f"Using the download of {uri} from {_age(download_time(latest))} ago")
             return str(latest)
 
         name = remote_file_name(uri, fmt)

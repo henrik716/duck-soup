@@ -180,11 +180,13 @@ export async function fetchRun(name: string, id: string): Promise<RunRecord | nu
 /** `name` keys the run history: the saved config's name. */
 // No timeout: a run takes as long as it takes, in its own engine process on the server
 // (previews keep working meanwhile), and cancelRun stops it.
-export async function runConfig(config: Config, name?: string): Promise<RunResponse> {
+/** `reuseDownloads` (minutes): remote files downloaded at most that long ago are used as
+ *  they are instead of being downloaded again. */
+export async function runConfig(config: Config, name?: string, reuseDownloads?: number): Promise<RunResponse> {
   const r = await fetch('/api/run', {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ config, name }),
+    body: JSON.stringify({ config, name, reuse_downloads: reuseDownloads ?? null }),
   })
   return r.json()
 }

@@ -22,6 +22,11 @@ def main(argv: list[str] | None = None) -> int:
         "if set, else the current folder)",
     )
     run.add_argument("--no-history", action="store_true", help="Don't record this run")
+    run.add_argument(
+        "--reuse-downloads", type=float, nargs="?", const=60.0, default=None, metavar="MINUTES",
+        help="Read a remote file downloaded at most MINUTES ago (default 60) as it is, "
+        "instead of downloading it again",
+    )
 
     check = sub.add_parser("check", help="Validate a pipeline YAML without running")
     check.add_argument("pipeline")
@@ -86,7 +91,7 @@ def _run(cfg, args) -> int:
     written: list[dict] = []
     started = datetime.now(timezone.utc)
     try:
-        out_path = run_config(cfg, log=echo, written=written)
+        out_path = run_config(cfg, log=echo, written=written, reuse_downloads=args.reuse_downloads)
     except Exception as e:
         # Recorded, then re-raised: the exit code and traceback stay what schedulers expect.
         if not args.no_history:

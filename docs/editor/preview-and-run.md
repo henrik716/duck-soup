@@ -131,6 +131,11 @@ Previews, row counts and source inspection keep working during a run. When it fi
 
 New runs are appended under a divider so you can compare them. **clear** empties the log.
 
+A run downloads its [remote files](../reference/sources.md#remote-files) again. Tick **reuse
+downloads from the last hour**, in the **Run Logs** header, to have it read a file downloaded
+less than an hour ago (for the previews, or by the last run) as it is; the log then says
+*Using the download of … from 12 min ago*. The setting is remembered in this browser.
+
 **cancel** stops the run at once. Layers already written stay in the output, and the one
 being written when you cancelled may be incomplete, so run again before using the file. A run
 cancelled while it's still downloading its sources hasn't written anything; the downloads

@@ -1955,6 +1955,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.7; }
   font-family: var(--display); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
 }
 .sql-plan-scope { text-transform: none; letter-spacing: 0; color: var(--accent); }
+/* The Run Logs tab's "reuse downloads" checkbox, between the title and "clear". */
+.reuse-downloads {
+  margin-left: auto; margin-right: 10px; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--muted); cursor: pointer;
+}
+.reuse-downloads input { margin: 0; width: auto; }
 .sql-entry, .run-entry {
   border: 1px solid var(--line); border-radius: var(--radius-sm); margin-bottom: 6px;
   background: var(--panel2); flex-shrink: 0;

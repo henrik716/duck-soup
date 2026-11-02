@@ -127,7 +127,8 @@ converting*.
 Once it's done, the card shows when the file was downloaded, e.g. *Downloaded 2 h ago ·
 44.6 MB · read via Parquet*. Previews keep using that download, even after you restart the
 editor, until you click **refresh** next to it, which downloads the file again in the
-background and then re-runs the preview. **Run** always downloads fresh data. See
+background and then re-runs the preview. **Run** downloads fresh data, unless you tick
+[reuse downloads from the last hour](preview-and-run.md). See
 [Remote files](../reference/sources.md#remote-files).
 
 ## Refreshing all sources

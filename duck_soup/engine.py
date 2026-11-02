@@ -927,6 +927,7 @@ def run_config(
     log: Callable[[str], None] | None = None,
     written: list[dict] | None = None,
     downloads: dict[str, str] | None = None,
+    reuse_downloads: float | None = None,
 ) -> str:
     """Run all pipelines in a Config, appending each one's layers to the shared output.
 
@@ -938,6 +939,9 @@ def run_config(
     `downloads` ({uri: path}) are remote files already downloaded for this run, used
     rather than fetched again: the editor downloads a run's files itself, then hands the
     run to its engine worker (see worker.py and sources.download_remote_sources).
+
+    `reuse_downloads` (minutes): a remote file downloaded at most that long ago is read as
+    it is instead of being downloaded again.
     """
     out_path = Path(config.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -949,8 +953,10 @@ def run_config(
     elif config.overwrite and out_path.exists():
         out_path.unlink()
     # A run reads current data: remote file sources are downloaded again (once per URL)
-    # rather than reusing a preview's download — see sources.fresh_downloads.
-    with src_readers.fresh_downloads(reuse=downloads):
+    # rather than reusing a preview's download, unless one is recent enough for
+    # `reuse_downloads` — see sources.fresh_downloads.
+    max_age = reuse_downloads * 60 if reuse_downloads else None
+    with src_readers.fresh_downloads(reuse=downloads, max_age=max_age):
         for i, pdef in enumerate(config.pipelines):
             engine = Engine(pdef, log=log, parquet_multi=multi, pipeline_index=i)
             engine.run(config.output)

@@ -21,7 +21,7 @@ On failure it prints the validation error, including the path to the bad field
 ## `duck-soup run`
 
 ```bash
-duck-soup run quickstart.yaml [--history-dir DIR] [--no-history]
+duck-soup run quickstart.yaml [--history-dir DIR] [--no-history] [--reuse-downloads [MINUTES]]
 ```
 
 Runs every pipeline in the file and writes the output (GeoPackage or GeoParquet), logging each stage as it goes:
@@ -46,6 +46,7 @@ rows per layer and the log.
 |---|---|
 | `--history-dir DIR` | Record the run in `DIR/runs/`. Without it: `$DUCK_SOUP_ROOT/runs/` when `DUCK_SOUP_ROOT` is set, otherwise `runs/` in the current folder. |
 | `--no-history` | Don't record this run. |
+| `--reuse-downloads [MINUTES]` | Read a [remote file](sources.md#remote-files) downloaded at most `MINUTES` ago (60 when left out) as it is, instead of downloading it again. Without it, every run downloads its remote files fresh. |
 
 Recording never fails a run: if the history can't be written, a warning goes to stderr.
 

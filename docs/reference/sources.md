@@ -189,9 +189,12 @@ A file-based source (`gpkg`, `geojson`, `shp`, `flatgeobuf`, `gml`, `fgdb`, `csv
   the newest download until you click **refresh** on the source card, including after
   restarting the editor. Datasets rarely change between two previews, and fetching them
   again takes as long as the download does.
-- **Runs download fresh data.** `duck-soup run` and the editor's **Run** always download the
-  file again, once per run even if several pipelines read it, so the output reflects the
-  current data.
+- **Runs download fresh data.** `duck-soup run` and the editor's **Run** download the file
+  again, once per run even if several pipelines read it, so the output reflects the current
+  data. To skip that when the file was downloaded only minutes ago, tick **reuse downloads
+  from the last hour** on the editor's **Run Logs** tab, or pass
+  [`--reuse-downloads`](cli.md#duck-soup-run) to `duck-soup run`: a download younger than
+  that is read as it is.
 - **Layer names** come from the file name in the URL, as they would for a local file
   (`…/segmentert.csv?fylke=56` → layer `segmentert`).
 - **A plain `.shp` URL** is the one exception: it's read directly, so GDAL can also fetch the

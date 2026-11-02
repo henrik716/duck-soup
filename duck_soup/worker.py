@@ -145,14 +145,20 @@ def _task_http_sample(config: dict, log: Callable[[str], None], partial: dict, p
     return Engine(_config_pipeline(cfg, pipeline_idx), log=log, pipeline_index=pipeline_idx).http_sample_url(step)
 
 
-def _task_run(config: dict, log: Callable[[str], None], partial: dict, downloads: dict | None = None) -> Any:
+def _task_run(
+    config: dict, log: Callable[[str], None], partial: dict,
+    downloads: dict | None = None, reuse_downloads: float | None = None,
+) -> Any:
     from .config import load_config_dict
     from .engine import run_config
 
     written = partial.setdefault("layers", [])
     buf = io.StringIO()
     with redirect_stdout(buf):
-        out = run_config(load_config_dict(config), log, written, downloads=downloads)
+        out = run_config(
+            load_config_dict(config), log, written,
+            downloads=downloads, reuse_downloads=reuse_downloads,
+        )
     return {"output": out, "layers": written, "stdout": buf.getvalue()}
 
 

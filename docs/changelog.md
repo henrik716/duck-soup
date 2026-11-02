@@ -7,7 +7,7 @@ loads or what it writes are listed under **Upgrading** at the top of each sectio
 To upgrade, see [Install](getting-started/install.md); `duck-soup --version` and the badge
 next to the editor's name show the version you're running.
 
-## 1.8 — 2026-10-29
+## 1.8 — 2026-10-29 to 2026-11-02
 
 **Editor**
 
@@ -27,6 +27,17 @@ next to the editor's name show the version you're running.
   this step**. Before, the column showed as dropped, and its **by** (or **keep all**) added it
   a second time. (1.8.2; released as 1.8.3, since 1.8.2's tests failed on a check of the
   percentage that relied on DuckDB tracking every query)
+- **reuse downloads from the last hour**, a checkbox on the **Run Logs** tab, saves a run
+  from downloading its remote files again: a file downloaded less than an hour ago, for the
+  previews or by the last run, is read as it is, and the log says so (*Using the download of
+  … from 12 min ago*). Off by default, and remembered in the browser. See
+  [Preview & run](editor/preview-and-run.md). (1.8.4)
+
+**CLI**
+
+- `duck-soup run --reuse-downloads [MINUTES]` does the same: a remote file downloaded at most
+  `MINUTES` ago (60 when left out) is read as it is. Without it, a run downloads its remote
+  files fresh, as before. See [CLI](reference/cli.md#duck-soup-run). (1.8.4)
 
 ## 1.7 — 2026-10-13 to 2026-10-27
 
